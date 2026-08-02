@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+
+# Server runtime state: audit trail, FGD cache, compile job logs and file backups.
+.hammer-mcp/
+
+# Local configuration, derived from config.example.json.
+config.json
