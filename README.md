@@ -226,8 +226,13 @@ Enregistrement auprès de Claude Code :
 node dist/index.js install     # fusionne dans <repoRoot>/.mcp.json, préserve gmod-mcp
 ```
 
-Puis ajouter `"hammer-mcp"` à `enabledMcpjsonServers` dans `.claude/settings.json`, et n'y
-autoriser que les outils `read_*`.
+`.claude/settings.json` du dépôt parent porte déjà `"hammer-mcp"` dans `enabledMcpjsonServers` et
+les outils `read_*` dans sa liste d'autorisations — les outils gardés en sont volontairement
+absents.
+
+**`.mcp.json` n'est pas suivi par git** : la liste blanche du `.gitignore` parent l'exclut, parce
+qu'il porte des chemins **absolus** — le même motif qui en exclut les `.luarc.json`. La commande
+`install` est donc à relancer **dans chaque clone**, après `pnpm build`.
 
 ### Fixtures
 
