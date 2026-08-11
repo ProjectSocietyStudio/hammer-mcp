@@ -4,6 +4,7 @@ import { buildTools } from "./build.js";
 import { compileTools } from "./compile.js";
 import { depsTools } from "./deps.js";
 import { gmaTools } from "./gma.js";
+import { faceTools } from "./face.js";
 import { gameTools } from "./games.js";
 import { healthTools } from "./health.js";
 import { lightmapTools } from "./lightmap.js";
@@ -31,6 +32,7 @@ export const allTools: AnyToolDef[] = [
   ...solidTools,
   ...buildTools,
   ...modifyTools,
+  ...faceTools,
   ...optimiseTools,
   ...depsTools,
   ...gmaTools,
