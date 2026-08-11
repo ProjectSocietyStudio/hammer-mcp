@@ -166,22 +166,48 @@ function intersect(a: Plane, b: Plane, c: Plane): Vec3 | null {
   ];
 }
 
-/** Area of a coplanar point set, ordered around its own centroid before summing. */
-function polygonArea(vertices: Vec3[], normal: Vec3): number {
-  if (vertices.length < 3) return 0;
-  const c: Vec3 = [
-    vertices.reduce((s, v) => s + v[0], 0) / vertices.length,
-    vertices.reduce((s, v) => s + v[1], 0) / vertices.length,
-    vertices.reduce((s, v) => s + v[2], 0) / vertices.length,
+/** Centroid of a point set. Undefined for an empty one, which no caller has. */
+function centroid(vertices: readonly Vec3[]): Vec3 {
+  const n = vertices.length;
+  return [
+    vertices.reduce((s, v) => s + v[0], 0) / n,
+    vertices.reduce((s, v) => s + v[1], 0) / n,
+    vertices.reduce((s, v) => s + v[2], 0) / n,
   ];
+}
+
+/**
+ * Sorts a coplanar point set into the loop that walks its perimeter.
+ *
+ * Exact for a convex face, which is the only kind a brush has: sorting by angle around
+ * the centroid cannot skip a vertex or cross an edge when every vertex is on the hull.
+ * The order is counter-clockwise seen from the `normal` side -- angles increase from the
+ * arbitrary first vertex towards `cross(normal, u)`, which is the right-hand turn.
+ *
+ * This existed inside `polygonArea`, which threw the loop away and returned a scalar.
+ * Clipping a brush and moving one of its vertices both need the loop itself: a face
+ * inherited from a cut has a plane and a corner set, and re-emitting it means writing
+ * three points that wind the right way round.
+ */
+export function orderedLoop(vertices: readonly Vec3[], normal: Vec3): Vec3[] {
+  if (vertices.length < 3) return [...vertices];
+  const c = centroid(vertices);
   const u = normalise(sub(vertices[0]!, c));
-  if (!u) return 0;
+  if (!u) return [...vertices];
   const v = cross(normal, u);
-  const ordered = [...vertices].sort((p, q) => {
+  return [...vertices].sort((p, q) => {
     const dp = sub(p, c);
     const dq = sub(q, c);
     return Math.atan2(dot(dp, v), dot(dp, u)) - Math.atan2(dot(dq, v), dot(dq, u));
   });
+}
+
+/** Area of a coplanar point set, ordered around its own centroid before summing. */
+function polygonArea(vertices: Vec3[], normal: Vec3): number {
+  if (vertices.length < 3) return 0;
+  const ordered = orderedLoop(vertices, normal);
+  if (ordered.length < 3) return 0;
+  const c = centroid(vertices);
 
   let area = 0;
   for (let i = 0; i < ordered.length; i++) {
@@ -190,6 +216,52 @@ function polygonArea(vertices: Vec3[], normal: Vec3): number {
     area += dot(normal, cross(sub(p, c), sub(q, c)));
   }
   return Math.abs(area) / 2;
+}
+
+/**
+ * Picks the three points a `.vmf` side needs to state `plane`, from that face's corners.
+ *
+ * The missing half of the write path. `buildSolidText` emits planes from an explicit mesh
+ * loop it built itself; a face that came out of a clip or a vertex move has only a plane
+ * and a set of corners, and nothing turned that back into something writable.
+ *
+ * Two things decide correctness, and both are checked here rather than reasoned about:
+ *
+ * **The triple must not be collinear**, or the plane it states is degenerate -- so the
+ * widest triangle available is chosen rather than the first three corners, which on a
+ * face with a nearly-flat corner can be almost a line.
+ *
+ * **The winding must reproduce the plane it came from.** VMF states a face by three points
+ * clockwise seen from outside the solid, and `planeFromPoints` is the same reading in
+ * reverse. So the result is fed back through it and the triple is flipped when the normal
+ * comes out facing the wrong way. A brush whose faces are wound inwards compiles into a
+ * solid that encloses nothing, and vbsp does not always say so -- it can spin instead.
+ */
+export function pointsFromPlane(plane: Plane, vertices: readonly Vec3[]): [Vec3, Vec3, Vec3] | null {
+  if (vertices.length < 3) return null;
+  const loop = orderedLoop(vertices, plane.normal);
+
+  let best: [Vec3, Vec3, Vec3] | null = null;
+  let bestArea = 0;
+  for (let i = 0; i < loop.length; i++) {
+    for (let j = i + 1; j < loop.length; j++) {
+      for (let k = j + 1; k < loop.length; k++) {
+        const a = loop[i]!;
+        const b = loop[j]!;
+        const c = loop[k]!;
+        const area = length(cross(sub(a, b), sub(c, b)));
+        if (area > bestArea) {
+          bestArea = area;
+          best = [a, b, c];
+        }
+      }
+    }
+  }
+  if (!best || bestArea <= ON_EPSILON) return null;
+
+  const check = planeFromPoints(best[0], best[1], best[2]);
+  if (!check) return null;
+  return dot(check.normal, plane.normal) < 0 ? [best[2], best[1], best[0]] : best;
 }
 
 /**
