@@ -1,8 +1,26 @@
 {
   "name": "hammer-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Local-first MCP server for Source-engine map work: VMF, BSP, entity-lump patches, compile and audit",
   "license": "MIT",
+  "author": "Project Society Studio",
+  "homepage": "https://github.com/ProjectSocietyStudio/hammer-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ProjectSocietyStudio/hammer-mcp.git"
+  },
+  "bugs": "https://github.com/ProjectSocietyStudio/hammer-mcp/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "source-engine",
+    "hammer",
+    "hammer++",
+    "vmf",
+    "bsp",
+    "garrys-mod",
+    "level-design"
+  ],
   "type": "module",
   "bin": {
     "hammer-mcp": "./dist/index.js"
