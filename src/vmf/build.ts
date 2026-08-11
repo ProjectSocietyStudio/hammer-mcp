@@ -23,11 +23,14 @@
  * whose normal the face most agrees with, take that entry's u and v.
  *
  * The table is cross-checked, not trusted: `test/fixtures/gen_probe.py` writes its six box
- * faces by hand, and that file has been through a real compile and a real srcds boot. Four
- * of the table's six branches reproduce its axes exactly. That matters because the probe
- * only ever exercises axis-aligned faces on a box -- a ramp or a prism reaches branches no
- * hand-written fixture covers, and the answer is that this is Valve's algorithm for all of
- * them rather than an extrapolation from the box case.
+ * faces by hand, and that file has been through a real compile and a real srcds boot.
+ * **All six** of the table's branches reproduce its axes exactly -- measured, one normal at
+ * a time, not read off by eye.
+ *
+ * So what a ramp or a prism reaches is not a seventh entry: there are only six, and every
+ * one is confirmed. It is the *selection* that a box never exercises -- picking the closest
+ * base for a normal that matches none of them exactly. That step is Valve's algorithm
+ * rather than an extrapolation from the box case, and it is the part still owed a compile.
  *
  * One consequence worth stating rather than discovering: these are **world-aligned** axes,
  * Hammer's default for a new brush. On a steep slope a world-aligned texture stretches.
