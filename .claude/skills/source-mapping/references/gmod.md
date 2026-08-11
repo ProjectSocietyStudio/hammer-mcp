@@ -1,118 +1,131 @@
-# Garry's Mod contre Half-Life 2
+# Garry's Mod versus Half-Life 2
 
-GMod n'est pas un jeu Source de plus : c'est un mod multijoueur qui charge des gamemodes en Lua
-par-dessus le moteur. Ce document dit ce qui change une fois qu'une carte quitte HL2/CS:S pour
-GMod. La perf générale reste dans [performance.md](performance.md), la visibilité dans
-[visibilite.md](visibilite.md), le packing d'assets dans [assets.md](assets.md).
+GMod is not one more Source game: it is a multiplayer mod loading Lua gamemodes on top of the
+engine. This page says what changes once a map leaves HL2/CS:S for GMod. General performance stays
+in [performance.md](performance.md), visibility in [visibility.md](visibility.md), asset packing in
+[assets.md](assets.md).
 
-## Compiler pour GMod
+## Compiling for GMod
 
-**Le FGD à charger est `garrysmod.fgd`, pas `base.fgd`.** Il déclare les entités propres à GMod
-(`gmod_button`, `gmod_hands`) et les FGD de chaque gamemode chargé (`ttt.fgd` pour TTT). Compiler
-avec `base.fgd` ne casse rien à la compilation : les entités GMod restent simplement invisibles
-dans Hammer, une perte silencieuse. [moteur]
+**The FGD to load is `garrysmod.fgd`, not `base.fgd`.** It declares GMod's own entities
+(`gmod_button`, `gmod_hands`) and the FGDs of each loaded gamemode (`ttt.fgd` for TTT). Compiling
+with `base.fgd` breaks nothing at compile time: the GMod entities simply become invisible in
+Hammer, a silent loss. `[engine]`
 
-Deux chaînes de compilateurs compilent toutes les deux un `.bsp` valide pour GMod :
+You do not have to pick the FGD by hand: `read_source_games` reads it from each game's own
+`gameinfo.txt` (`GameData`), so the lint checks a map against what the game itself declares.
 
-| Chaîne | Quand | Vérifier |
+Two compiler chains both produce a valid `.bsp` for GMod:
+
+| Chain | When | Check |
 |---|---|---|
-| Source SDK Base 2013 Multiplayer | la plus documentée, la cible de Hammer++ | `read_source_games` liste les jeux installés et leur `toolchain` |
-| Compilateurs embarqués dans `GarrysMod/bin/` | repli, sans dépendance externe | idem, `toolchain.dir` peut être `null` si le jeu n'a pas de `bin/` séparé |
+| Source SDK Base 2013 Multiplayer | the best documented, Hammer++'s target | `read_source_games` lists installed games and their toolchain |
+| Compilers shipped in `GarrysMod/bin/` | fallback, no external dependency | same, `toolchain.dir` can be `null` if the game has no separate `bin/` |
 
-[consensus] — les deux chemins sont attestés, aucune source ne documente d'écart de sortie entre
-eux. `read_fgd_class` confirme qu'une classe donnée existe bien dans le FGD chargé avant de
-l'employer dans un `.vmf`.
+`[consensus]` — both paths are attested, and no source documents a difference in output between
+them. `read_fgd_class` confirms a given class really exists in the loaded FGD before you use it in
+a `.vmf`.
 
-## Le montage de contenu — le piège CS:S
+## Content mounting — the CS:S trap
 
-`garrysmod/cfg/mount.cfg` déclare, jeu par jeu, quel contenu d'un autre titre GMod expose en plus
-du sien (`"cstrike" "<chemin>/cstrike"`). Il pilote `IsMounted` côté Lua **et** ce que voient
-Hammer et les compilateurs à la compilation — une carte qui référence une texture CS:S doit avoir
-CS:S monté **au moment de compiler**, pas seulement au runtime. Les chemins sont sensibles à la
-casse sous Linux. [moteur]
+`garrysmod/cfg/mount.cfg` declares, game by game, which other title's content GMod exposes
+alongside its own (`"cstrike" "<path>/cstrike"`). It drives `IsMounted` on the Lua side **and** what
+Hammer and the compilers see at compile time — a map referencing a CS:S texture must have CS:S
+mounted **when compiling**, not only at runtime. Paths are case-sensitive on Linux. `[engine]`
 
-⚠️ **Damier violet/noir en GMod signifie presque toujours une dépendance CS:S ou HL2 Episode Two
-non montée**, pas un asset réellement manquant : une grande partie du contenu communautaire est
-bâtie sur les VPK de CS:S. Vérifier avec `read_pakfile` ce que la carte embarque déjà, puis
-`mount.cfg` côté serveur pour ce qu'elle emprunte sans l'embarquer. [consensus]
+⚠️ **A purple/black chequerboard in GMod almost always means an unmounted CS:S or HL2 Episode Two
+dependency**, not a genuinely missing asset: a large share of community content is built on the
+CS:S VPKs. Check with `read_map_dependencies` what the map references and where each reference
+resolves — it separates "packed", "provided by the game" and "missing", which is exactly the
+distinction this trap turns on. `[consensus]`
 
-## Spawns — ce que DarkRP lit et ce qu'il ignore
+## Spawns — what DarkRP reads and what it ignores
 
-`info_player_start` reste le spawn générique hérité de HL2, lu par Sandbox et par tout gamemode
-qui n'a pas sa propre logique. **DarkRP ne lit pas nativement `info_player_start` pour placer un
-job** : le spawn par job passe par un champ Lua (`PlayerSpawn`/`PlayerSelectSpawn`) déclaré dans la
-définition du job, enregistré en base par une commande admin — hors du `.bsp`. Une carte DarkRP
-n'a donc besoin que de spawns génériques ; inventer une entité de carte pour « le spawn du job
-policier » ne sera lu par rien. [consensus]
+`info_player_start` remains the generic spawn inherited from HL2, read by Sandbox and by any
+gamemode with no logic of its own. **DarkRP does not natively read `info_player_start` to place a
+job**: per-job spawning goes through a Lua field (`PlayerSpawn`/`PlayerSelectSpawn`) declared in
+the job definition and stored in a database by an admin command — outside the `.bsp`. A DarkRP map
+therefore only needs generic spawns; inventing a map entity for "the police job spawn" will be read
+by nothing. `[consensus]`
 
-**Les portes achetables DarkRP reconnaissent une liste fermée de cinq classes**, testée par
-`isDoor()` dans `sh_doors.lua` du gamemode : `func_door`, `func_door_rotating`,
-`prop_door_rotating`, `func_movelinear`, `prop_dynamic`. [moteur] — source :
-`github.com/FPtje/DarkRP/blob/master/gamemode/modules/doorsystem/sh_doors.lua`. Une porte montée
-sur une autre classe (un `func_button` habillé en porte) s'ouvre normalement mais n'a **jamais**
-de menu d'achat, sans erreur nulle part. Rien de tout cela ne se règle en keyvalue Hammer :
-propriétaire, titre, groupe autorisé sont des networked vars côté Lua, pas des champs de la
-classe. ⚠️ Un serveur cible peut forker `sh_doors.lua` — vérifier la liste dans le dépôt du
-gamemode réellement installé, pas supposer l'amont FPtje.
+**DarkRP's purchasable doors recognise a closed list of five classes**, tested by `isDoor()` in the
+gamemode's `sh_doors.lua`: `func_door`, `func_door_rotating`, `prop_door_rotating`,
+`func_movelinear`, `prop_dynamic`. `[engine]` A door built on any other class (a `func_button`
+dressed as a door) opens normally but **never** gets a purchase menu, with no error anywhere. None
+of this is set by a Hammer keyvalue: owner, title and allowed group are networked vars on the Lua
+side, not fields of the class. ⚠️ A target server may fork `sh_doors.lua` — check the list in the
+gamemode repository actually installed, do not assume upstream.
 
-## Nav mesh et nodegraph — deux systèmes, un seul se répare seul
+## Nav mesh and nodegraph — two systems, only one repairs itself
 
 | | `.nav` (nav mesh) | `.ain` (nodegraph) |
 |---|---|---|
-| Sert | les `NextBot` | les NPC classiques (Combine, zombies HL2) |
-| Généré par | jamais le compilateur — `nav_generate` en jeu, `sv_cheats 1`, uniquement | le moteur, automatiquement, au premier chargement si absent/invalide |
-| Invalidé par une recompile | oui, silencieusement | oui, mais le moteur le régénère seul au chargement suivant |
-| Coût d'oubli | Nextbots figés, **console muette** | coût CPU ponctuel au premier `map`, rien de cassé |
-| Vérifier | `read_nav` rend `fresh`/`stale` en comparant la taille de BSP inscrite dans le fichier à celle chargée | log serveur au premier `changelevel` après recompile |
+| Serves | `NextBot` | classic NPCs (Combine, HL2 zombies) |
+| Generated by | never the compiler — `nav_generate` in game, `sv_cheats 1`, only | the engine, automatically, on first load if absent or invalid |
+| Invalidated by a recompile | yes, silently | yes, but the engine regenerates it on the next load |
+| Cost of forgetting | Nextbots frozen, **silent console** | a one-off CPU cost on the first `map`, nothing broken |
+| Check | `read_nav` returns `fresh`/`stale`, comparing the BSP size in the file to the one loaded | server log on the first `changelevel` after a recompile |
 
-`rp_nycity_day` embarque un `.ain` dans son pakfile — vérifiable avec `read_pakfile`. Aucun
-générateur de nav mesh n'existe hors moteur, ici ou ailleurs dans le domaine public ; regénérer
-exige `gmod-mcp` en jeu, ça se demande, ça ne se décide pas (voir `SKILL.md`).
+⚠️ Both are loaded **by map name**, referenced by nothing. That makes a typo undetectable by any
+compiler: a production map in this corpus ships `maps/graphs/rp_nyc1ty_day.ain` — a `1` where the
+`i` should be — so its nodegraph has never once been loaded `[measured]`. `read_map_dependencies`
+catches it, because it knows the naming convention; nothing else does.
+
+No nav mesh generator exists outside the engine, here or anywhere public; regenerating one needs
+`gmod-mcp` in game, which is asked for, not decided (see `SKILL.md`).
 
 ## Workshop
 
-`gmad` empaquette un dossier en `.gma`, `gmpublish` l'uploade — deux binaires livrés dans
-`garrysmod/bin/`, ni l'un ni l'autre outillé par ce projet : cette étape reste manuelle. Deux
-contraintes dures avant d'y passer :
+`gmad` packs a folder into a `.gma`, `gmpublish` uploads it — two binaries shipped in
+`garrysmod/bin/`, neither tooled by this project: that step stays manual. Two hard constraints
+before going there:
 
-- **L'icône doit être un JPEG baseline 512×512, chroma 4:2:0.** Un JPEG progressif, un PNG, ou un
-  export 4:2:2/4:4:4 est rejeté silencieusement par le compresseur. [moteur]
-- **Liste blanche d'extensions** dans `AddonWhiteList.h` de `gmad` : `.dll`, `.exe`, `.js`,
-  `.html`, `.css` et la plupart des `.txt` sont bannis (exception : scripts de véhicule). [moteur]
+- **The icon must be a baseline JPEG, 512×512, chroma 4:2:0.** A progressive JPEG, a PNG, or a
+  4:2:2/4:4:4 export is silently rejected by the compressor. `[engine]`
+- **An extension whitelist** in `gmad`'s `AddonWhiteList.h`: `.dll`, `.exe`, `.js`, `.html`, `.css`
+  and most `.txt` are banned (exception: vehicle scripts). `[engine]`
 
-`addon.json` doit être à la racine, pas dans un sous-dossier, sous peine d'un rejet « not allowed
-by whitelist » à la création du `.gma`. [consensus]
+`addon.json` must be at the root, not in a subfolder, or the `.gma` creation fails with "not
+allowed by whitelist". `[consensus]`
 
-## Deux chiffres à ne pas confondre avec leur voisin
+## Two numbers not to confuse with their neighbour
 
-**La limite d'edicts n'est pas la limite d'entités de compilation.** `MAX_EDICTS` = 2048 dans
-`const.h` est la limite **runtime** du moteur Source stock — combien d'entités peuvent exister
-*en même temps en jeu*, carte plus joueurs plus armes plus ragdolls plus props spawnés. [moteur]
-GMod la relève, mais GMod est fermé : la valeur exacte n'est vérifiable dans aucun code source
-ici. **[consensus]** — à mesurer sur l'instance réelle, pas à citer. Elle n'a rien à voir avec
-`MAX_MAP_ENTITIES` = 8192, qui borne le lump 0 **à la compilation** et n'existe qu'au moment où
-`vbsp` écrit le `.bsp` — une carte peut respecter 8192 sans épuiser les 2048 (ou plus) edicts
-runtime une fois des joueurs dedans, et inversement une petite carte peut épuiser les edicts si
-elle laisse `sbox_maxprops` sans borne. Vérifier : `read_map_extents`/`read_bsp_entities` pour le
-compte de compilation ; `gmod-mcp` → `read_entities` pour le compte runtime réel.
+**The edict limit is not the compile-time entity limit.** `MAX_EDICTS` = 2048 in `const.h` is the
+stock Source engine's **runtime** limit — how many entities can exist *at the same time in game*:
+map plus players plus weapons plus ragdolls plus spawned props. `[engine]` GMod raises it, but GMod
+is closed: the exact value is verifiable in no source code here. **`[consensus]`** — measure it on
+the real instance, do not quote it.
 
-**« 32768 » est une étendue, pas une borne.** `MAX_COORD_INTEGER` = 16384 : le monde va de −16384
-à +16384 sur chaque axe. L'étendue totale, bord à bord, fait 32768 — c'est l'origine du chiffre,
-pas une limite qu'on pourrait placer n'importe où dans l'espace. [moteur] Le folklore qui présente
-« 32768 » comme la taille maximale d'une carte fait construire deux fois trop grand : à partir de
-l'origine, on n'a que 16384 dans chaque direction, pas 32768. Vérifier : `read_map_extents`.
+It has nothing to do with `MAX_MAP_ENTITIES` = 8192, which bounds lump 0 **at compile time** and
+exists only while `vbsp` writes the `.bsp`. A map can respect 8192 without exhausting the 2048 (or
+more) runtime edicts once players are in it, and conversely a small map can exhaust the edicts if
+it leaves `sbox_maxprops` unbounded.
 
-## La charge multijoueur réelle
+Measured, and worth knowing before scoping: three urban production maps sit at **165%, 250% and
+209%** of stock `MAX_EDICTS` from their map entities alone, before any player `[measured]`. A map of
+that size is impossible under a stock Source engine and exists only because GMod raises the ceiling.
 
-Un DarkRP à 32-64 joueurs consomme des edicts pour les entités de carte **et** pour tout ce qui
-apparaît en jeu — armes tenues, projectiles, ragdolls, props spawnés. Une carte déjà dense en
-entités statiques réduit d'autant la marge qui reste aux joueurs en cours de partie ; ce n'est pas
-un défaut de la carte en soi, mais un budget à connaître avant de l'ajouter. Les `sbox_max*`
-(`sbox_maxprops`, `sbox_maxragdolls`, `sbox_maxnpcs`…) bornent le spawn joueur côté serveur, pas
-côté carte — ne jamais supposer leur valeur par défaut, la lire sur l'instance cible. [consensus]
-Vérifier : `gmod-mcp` → `read_convars` pour les `sbox_max*` effectifs, `read_runtime` pour la
-charge en cours, `read_players` pour le nombre connecté.
+Checking: `read_bsp_entities` for the compile-time count; `gmod-mcp` → `read_entities` for the real
+runtime count.
 
-Le poids réel d'un `prop_physics` non batché, le coût d'une collision mesh redimensionnée
-dynamiquement, la densité de props physiques toujours actifs — jugement humain, non outillé :
-aucun outil ici ne mesure un coût CPU en jeu, seul `gmod-mcp` observe l'instant présent.
+**"32768" is an extent, not a bound.** `MAX_COORD_INTEGER` = 16384: the world runs from −16384 to
++16384 on each axis. The total edge-to-edge extent is 32768 — that is where the number comes from,
+not a limit you could place anywhere in space. `[engine]` The folklore presenting "32768" as a map's
+maximum size makes people build twice too large: from the origin you have 16384 in each direction,
+not 32768. Checking: `read_map_extents`.
+
+## Real multiplayer load
+
+A DarkRP server at 32-64 players spends edicts on map entities **and** on everything that appears in
+game — held weapons, projectiles, ragdolls, spawned props. A map already dense in static entities
+reduces the headroom left to players mid-round; that is not a defect of the map in itself, but a
+budget to know before adding it. The `sbox_max*` cvars (`sbox_maxprops`, `sbox_maxragdolls`,
+`sbox_maxnpcs`…) bound player spawning server-side, not map-side — never assume their default, read
+it on the target instance. `[consensus]`
+
+Checking: `gmod-mcp` → `read_convars` for the effective `sbox_max*`, `read_runtime` for current
+load, `read_players` for the connected count.
+
+The real weight of an unbatched `prop_physics`, the cost of a dynamically resized collision mesh,
+the density of always-active physics props — **human judgement, not tooled**: nothing here measures
+a CPU cost in game, only `gmod-mcp` observes the present moment.

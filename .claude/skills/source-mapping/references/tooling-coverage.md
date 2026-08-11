@@ -1,119 +1,122 @@
-# Ce qu'on sait vérifier, et ce qu'on ne sait pas
+# What we can verify, and what we cannot
 
-Savoir une règle ne sert à rien si on ne sait pas dire si elle est respectée. Cette page relie
-chaque famille de règles du skill à sa méthode de contrôle, et nomme sans détour ce que rien ne
-contrôle.
+Knowing a rule is useless if you cannot say whether it is being followed. This page ties every
+family of rules in the skill to its checking method, and names outright what nothing checks.
 
-Trois statuts, et un seul est confortable :
+Three statuses, and only one is comfortable:
 
-| Statut | Ce que ça veut dire |
+| Status | What it means |
 |---|---|
-| **offline** | un outil `hammer-mcp` répond sur le fichier, sans moteur, sans serveur |
-| **en jeu** | il faut le moteur en marche : `gmod-mcp`, donc le serveur partagé |
-| **humain** | aucun outil ne tranche. Le dire est la seule honnêteté possible |
+| **offline** | a `hammer-mcp` tool answers from the file, with no engine and no server |
+| **in game** | the running engine is required: `gmod-mcp`, therefore the shared server |
+| **human** | no tool settles it. Saying so is the only honesty available |
 
-## Par domaine
+## By area
 
-| Règle du skill | Comment on la vérifie | Statut |
+| Skill rule | How it is checked | Status |
 |---|---|---|
-| Remplissage des lumps vs plafonds vbsp ([brushwork](brushwork.md)) | `read_map_geometry` | offline |
-| Emprise réelle, sortie du monde ([brushwork](brushwork.md)) | `read_map_extents` | offline |
-| Classe ou keyvalue inconnue du FGD ([entites](entites.md)) | `read_vmf_lint`, `read_fgd_class` | offline |
-| Output vers une cible inexistante ([entites](entites.md)) | `read_vmf_lint` | offline |
-| Inventaire et position des entités ([entites](entites.md)) | `read_bsp_entities`, `read_vmf` | offline |
-| Carte scellée, traque d'un leak ([compile](compile.md)) | `read_leak` sur le pointfile, `read_compile_log` | offline |
-| Sens réel d'un message de compilateur ([compile](compile.md)) | `read_compile_log` | offline |
-| Longueur des lignes de vue ([visibilite](visibilite.md)) | `read_sightlines` | offline |
-| Un brush est-il clos, convexe, dans le monde, sur la grille ([brushwork](brushwork.md)) | `read_vmf_solids` | offline |
-| Une carte tient-elle son budget, et lequel ([performance](performance.md)) | `read_map_report` | offline |
-| Un hint a-t-il changé quelque chose ([visibilite](visibilite.md)) | compiler avant/après, comparer `read_visleaf_stats` | offline |
-| Props dynamiques convertibles en statiques ([performance](performance.md)) | `read_prop_survey` | offline |
-| Emprise et volume des entités brush ([performance](performance.md)) | `read_brush_volumes` | offline |
-| Cubemaps construits, lighting statique cuit ([lighting](lighting.md)) | `read_pakfile` — compte les `c-*.vtf` et les `.vhv` | offline |
-| Assets embarqués vs dépendances externes ([assets](assets.md)) | `read_pakfile`, puis `run_pack` | offline |
-| Nav mesh encore valide après compilation ([gmod](gmod.md)) | `read_nav` | offline |
-| Toolchain, FGD, profil de jeu disponibles ([compile](compile.md)) | `health`, `read_source_games` | offline |
-| Découpage réel en visleaves ([visibilite](visibilite.md)) | `mat_leafvis`, `r_lockpvs` via `run_console_command` | en jeu |
-| Ce qui est réellement dessiné ([performance](performance.md)) | `mat_wireframe`, `+showbudget` via `run_console_command` | en jeu |
-| Coût serveur sous charge ([performance](performance.md)) | `read_runtime`, `read_players`, `read_entities` | en jeu |
-| Cubemaps à reconstruire ([lighting](lighting.md)) | `buildcubemaps` via `run_console_command` | en jeu |
-| Damier violet, modèle ERROR ([assets](assets.md)) | `capture_screen`, `read_console` | en jeu |
-| Ambiance sonore, brouillard, eau ([ambiance](ambiance.md)) | `capture_screen`, `read_view`, écoute humaine | en jeu |
-| Un brush structurel devrait-il être `func_detail` ([visibilite](visibilite.md)) | — | humain |
-| Où poser un hint, un areaportal ([visibilite](visibilite.md)) | — | humain |
-| Quel lightmap scale mérite telle surface ([lighting](lighting.md)) | — | humain |
-| L'éclairage est-il beau, la ville lisible ([level-design](level-design.md)) | — | humain |
-| Échelle, composition, flow ([level-design](level-design.md)) | — | humain |
-| Le displacement est-il bien cousu ([displacements](displacements.md)) | — | humain |
+| Lump fill against vbsp ceilings ([brushwork](brushwork.md)) | `read_map_geometry` | offline |
+| Real extent, leaving the world ([brushwork](brushwork.md)) | `read_map_extents` | offline |
+| Class or keyvalue unknown to the FGD ([entities](entities.md)) | `read_vmf_lint`, `read_fgd_class` | offline |
+| Output aimed at a target that does not exist ([entities](entities.md)) | `read_vmf_lint` | offline |
+| Entity inventory and positions ([entities](entities.md)) | `read_bsp_entities`, `read_vmf` | offline |
+| Map sealed, hunting a leak ([compiling](compiling.md)) | `read_leak` on the pointfile, `read_compile_log` | offline |
+| What a compiler message really means ([compiling](compiling.md)) | `read_compile_log` | offline |
+| Sightline lengths ([visibility](visibility.md)) | `read_sightlines` | offline |
+| Is a brush closed, convex, inside the world, on grid ([brushwork](brushwork.md)) | `read_vmf_solids` | offline |
+| Does a map hold its budget, and which one ([performance](performance.md)) | `read_map_report` | offline |
+| Did a hint change anything ([visibility](visibility.md)) | compile before/after, compare `read_visleaf_stats` | offline |
+| Dynamic props convertible to static ([performance](performance.md)) | `read_prop_survey` | offline |
+| Footprint and volume of brush entities ([performance](performance.md)) | `read_brush_volumes` | offline |
+| Cubemaps built, static lighting baked ([lighting](lighting.md)) | `read_pakfile` — counts the `c-*.vtf` and the `.vhv` | offline |
+| Was the map compiled with HDR ([lighting](lighting.md)) | `read_bsp_info` → `hdrLighting`, from lumps 53/54/58 | offline |
+| Where the lightmap budget went ([lighting](lighting.md)) | `read_lightmap_budget` | offline |
+| Materials used and how often ([assets](assets.md)) | `read_materials` | offline |
+| Assets referenced but not packed ([assets](assets.md)) | `read_map_dependencies` | offline |
+| Nav mesh still valid after a compile ([gmod](gmod.md)) | `read_nav` | offline |
+| Toolchain, FGD, game profile available ([compiling](compiling.md)) | `health`, `read_source_games` | offline |
+| The real visleaf split ([visibility](visibility.md)) | `mat_leafvis`, `r_lockpvs`, **client console** | in game |
+| What is actually drawn ([performance](performance.md)) | `mat_wireframe`, `+showbudget`, **client console** | in game |
+| Server cost under load ([performance](performance.md)) | `read_runtime`, `read_players`, `read_entities` | in game |
+| Cubemaps to rebuild ([lighting](lighting.md)) | `buildcubemaps` via `run_console_command` | in game |
+| Purple chequerboard, ERROR model ([assets](assets.md)) | `capture_screen`, `read_console` | in game |
+| Sound, fog, water ([atmosphere](atmosphere.md)) | `capture_screen`, `read_view`, human listening | in game |
+| Should this structural brush be `func_detail` ([visibility](visibility.md)) | — | human |
+| Where to place a hint, an areaportal ([visibility](visibility.md)) | — | human |
+| Which lightmap scale a surface deserves ([lighting](lighting.md)) | — | human |
+| Is the lighting good, is the city readable ([level-design](level-design.md)) | — | human |
+| Scale, composition, flow ([level-design](level-design.md)) | — | human |
+| Is the displacement well sewn ([displacements](displacements.md)) | — | human |
 
-⚠️ **La colonne « humain » n'est pas une faiblesse de l'outillage, c'est la nature du métier.**
-Un agent qui maquille un jugement esthétique en métrique produit un chiffre faux et une fausse
-assurance. Dire « je ne peux pas trancher, regarde » est une réponse valide et souvent la bonne.
+⚠️ **The "human" column is not a weakness of the tooling, it is the nature of the craft.** An agent
+dressing an aesthetic judgement up as a metric produces a wrong number and false confidence. "I
+cannot settle this, look at it" is a valid answer and often the right one.
 
-## Ce que le fichier compilé a définitivement perdu
+⚠️ `mat_leafvis` and `mat_wireframe` are **client** render cvars. A dedicated server has no
+renderer, so sending them server-side does nothing whatever `sv_cheats` says.
 
-Un `.bsp` n'est pas une carte, c'est le résultat d'une carte. Auditer une carte dont on n'a pas le
-`.vmf`, c'est accepter ces angles morts :
+## What the compiled file has permanently lost
 
-| Perdu | Pourquoi |
+A `.bsp` is not a map, it is the result of a map. Auditing a map you have no `.vmf` for means
+accepting these blind spots:
+
+| Lost | Why |
 |---|---|
-| structurel vs `func_detail` | vbsp fond le détail dans le monde à la compilation |
-| hints et skips | consommés par vvis, absents du fichier final |
-| visgroups, cordon, organisation de travail | n'existent que dans le `.vmf` |
-| lightmap scale par face | la taille du lump se mesure, la décision par surface non |
-| l'intention du mappeur | aucun fichier ne la contient |
+| structural vs `func_detail` | vbsp merges detail into the world at compile time |
+| hints and skips | consumed by vvis, absent from the final file |
+| visgroups, cordon, working organisation | exist only in the `.vmf` |
+| per-face lightmap scale | the lump size is measurable, the per-surface decision is not |
+| the mapper's intent | no file contains it |
 
-Face à une de ces questions sur une carte compilée, la réponse est **« non déterminable depuis un
-`.bsp` »**, pas une estimation.
+Faced with one of those questions on a compiled map, the answer is **"not determinable from a
+`.bsp`"**, not an estimate.
 
-## Les trous d'outillage, relevés et non comblés
+## The tooling gaps, recorded and unfilled
 
-Constat au 11/08/2026 **en fin de journée**, à partir du catalogue de `hammer-mcp`. Ce n'est pas
-un chantier ouvert : c'est ce qu'il faut savoir avant de promettre une vérification qui n'existe
-pas.
+Position at the end of 11/08/2026, from the `hammer-mcp` catalogue. This is not a work plan: it is
+what you need to know before promising a check that does not exist.
 
-Deux lacunes de la version du matin ont été comblées dans la journée et sont retirées de ce
-tableau plutôt que barrées : la **table des matériaux** (`read_materials`) et la **géométrie de
-brush**, qui n'est plus un refus — voir ci-dessous.
+Four gaps from the morning version were closed during the day and are removed from this table
+rather than struck through: the **material table** (`read_materials`), **brush geometry** (no
+longer a refusal — see below), the **lightmap budget** (`read_lightmap_budget`), and **referenced
+asset detection** (`read_map_dependencies`).
 
-| Trou | Ce qu'il empêche |
+| Gap | What it prevents |
 |---|---|
-| `run_pack` exige une liste explicite | aucune détection des assets réellement référencés ; un oubli reste invisible jusqu'au damier violet |
-| aucune lecture de la géométrie d'un `.nav` | `read_nav` ne dit que la fraîcheur, pas la couverture |
-| aucun lecteur de `.gma` | une carte du Workshop doit être extraite hors outillage avant d'être mesurée |
-| displacements, visgroups, cordon, occluders | lus ou comptés au mieux, jamais créés ni édités |
-| areaportals | comptés par `read_map_geometry`, jamais validés fonctionnellement |
-| génération de cubemaps et de nav mesh | hors périmètre par construction — le moteur est requis, donc `gmod-mcp` |
-| lecteur de `vprof` | envisagé, jamais écrit, faute d'échantillon réel pour le calibrer |
+| `read_prop_survey` does not read the `GAME_LUMP` | it returns zero `prop_static` on any compiled map **without saying so**, and on an urban map that is most of the scenery |
+| no reading of a `.nav`'s geometry | `read_nav` only reports freshness, not coverage |
+| no `.gma` reader | a Workshop map must be extracted outside the tooling before it can be measured |
+| displacements, visgroups, cordon, occluders | read or counted at best, never created or edited |
+| areaportals | counted by `read_map_geometry`, never functionally validated |
+| cubemap and nav mesh generation | out of scope by construction — the engine is required, therefore `gmod-mcp` |
+| `vprof` reader | considered, never written, for lack of a real sample to calibrate it against |
 
-## Le refus sur la géométrie de brush, et pourquoi il est tombé
+## The refusal on brush geometry, and why it fell
 
-`hammer-mcp` refusait de créer des brushes, avec un motif écrit en tête de son chemin d'écriture :
-poser des plans et des axes de texture **sans oracle** produit des cartes qui compilent et qui sont
-fausses.
+`hammer-mcp` refused to create brushes, with the reason written at the head of its write path:
+placing planes and texture axes **with no oracle** produces maps that compile and are wrong.
 
-L'argument était juste ; c'est sa conclusion qui a expiré, parce que les oracles existent
-maintenant. Quatre, et ils sont indépendants :
+The argument was sound; its conclusion expired, because the oracles exist now. Four of them, and
+they are independent:
 
-| Oracle | Ce qu'il attrape |
+| Oracle | What it catches |
 |---|---|
-| **l'algèbre** — `read_vmf_solids` | il remonte des plans vers le volume, là où l'écrivain descend du volume vers les plans : une erreur de signe ne peut pas se cacher dans les deux sens |
-| **le compilateur** — vbsp | une pièce close construite entièrement par l'outil compile sans leak, et fuit dès qu'on retire un mur |
-| **le moteur** | la pièce démarre, ou non |
-| **l'œil** | tout le reste, et il reste requis |
+| **the algebra** — `read_vmf_solids` | it goes from planes back to volume where the writer goes from volume to planes: a sign error cannot hide in both directions |
+| **the compiler** — vbsp | a closed room built entirely by the tool compiles without a leak, and leaks the moment a wall is removed |
+| **the engine** | the room boots, or it does not |
+| **the eye** | everything else, and it is still required |
 
-Conséquence pour ce skill : **la colonne « humain » n'a pas rétréci.** Ce qui a changé, c'est qu'un
-agent peut désormais *agir* sur ce qu'il diagnostique — poser un `func_detail`, un hint, un volume —
-au lieu de seulement le nommer. Décider **où** les poser reste un jugement.
+Consequence for this skill: **the "human" column has not shrunk.** What changed is that an agent
+can now *act* on what it diagnoses — place a `func_detail`, a hint, a volume — instead of only
+naming it. Deciding **where** to place them stays a judgement.
 
-⚠️ Ne pas en conclure qu'une carte construite par outil est bonne. Les quatre oracles répondent
-« close, convexe, dans le monde, scellée ». Aucun ne répond « belle », ni « lisible », ni « au bon
-endroit ».
+⚠️ Do not conclude that a tool-built map is good. The four oracles answer "closed, convex, inside
+the world, sealed". None answers "beautiful", "readable", or "in the right place".
 
-⚠️ **`write_lump_patch` produit un fichier valide dont l'effet en jeu n'est pas prouvé.** Le codec
-`.lmp` est mesuré ; que Garry's Mod l'honore réellement ne l'est pas. Tant que cette porte n'est pas
-passée, ne bâtis pas un plan de livraison dessus.
+⚠️ **`write_lump_patch` produces a valid file whose in-game effect is unproven.** The `.lmp` codec
+is measured; that Garry's Mod actually honours it is not. Until that gate is passed, do not build a
+delivery plan on it.
 
-⚠️ **Seul Garry's Mod a réellement été exécuté ici.** Les lecteurs BSP et VMF sont du Source
-générique, mais les profils des autres jeux sont plausibles et non vérifiés. Une affirmation du
-genre « pour CS:S, fais X » n'a été essayée par personne dans cet atelier — dis-le si tu l'écris.
+⚠️ **Only Garry's Mod has actually been run here.** The BSP and VMF readers are generic Source, but
+the other games' profiles are plausible and unverified. A claim of the form "for CS:S, do X" has
+been tried by nobody in this workshop — say so if you write it.
