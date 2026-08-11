@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { toolchainDir } from "../compile/wine.js";
+import { allGames, gameFor } from "../games/resolve.js";
 import { defineTool } from "../mcp/registry.js";
 import { run } from "../proc/run.js";
 import { probeSidecar } from "../sidecar/client.js";
@@ -8,7 +9,12 @@ import { VERSION } from "../version.js";
 
 /** The Source tools this server drives, all of them Windows binaries. */
 const BINARIES = ["hammer.exe", "vbsp.exe", "vvis.exe", "vrad.exe", "vbspinfo.exe"];
-const FGDS = ["base.fgd", "halflife2.fgd", "garrysmod.fgd"];
+/**
+ * Extra .fgd files worth reporting on. The *required* ones are no longer listed here:
+ * they come from the active game's own `gameinfo.txt`, so this stays correct for a game
+ * nobody here owns.
+ */
+const EXTRA_FGDS = ["base.fgd", "halflife2.fgd"];
 
 /**
  * The Hammer++ rebuild of the same compilers. Optional, and reported separately rather
@@ -39,7 +45,19 @@ export const health = defineTool({
     const wine = await run("wine", ["--version"], { timeoutMs: 10_000 }).catch(() => null);
     const sidecar = await probeSidecar(config);
 
-    const plusDir = toolchainDir(config, "plusplus");
+    // Never throws: health has to stay callable precisely when the configuration is what
+    // is wrong. A bad default profile id is reported, not raised.
+    let active: ReturnType<typeof gameFor> | null = null;
+    let gamesError: string | null = null;
+    try {
+      active = gameFor(config);
+    } catch (e) {
+      gamesError = e instanceof Error ? e.message : String(e);
+    }
+    const profiles = gamesError ? {} : allGames(config);
+    const fgdList = [...(active?.game.fgd ?? []), ...EXTRA_FGDS];
+
+    const plusDir = toolchainDir(config, "plusplus", active?.game);
     const plusDirExists = existsSync(plusDir);
     const plusBinaries = Object.fromEntries(
       PLUSPLUS.map((b) => [b, plusDirExists && existsSync(join(plusDir, b))]),
@@ -50,6 +68,30 @@ export const health = defineTool({
       repoRoot: config.repoRoot,
       stateDir: config.stateDir,
       auditLog: ctx.audit.path,
+      game: gamesError
+        ? { error: gamesError, active: null, known: [] }
+        : {
+            error: null,
+            active: {
+              id: active!.game.id,
+              displayName: active!.game.displayName,
+              branch: active!.game.branch,
+              gameDir: active!.game.gameDir,
+              binDir: active!.game.binDir,
+              fgd: active!.game.fgd,
+              instancePath: active!.game.instancePath,
+              unusableForCompile: active!.game.unusableForCompile,
+              // Which values were read off disk and which are built-in guesses. Only one
+              // game has ever been run here, so this is not decoration.
+              provenance: active!.game.provenance,
+            },
+            known: Object.entries(profiles).map(([id, g]) => ({
+              id,
+              displayName: g.displayName,
+              installed: g.gameDir !== null,
+              usableForCompile: g.unusableForCompile === null,
+            })),
+          },
       toolchain: {
         gmodBin: binDir,
         present: binDirExists,
@@ -57,7 +99,7 @@ export const health = defineTool({
           BINARIES.map((b) => [b, binDirExists && existsSync(join(binDir, b))]),
         ),
         fgd: Object.fromEntries(
-          FGDS.map((f) => [f, binDirExists && existsSync(join(binDir, f))]),
+          fgdList.map((f) => [f, binDirExists && existsSync(join(binDir, f))]),
         ),
         gameDir: config.gmodGameDir,
         gameDirPresent: existsSync(config.gmodGameDir),
