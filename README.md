@@ -20,12 +20,13 @@ else. That is what lets it hold no lock and sit beside a live server without dis
   TEXINFO     11841 / 12288    96%  █████████▋
   VERTEXES    62270 / 65536    95%  █████████▌
   BRUSHES      6913 /  8192    84%  ████████▍
-  OVERLAYS      371 /   512     73%  ███████▎
 
-  4 lumps near their ceiling. MODELS is past it — and this map loads
-  every day. That is not a broken map: it is evidence that the
-  compilers which built it raise that ceiling. The tool reports it in
-  those terms, rather than an error it cannot substantiate.
+  4 lumps at or past 80% of their ceiling.
+
+  MODELS is past it outright — and this map loads every day. That is
+  not a broken map: it is evidence that the compilers which built it
+  raise that ceiling. The tool reports it in those terms, rather than
+  an error it cannot substantiate.
 ```
 
 Measured on 11/08/2026. The tool returns JSON; the bars are this README's rendering of it. Every
