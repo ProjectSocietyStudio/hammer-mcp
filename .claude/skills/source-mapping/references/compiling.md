@@ -1,121 +1,117 @@
-# Compiler
+# Compiling
 
-Piloter les outils — `run_compile`, Wine, stock/Hammer++, `cull` — vit dans
-`source-map/references/compile.md`. Ici : ce que chaque passe fait réellement, quels flags
-changent quelque chose, comment traquer un leak, et le catalogue des messages.
+Driving the tools — `run_compile`, Wine, stock/Hammer++, `cull` — lives in
+`source-map/references/compiling.md`. Here: what each pass actually does, which flags change
+anything, how to hunt a leak, and the message catalogue.
 
-## Les trois passes
+## The three passes
 
-- **vbsp** transforme les brushes en polygones, génère les visleaves et les detail props, avale
-  la plupart des entités internes dans le monde, patche les matériaux `WorldVertexTransition`
-  hors displacement, et écrit le `.lin` s'il ne trouve pas de scellement. Le `.bsp` qu'il produit
-  est jouable mais **sans VIS et sans lumière**. [moteur]
-- **vvis** teste la visibilité entre visleaves (clipping de leurs plans) et écrit le résultat dans
-  le `.bsp`. Sans `-fast`, c'est la passe qui dure — de la minute à l'heure sur une grande carte
-  extérieure. [moteur]
-- **vrad** calcule les lightmaps, l'éclairage par sommet des props, les échantillons d'ambiance ;
-  c'est en général **la plus lente des trois**, et une carte non scellée ou mal optimisée
-  l'allonge encore. [moteur]
+- **vbsp** turns brushes into polygons, generates the visleaves and detail props, absorbs most
+  internal entities into the world, patches `WorldVertexTransition` materials off displacements, and
+  writes the `.lin` if it finds no seal. The `.bsp` it produces is playable but **with no VIS and no
+  light**. `[engine]`
+- **vvis** tests visibility between visleaves (clipping their planes) and writes the result into the
+  `.bsp`. Without `-fast`, this is the pass that takes time — minutes to hours on a large outdoor
+  map. `[engine]`
+- **vrad** computes lightmaps, per-vertex prop lighting and ambient samples; it is generally **the
+  slowest of the three**, and an unsealed or badly optimised map makes it longer still. `[engine]`
 
-## Les flags qui changent vraiment quelque chose
+## The flags that really change something
 
-| Situation | Flags | Effet réel |
+| Situation | Flags | Real effect |
 |---|---|---|
-| Itérer sur le gameplay, pas encore la lumière | `vvis -fast`, `vrad -fast` | vvis ne teste pas la visibilité (juste un premier passage grossier) ; vrad ignore les rebonds. Provoque des taches de couleur aléatoires dans le noir et sur les bords de displacement — **jamais livrer avec `-fast`**. [moteur] |
-| Livrer | `vrad -final` | Équivaut à un échantillonnage de props nettement plus fin (`-staticpropsamplescale 16` sur plusieurs jeux) — coût de temps réel, pas un simple label. [moteur] |
-| Props aux ombres fausses (collision grossière : grilles, clôtures) | `-staticproppolys` (+ `-textureshadows` si alpha) | vrad ombre depuis le maillage de rendu du prop, pas sa hitbox. `-textureshadows` réclame en général `-staticproppolys` pour être visible. [moteur] |
-| Formes de props courbes mal dégradées | `-staticproplighting` | Passe en éclairage par sommet sur les props — le temps de compile grimpe avec leur nombre ; à réserver aux dernières passes. [moteur] |
-| Ne toucher qu'aux entités, géométrie et lumière déjà bonnes | `vbsp -onlyents` | Ne réembarque que le bloc d'entités ; conserve VIS et lighting existants. Marque le `.bsp` comme *stale* (avertissement en jeu) — alternative au patch de lump quand on a la source. [moteur] |
-| Carte destinée au HDR | `-both`, jamais `-hdr` seul pour une livraison | Sur les branches pré-dépréciation, charger une carte compilée `-hdr` seul avec le HDR désactivé côté client force `mat_fullbright 1` sur **toutes** les cartes suivantes jusqu'à l'activation des cheats. [moteur] |
-| Machine partagée, compile longue | `-threads <n-1>` ou `-low` | Laisse la machine réactive pendant la compile ; allonge légèrement le temps. [consensus] |
-| T-junctions en excès (`func_detail` touchant le monde) | ne pas dégainer `-notjunc` par défaut | `-notjunc` désactive le correctif de raccord et produit un scintillement visible dans le noir, surtout avec du bump mapping — dernier recours, pas une solution. [consensus] |
+| Iterating on gameplay, not lighting yet | `vvis -fast`, `vrad -fast` | vvis does not test visibility (just a coarse first pass); vrad ignores bounces. Produces random colour blotches in the dark and on displacement edges — **never ship with `-fast`**. `[engine]` |
+| Shipping | `vrad -final` | Equivalent to markedly finer prop sampling (`-staticpropsamplescale 16` on several games) — a real time cost, not a label. `[engine]` |
+| Props with wrong shadows (coarse collision: grates, fences) | `-staticproppolys` (+ `-textureshadows` if alpha) | vrad shadows from the prop's render mesh rather than its hitbox. `-textureshadows` generally needs `-staticproppolys` to be visible. `[engine]` |
+| Curved prop shapes shading badly | `-staticproplighting` | Switches props to per-vertex lighting — compile time grows with their count; save it for late passes. `[engine]` |
+| Only entities changed, geometry and lighting already good | `vbsp -onlyents` | Re-embeds the entity block only; keeps existing VIS and lighting. Marks the `.bsp` *stale* (in-game warning) — the alternative to a lump patch when you have the source. `[engine]` |
+| Map intended for HDR | `-both`, never `-hdr` alone for a release | On pre-deprecation branches, loading a map compiled `-hdr` only with HDR disabled client-side forces `mat_fullbright 1` on **every subsequent map** until cheats are enabled. `[engine]` |
+| Shared machine, long compile | `-threads <n-1>` or `-low` | Keeps the machine responsive during the compile; slightly longer. `[consensus]` |
+| Excess T-junctions (`func_detail` touching the world) | do not reach for `-notjunc` by default | `-notjunc` disables the seam fix-up and produces visible shimmering in the dark, especially with bump mapping — a last resort, not a solution. `[consensus]` |
 
-⚠️ **`-leaktest` n'est pas ce qui produit le `.lin`.** Il fait seulement arrêter vbsp net au
-premier leak détecté ; le pointfile est écrit dans tous les cas, flag présent ou non. Sans lui,
-vbsp continue jusqu'au bout et vvis refuse ensuite de tourner. [moteur]
+⚠️ **`-leaktest` is not what produces the `.lin`.** It only makes vbsp stop dead at the first leak
+found; the pointfile is written either way, flag or no flag. Without it, vbsp runs to completion and
+vvis then refuses to run. `[engine]`
 
-## Lire la progression de vvis
+## Reading vvis progress
 
-Utile pour distinguer un run qui avance d'un run bloqué — vvis affiche peu, et le seul signe de
-vie sur une grande carte peut être ce compteur :
+Useful for telling a run that is progressing from one that is stuck — vvis prints little, and on a
+large map this counter can be the only sign of life:
 
-| Sortie console | Ce que ça mesure |
+| Console output | What it measures |
 |---|---|
-| `number portalclusters` | nombre effectif de visleaves (un `func_viscluster` fusionne plusieurs feuilles en une) [moteur] |
-| `BasePortalVis: 0...10` | premier passage grossier, élimine trivialement ce qui ne se voit pas — **pas exécuté avec `-fast`** [moteur] |
-| `PortalFlow: 0...10` | le calcul de visibilité réel — la partie longue, absente en `-fast` [moteur] |
-| `Building PAS...` | calcul du Potentially Audible Set, après le PVS | [moteur] |
-| `visdatasize: N compressed from M` | taille des données de visibilité embarquées ; plafond dur de 16 Mio sur les branches Source 2013 | [moteur] |
+| `number portalclusters` | the effective visleaf count (a `func_viscluster` merges several leaves into one) `[engine]` |
+| `BasePortalVis: 0...10` | the coarse first pass, trivially eliminating what cannot see — **not run with `-fast`** `[engine]` |
+| `PortalFlow: 0...10` | the real visibility computation — the long part, absent with `-fast` `[engine]` |
+| `Building PAS...` | the Potentially Audible Set, after the PVS `[engine]` |
+| `visdatasize: N compressed from M` | embedded visibility data size; hard ceiling of 16 MiB on Source 2013 branches `[engine]` |
 
-⚠️ `-onlyprops` sur vbsp ne génère pas de `.prt` — enchaîné avec vvis normal, vvis **échoue**
-plutôt que de sauter la passe. À réserver à un `.bsp` qu'on ne recompile plus qu'en props. [moteur]
+⚠️ `-onlyprops` on vbsp produces no `.prt` — chained with a normal vvis, vvis **fails** rather than
+skipping the pass. Reserve it for a `.bsp` you only ever recompile for props. `[engine]`
 
-## Traquer un leak
+## Hunting a leak
 
-⚠️ **L'entité nommée dans `leaked!` n'est jamais la cause.** vbsp remonte du vide vers l'intérieur
-par flood-fill et rapporte la première entité rencontrée sur ce chemin — la supprimer déplace
-simplement le message sur la suivante. Théorie du scellement : `references/visibilite.md`. [moteur]
+⚠️ **The entity named in `leaked!` is never the cause.** vbsp flood-fills from the void inward and
+reports the first entity it meets on that path — deleting it simply moves the message to the next
+one. Sealing theory: `references/visibility.md`. `[engine]`
 
-1. `read_compile_log` sur la sortie de vbsp : le premier `**** leaked ****` compte, pas ceux qui
-   suivent — vvis refuse de tourner sur une carte qui fuit, et le run s'arrête de lui-même.
-2. `read_leak` corrèle le pointfile (`.lin`) avec les entités et nomme celle qui se tient sur le
-   trajet. Le fichier trace des coordonnées ligne par ligne : la première est le point de départ
-   dans le vide, la dernière l'entité d'arrivée — la position dite est **où le rayon est passé**,
-   pas nécessairement où est le trou. [moteur]
-3. Si le pointfile ne mène nulle part d'évident, les causes qui ne sont pas de la théorie du
-   scellement mais des accidents de construction :
-   - **origine désynchronisée** — une entité-brush à helper d'origine (`func_door_rotating`,
-     `func_rot_button`) fuit si son origine est hors du monde, même si le corps du brush y est.
-     Arrive typiquement après un déplacement en mode Vertex Tool, qui ne déplace pas l'origine.
-     [moteur]
-   - **face translucide tournée vers le vide** — une seule face translucide suffit à rompre le
-     scellement, quel que soit le côté ; le pointfile traverse le brush tout droit. [moteur]
-   - **`func_detail` non recouvert** — un `func_detail` qui n'a rien derrière lui en world brush
-     fuit, puisqu'il ne scelle jamais rien lui-même. [moteur]
-   - **aucune entité dans la carte** — vbsp n'a alors aucun point de référence intérieur/extérieur
-     et peut rapporter un leak sans qu'il y en ait un géométriquement. Toujours garder au moins un
-     spawn. [moteur]
-   - **faux positif** — rare : recopier la carte dans un nouveau fichier et recompiler; si le leak
-     disparaît, le fichier d'origine était corrompu. [consensus]
-   - **`func_viscluster` en travers d'une areaportal ou d'une eau** — pas une cause de leak par
-     lui-même, mais le symptôme croisé (leak et viscluster mal posé) se confond facilement au
-     pointfile ; vérifier qu'il ne traverse ni l'une ni l'autre. [moteur]
-4. Une entité dont l'origine tombe **exactement** à `0 0 0`, ou à l'intérieur d'un brush plein, ne
-   fuit jamais — elle est ignorée pour la détermination intérieur/extérieur, ce qui explique
-   certains « non-leaks » déroutants sur des props mal placés. [moteur]
+1. `read_compile_log` on vbsp's output: the first `**** leaked ****` is the one that counts, not the
+   ones after — vvis refuses to run on a leaking map, and the run stops on its own.
+2. `read_leak` correlates the pointfile (`.lin`) with the entities and names the one standing on the
+   path. The file traces coordinates line by line: the first is the starting point in the void, the
+   last the entity it reached — the reported position is **where the ray got through**, not
+   necessarily where the hole is. `[engine]`
+3. If the pointfile leads nowhere obvious, the causes that are construction accidents rather than
+   sealing theory:
+   - **desynchronised origin** — a brush entity with an origin helper (`func_door_rotating`,
+     `func_rot_button`) leaks if its origin is outside the world even when the brush body is inside.
+     Typically after a move in Vertex Tool mode, which does not move the origin. `[engine]`
+   - **a translucent face turned towards the void** — one translucent face is enough to break the
+     seal, whichever side; the pointfile goes straight through the brush. `[engine]`
+   - **an uncovered `func_detail`** — a `func_detail` with no world brush behind it leaks, since it
+     never seals anything itself. `[engine]`
+   - **no entity in the map at all** — vbsp then has no inside/outside reference and can report a
+     leak where there is none geometrically. Always keep at least one spawn. `[engine]`
+   - **false positive** — rare: copy the map into a new file and recompile; if the leak disappears,
+     the original file was corrupt. `[consensus]`
+   - **`func_viscluster` crossing an areaportal or water** — not a leak cause in itself, but the
+     combined symptom is easily confused at the pointfile; check it crosses neither. `[engine]`
+4. An entity whose origin falls **exactly** at `0 0 0`, or inside a solid brush, never leaks — it is
+   ignored for inside/outside determination, which explains some baffling "non-leaks" on badly
+   placed props. `[engine]`
 
-## Le catalogue des messages
+## The message catalogue
 
-| Message | Ce que ça veut réellement dire | Quoi faire |
+| Message | What it really means | What to do |
 |---|---|---|
-| `**** leaked ****` / `Entity <classe> (id) leaked!` | Chemin ouvert vers le vide ; l'entité citée est le point de départ du flood-fill, pas la cause. | `read_leak`, suivre le pointfile, sceller en world brush. Ne jamais supprimer l'entité citée. [moteur] |
-| `LEAKED` sans `.lin` exploitable (0 octet) | Le leak existe mais vbsp n'a pas pu tracer un chemin propre — souvent plusieurs leaks simultanés, ou de la géométrie massive hors grille. | Réduire par dichotomie (cordon), chercher un brush isolé loin du reste. [contesté] |
-| `Displacement found on a(n) <classe> entity — not supported` | Un displacement s'est retrouvé sur un brush qui n'est plus world (converti par erreur en `func_detail`/`func_brush`). Les displacements ne vivent que sur la géométrie de monde. | `read_vmf_lint` identifie le vrai brush — l'index imprimé par le compilateur est inutilisable (toujours 0). Le reconvertir en world. [consensus] |
-| `Too many t-junctions to fix up!` | Trop de `func_detail` intersectant le monde pour que le correctif de raccord tienne sa limite interne. | Convertir une partie des `func_detail` en `func_brush` (pas le même fix-up), ou en props. `-notjunc` en dernier recours seulement. [consensus] |
-| `MAX_MAP_BRUSHSIDES` / `MAX_MAP_PLANES` / `MAX_MAP_*` dépassé | Un lump touche sa limite dure, codée dans `bspfile.h`, pas un réglage de ligne de commande (`BRUSHSIDES`/`PLANES`/`NODES`/`LEAFS` = 65536 ; `ENTITIES` = 8192 ; `AREAPORTALS` = 1024 — voir `00-constantes-verifiees.md`). | `read_map_geometry` dit lequel et de combien. Réduire la géométrie (detail, props, instances) ; Hammer++ relève certaines de ces limites, jamais toutes. [moteur] |
-| `no entities in the map` | Pas de `worldspawn` valide, ou aucune entité de référence intérieur/extérieur — vbsp peut alors rapporter un leak même sans trou géométrique. | Vérifier l'intégrité du `.vmf`, garantir au moins un spawn. [moteur] |
-| `material not found: <chemin>` | Le matériau référencé n'existe dans aucun VPK/dossier monté pour le `-game` utilisé — le compile continue avec une texture de secours (damier). | Vérifier `-game`/`read_source_games`, la casse du chemin (sensible sous Wine/Linux), l'existence du `.vmt`/`.vtf`. [consensus] |
-| `Bad surface extents` | Empreinte de lightmap trop grande pour une face — échelle de texture aberrante (souvent hors `[0.1, 10]`), ou displacement à sommets quasi confondus. | Réaligner en *World*, réduire l'échelle, augmenter le `lightmapscale` de la face concernée. [consensus] |
-| `WARNING: node without a volume` / `BSP node with unbounded volume` | Un nœud de l'arbre BSP n'a pas pu être borné — souvent de la géométrie invalide issue de vertex-edit ou de props incrustés dans un mur. | Ignorable en pratique si rien ne se voit en jeu ; sinon isoler par cordon la zone récemment vertex-éditée. **[contesté]** — pas de page VDC dédiée trouvée, traitement communautaire. |
-| `brush outside world` (brush loin du reste de la carte) | Un brush ou une entité s'est égaré à une distance aberrante, souvent après un copier-coller, gonflant les limites de la carte et risquant un leak ou un plantage. | Vue *Overview*/zoom arrière massif pour le repérer, le supprimer ou le replacer. [consensus] |
-| `func_areaportal ... has no area` / `doesn't touch two areas` | Le brush ne touche pas deux zones distinctes et scellées — flotte dans le vide, ou un écart de 0,1 unité rompt le contact. | Repositionner contre une paroi scellée des deux côtés ; un seul brush par areaportal. [moteur] |
-| `Cluster portals saw into cluster` | Un portail de vvis se voit lui-même à travers une géométrie dégénérée — quasi toujours un symptôme collatéral d'un leak ou d'un areaportal/hint mal formé. | Corriger le scellement d'abord, revérifier ensuite. **[contesté]** — pas de page VDC isolée. |
-| `*** Suppressing further FindPortalSide errors ***` | vvis a rencontré tant d'erreurs de portail qu'il arrête de les logguer une à une — indicateur de gravité, pas l'erreur elle-même. | Remonter au tout premier `FindPortalSide error` avant la coupure ; vérifier l'étanchéité en priorité. **[contesté]** — interprétation littérale, pas de doc primaire directe. |
-| `lightmap sample position` (impossible de placer un échantillon) | Recoupe la famille `Bad surface extents` — face dégénérée ou géométrie qui chevauche un displacement. | Même traitement que `Bad surface extents`. **[contesté]** — non isolé formellement dans les sources consultées. |
-| `Bogus range` (lighting/HDR) | Valeur de couleur/intensité hors plage représentable — souvent une `light`/`light_environment` à intensité nulle, négative ou extrême. | Vérifier les valeurs de brightness des lumières proches de la zone citée. **[contesté]** — pas de source primaire consultée. |
-| `Bad command line` (souvent depuis Hammer++) | Un flag du profil de compile n'est pas reconnu par l'exécutable ciblé — fréquent quand un jeu reçoit un flag propre à un autre. | Vérifier `-game` et l'exécutable réellement invoqué contre la doc du jeu ciblé. [consensus] |
-| `Error opening ...vmf` / pas de `.bsp` en fin de compile | La copie finale vers `maps/` a échoué — généralement parce que vbsp a planté avant de produire un `.bsp` (erreur fatale amont). | Remonter au premier message fatal, pas se fier au message de copie. [consensus] |
-| `Patching WVT material: ...` | Un matériau `WorldVertexTransition` est utilisé sur une face non-displacement ; vbsp le patche pour qu'il rende quand même. | Rien à faire — information, pas une erreur. [moteur] |
-| `FixTjuncs...` | vbsp corrige les raccords en T créés par des `func_detail` touchant le monde. | Rien à faire tant que ça ne précède pas `Too many t-junctions to fix up!`. [moteur] |
+| `**** leaked ****` / `Entity <class> (id) leaked!` | An open path to the void; the entity named is the flood-fill's starting point, not the cause. | `read_leak`, follow the pointfile, seal with world brush. Never delete the named entity. `[engine]` |
+| `LEAKED` with no usable `.lin` (0 bytes) | The leak exists but vbsp could not trace a clean path — often several simultaneous leaks, or massive off-grid geometry. | Bisect with a cordon, look for an isolated brush far from the rest. `[disputed]` |
+| `Displacement found on a(n) <class> entity — not supported` | A displacement ended up on a brush that is no longer world (wrongly converted to `func_detail`/`func_brush`). Displacements live only on world geometry. | `read_vmf_lint` identifies the real brush — the index the compiler prints is useless (always 0). Convert it back to world. `[consensus]` |
+| `Too many t-junctions to fix up!` | Too many `func_detail` intersecting the world for the seam fix-up to stay within its internal limit. | Convert some `func_detail` to `func_brush` (different fix-up), or to props. `-notjunc` only as a last resort. `[consensus]` |
+| `MAX_MAP_BRUSHSIDES` / `MAX_MAP_PLANES` / `MAX_MAP_*` exceeded | A lump hit its hard limit, coded in `bspfile.h`, not a command-line setting (`BRUSHSIDES`/`PLANES`/`NODES`/`LEAFS` = 65536; `ENTITIES` = 8192; `AREAPORTALS` = 1024). | `read_map_geometry` says which and by how much — including the byte-denominated ceilings like `MAX_MAP_LIGHTING`, which record-count checks miss. Reduce geometry (detail, props, instances); Hammer++ raises some of these limits, never all. `[engine]` |
+| `no entities in the map` | No valid `worldspawn`, or no inside/outside reference entity — vbsp can then report a leak with no geometric hole. | Check the `.vmf`'s integrity, guarantee at least one spawn. `[engine]` |
+| `material not found: <path>` | The referenced material exists in no VPK or folder mounted for the `-game` used — the compile continues with a fallback texture (chequerboard). | Check `-game`/`read_source_games`, path case (case-sensitive under Wine/Linux), the `.vmt`/`.vtf`. `read_map_dependencies` separates "packed", "provided by the game" and "missing". `[consensus]` |
+| `Bad surface extents` | Lightmap footprint too large for a face — an aberrant texture scale (often outside `[0.1, 10]`), or a displacement with near-coincident vertices. | Realign to *World*, reduce the scale, raise that face's `lightmapscale`. Note a brush face is capped at 32 luxels per axis, not the 125 of displacements. `[consensus]` |
+| `WARNING: node without a volume` / `BSP node with unbounded volume` | A BSP tree node could not be bounded — often invalid geometry from vertex editing, or props embedded in a wall. | Ignorable in practice if nothing shows in game; otherwise cordon off the recently vertex-edited area. **`[disputed]`** — no dedicated VDC page found, community treatment only. |
+| `brush outside world` | A brush or entity strayed to an absurd distance, often after a copy-paste, inflating the map's bounds and risking a leak or a crash. | Use *Overview* / massive zoom-out to find it, delete or reposition it. `[consensus]` |
+| `func_areaportal ... has no area` / `doesn't touch two areas` | The brush does not touch two distinct sealed areas — floating in the void, or a 0.1-unit gap breaking contact. | Reposition against a wall sealed on both sides; one brush per areaportal. `[engine]` |
+| `Cluster portals saw into cluster` | A vvis portal sees itself through degenerate geometry — almost always collateral to a leak or a malformed areaportal/hint. | Fix the sealing first, recheck after. **`[disputed]`** — no isolated VDC page. |
+| `*** Suppressing further FindPortalSide errors ***` | vvis hit so many portal errors it stopped logging them individually — a severity indicator, not the error itself. | Go back to the very first `FindPortalSide error` before the cutoff; check sealing first. **`[disputed]`** — literal reading, no direct primary doc. |
+| `lightmap sample position` | Same family as `Bad surface extents` — a degenerate face or geometry overlapping a displacement. | Same treatment as `Bad surface extents`. **`[disputed]`** — not formally isolated in the sources consulted. |
+| `Bogus range` (lighting/HDR) | A colour/intensity value outside the representable range — often a `light`/`light_environment` at zero, negative or extreme brightness. | Check the brightness of lights near the area named. **`[disputed]`** — no primary source consulted. |
+| `Bad command line` (often from Hammer++) | A flag in the compile profile is not recognised by the targeted executable — common when one game receives another's flag. | Check `-game` and the executable actually invoked against the target game's documentation. `[consensus]` |
+| `Error opening ...vmf` / no `.bsp` at the end | The final copy into `maps/` failed — usually because vbsp died before producing a `.bsp` (an upstream fatal error). | Go back to the first fatal message, do not trust the copy message. `[consensus]` |
+| `Patching WVT material: ...` | A `WorldVertexTransition` material is used on a non-displacement face; vbsp patches it so it renders anyway. | Nothing to do — information, not an error. `[engine]` |
+| `FixTjuncs...` | vbsp is fixing T-junctions created by `func_detail` touching the world. | Nothing to do unless it precedes `Too many t-junctions to fix up!`. `[engine]` |
 
-## Vérifier
+## Verifying
 
-| Question | Outil |
+| Question | Tool |
 |---|---|
-| Où en est la chaîne, quelle passe a échoué | `read_compile_log` (hammer-mcp) |
-| Position du leak, entité corrélée | `read_leak` (hammer-mcp) |
-| Quel lump touche sa limite, et de combien | `read_map_geometry` (hammer-mcp) |
-| Le VMF avant compile — hint, areaportal, brush suspect | `read_vmf_lint` (hammer-mcp) |
-| Quel `-game` cible réellement quel jeu | `read_source_games` (hammer-mcp) |
-| Les binaires stock/Hammer++ sont-ils là | `health` (hammer-mcp) |
-| `mat_fullbright` forcé après une carte `-hdr` seul, en jeu | jugement humain, non outillé — comparer avant/après en jeu (`gmod-mcp` → `run_console_command`) |
+| Where the chain got to, which pass failed | `read_compile_log` (hammer-mcp) |
+| Leak position, correlated entity | `read_leak` (hammer-mcp) |
+| Which lump hit its limit, and by how much | `read_map_geometry` (hammer-mcp) |
+| The VMF before compiling — hint, areaportal, suspect brush | `read_vmf_lint`, `read_vmf_solids` (hammer-mcp) |
+| Which `-game` really targets which game | `read_source_games` (hammer-mcp) |
+| Are the stock/Hammer++ binaries present | `health` (hammer-mcp) |
+| `mat_fullbright` forced after an `-hdr`-only map, in game | human judgement, not tooled — compare before/after in game |
