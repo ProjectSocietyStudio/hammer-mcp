@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { readGameContentTool, readModelInfoTool } from "../src/tools/content.js";
+import { readSourceGames as readSourceGamesTool } from "../src/tools/games.js";
 import { ctx as sharedCtx, has } from "./support/env.js";
 
 const ctx = sharedCtx as unknown as ToolContext;
@@ -100,6 +101,24 @@ describe("read_game_content", () => {
   it.skipIf(!ready)("returns nothing, and says nothing is there, for a name that is not", async () => {
     const r = await search({ pattern: "no_such_material_anywhere_12345" });
     expect(r.mounted).toBe(true);
+    expect(r.total).toBe(0);
+    expect(r.results).toEqual([]);
+  });
+});
+
+describe("a game profile that is not installed", () => {
+  it("searches nothing rather than searching Garry's Mod under another game's name", async () => {
+    // Falling back to the configured GMod directory returned GMod's own assets under a
+    // reply that named the other game: a confident answer about content the map will not
+    // have. read_source_games is what says which profiles resolve to a real directory.
+    const games = (await readSourceGamesTool.handler({} as never, ctx)) as unknown as {
+      games: Array<{ id: string; gameDir: string | null }>;
+    };
+    const missing = games.games.find((g) => g.gameDir === null);
+    if (!missing) return;
+
+    const r = await search({ pattern: "brick", game: missing.id });
+    expect(r.mounted).toBe(false);
     expect(r.total).toBe(0);
     expect(r.results).toEqual([]);
   });

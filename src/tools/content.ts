@@ -61,7 +61,8 @@ export const readGameContentTool = defineTool({
       }),
     ),
     note: z.string().optional(),
-    error: z.string().optional(),
+    /** Set when the verb declined the request. Not `error`, which is the fault envelope. */
+    refused: z.string().optional(),
   },
   handler: async (args, ctx) => {
     // Refused here rather than in the sidecar so it holds on a machine with no venv: an
@@ -73,7 +74,12 @@ export const readGameContentTool = defineTool({
     const result = (await callSidecar(
       "search_content",
       {
-        gameDir: game.gameDir ?? ctx.config.gmodGameDir,
+        // The selected profile's directory, and nothing else. Falling back to Garry's Mod
+        // when the asked-for game is not installed returned GMod's assets under a reply
+        // that named the other game -- a confident answer about content the map will not
+        // have. A null directory makes the sidecar report that nothing was mounted, which
+        // is the honest one.
+        gameDir: game.gameDir,
         pattern: args.pattern,
         kind: args.kind,
         limit: args.limit,
@@ -114,17 +120,22 @@ export const readModelInfoTool = defineTool({
     maxs: z.array(z.number()).nullable().optional(),
     size: z.array(z.number()).nullable().optional(),
     skinCount: z.number().optional(),
+    /** Every sequence the model has, even when only the first 64 labels are returned. */
     sequenceCount: z.number().optional(),
     sequences: z.array(z.string()).optional(),
     materials: z.array(z.string()).optional(),
+    sequencesTruncated: z.boolean().optional(),
     note: z.string().optional(),
-    error: z.string().optional(),
+    /** A model that exists and could not be read. Not `error`: that is the fault envelope. */
+    readError: z.string().optional(),
+    refused: z.string().optional(),
   },
   handler: async (args, ctx) => {
     const { game, from } = gameFor(ctx.config, args.game);
     const result = (await callSidecar(
       "model_info",
-      { gameDir: game.gameDir ?? ctx.config.gmodGameDir, model: args.model },
+      // Same rule as read_game_content: the profile's own directory, or nothing.
+      { gameDir: game.gameDir, model: args.model },
       ctx.config,
       120_000,
     )) as Record<string, unknown>;
