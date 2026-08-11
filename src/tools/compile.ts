@@ -4,7 +4,7 @@ import { clip } from "@rolists/mcp-core";
 import { z } from "zod";
 import { parseCompileLog } from "../compile/log.js";
 import { locateLeak, readPointfile } from "../compile/leak.js";
-import { runCompiler, toWindowsPath } from "../compile/wine.js";
+import { compilerExe, runCompiler, toWindowsPath } from "../compile/wine.js";
 import { readEntityLump } from "../bsp/entities.js";
 import { checkNavFreshness } from "../bsp/nav.js";
 import { parseEntityText } from "../bsp/entities.js";
@@ -19,6 +19,22 @@ const FINDING = z.object({
   message: z.string(),
   line: z.string(),
 });
+
+/**
+ * Stock by default, on purpose and not out of caution.
+ *
+ * The Hammer++ compilers are faster and cull more, which is exactly why they must not be
+ * the default: the only way to know whether they changed something they should not have
+ * on a 1.13 GB map is to recompile the same source with the stock chain and compare.
+ * A default nobody chose would remove that comparison without anyone noticing.
+ */
+const TOOLCHAIN = z
+  .enum(["stock", "plusplus"])
+  .default("stock")
+  .describe(
+    "Which compilers to drive. 'plusplus' is the Hammer++ rebuild: much faster vvis, and " +
+      "flags the stock chain does not have. Requires them installed; see health.",
+  );
 
 const STAGE_RESULT = z.object({
   stage: z.string(),
@@ -52,11 +68,13 @@ export const runCompile = defineTool({
       .array(z.enum(["vbsp", "vvis", "vrad"]))
       .default(["vbsp", "vvis", "vrad"])
       .describe("Stages to run, in order. vbsp alone is enough to check a map seals."),
+    toolchain: TOOLCHAIN,
     timeoutMinutes: z.number().int().min(1).max(600).default(60),
     confirm: z.boolean().default(false),
   },
   outputSchema: {
     vmf: z.string(),
+    toolchain: z.string(),
     bsp: z.string(),
     bspExists: z.boolean(),
     bspBytes: z.number().nullable(),
@@ -78,11 +96,15 @@ export const runCompile = defineTool({
     const target = toWindowsPath(vmf);
     const timeoutMs = args.timeoutMinutes * 60_000;
 
+    const chain = args.toolchain;
     const plans: Record<string, { exe: string; argv: string[] }> = {
-      vbsp: { exe: "vbsp.exe", argv: ["-game", game, target] },
-      vvis: { exe: "vvis.exe", argv: [...(args.fast ? ["-fast"] : []), "-game", game, target] },
+      vbsp: { exe: compilerExe("vbsp", chain), argv: ["-game", game, target] },
+      vvis: {
+        exe: compilerExe("vvis", chain),
+        argv: [...(args.fast ? ["-fast"] : []), "-game", game, target],
+      },
       vrad: {
-        exe: "vrad.exe",
+        exe: compilerExe("vrad", chain),
         argv: [
           ...(args.fast ? ["-fast"] : []),
           ...(args.hdr ? ["-both"] : []),
@@ -98,12 +120,18 @@ export const runCompile = defineTool({
 
     for (const stage of args.stages) {
       const plan = plans[stage]!;
-      ctx.audit.record({ kind: "compile_start", data: { stage, vmf } });
-      const run = await runCompiler(ctx.config, plan.exe, plan.argv, timeoutMs);
+      ctx.audit.record({ kind: "compile_start", data: { stage, vmf, toolchain: chain } });
+      const run = await runCompiler(ctx.config, plan.exe, plan.argv, timeoutMs, chain);
       const report = parseCompileLog(`${run.stdout}\n${run.stderr}`);
       ctx.audit.record({
         kind: "compile_end",
-        data: { stage, exitCode: run.code, clean: report.clean, ms: run.durationMs },
+        data: {
+          stage,
+          toolchain: chain,
+          exitCode: run.code,
+          clean: report.clean,
+          ms: run.durationMs,
+        },
       });
 
       stages.push({
@@ -127,6 +155,7 @@ export const runCompile = defineTool({
 
     return {
       vmf,
+      toolchain: chain,
       bsp,
       bspExists,
       bspBytes: bspExists ? statSync(bsp).size : null,
@@ -297,10 +326,12 @@ export const runPack = defineTool({
         }),
       )
       .min(1),
+    toolchain: TOOLCHAIN,
     confirm: z.boolean().default(false),
   },
   outputSchema: {
     bsp: z.string(),
+    toolchain: z.string(),
     requested: z.number(),
     filesBefore: z.number(),
     filesAfter: z.number(),
@@ -351,7 +382,7 @@ export const runPack = defineTool({
 
     const run = await runCompiler(
       ctx.config,
-      "bspzip.exe",
+      compilerExe("bspzip", args.toolchain),
       [
         "-game",
         toWindowsPath(ctx.config.gmodGameDir),
@@ -361,6 +392,7 @@ export const runPack = defineTool({
         toWindowsPath(bsp),
       ],
       600_000,
+      args.toolchain,
     );
 
     const filesAfter = await countPak();
@@ -368,6 +400,7 @@ export const runPack = defineTool({
 
     return {
       bsp,
+      toolchain: args.toolchain,
       requested: args.files.length,
       filesBefore,
       filesAfter,
