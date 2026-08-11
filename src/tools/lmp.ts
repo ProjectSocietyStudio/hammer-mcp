@@ -94,6 +94,17 @@ export const writeLumpPatch = defineTool({
     "entities have no effect because vrad bakes lighting at compile time.",
   realm: "map",
   guarded: true,
+  /**
+   * Asks the client to confirm with a human even under a permissive mode.
+   *
+   * `guarded` already refuses the call without `confirm:true`, but that gate is ours and
+   * an agent satisfies it by itself. This writes a file that changes what the production
+   * map spawns, so it deserves the client's own confirmation on top.
+   *
+   * Client-specific and unverified from here: an unrecognised key is ignored in silence,
+   * which is precisely why `guarded` remains the real defence rather than this.
+   */
+  meta: { "anthropic/requiresUserInteraction": true },
   inputSchema: {
     bsp: z.string().describe("Target .bsp. Its mapRevision and entity list are the base."),
     ops: z.array(OP).min(1),
