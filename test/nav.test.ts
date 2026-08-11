@@ -1,23 +1,18 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { checkNavFreshness, NavFormatError, readNavHeader } from "../src/bsp/nav.js";
-import { loadConfig } from "../src/config.js";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { readNav } from "../src/tools/compile.js";
+import { ctx as sharedCtx, has, paths } from "./support/env.js";
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
-const REPO = join(FIXTURES, "..", "..", "..");
-const config = loadConfig(REPO);
-const ctx = { config, audit: { record: () => undefined } } as unknown as ToolContext;
+const ctx = sharedCtx as unknown as ToolContext;
 
-const MAPS = join(REPO, "srcds/garrysmod/maps");
-const CONSTRUCT_NAV = join(MAPS, "gm_construct.nav");
-const CONSTRUCT_BSP = join(MAPS, "gm_construct.bsp");
-const hasNav = existsSync(CONSTRUCT_NAV) && existsSync(CONSTRUCT_BSP);
+const CONSTRUCT_NAV = join(paths.mapsDir, "gm_construct.nav");
+const CONSTRUCT_BSP = join(paths.mapsDir, "gm_construct.bsp");
+const hasNav = has.navPair;
 
 const scratch = mkdtempSync(join(tmpdir(), "hammer-nav-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));

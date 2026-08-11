@@ -1,7 +1,6 @@
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { readGeometry } from "../src/bsp/geometry.js";
 import { locateLeak, readPointfile } from "../src/compile/leak.js";
@@ -13,17 +12,13 @@ import {
   toolchainDir,
   toWindowsPath,
 } from "../src/compile/wine.js";
-import { loadConfig } from "../src/config.js";
 import type { MapEntity } from "../src/entity/model.js";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { readLeak, runCompile } from "../src/tools/compile.js";
+import { FIXTURES, config, ctx as sharedCtx, has, paths } from "./support/env.js";
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
-const REPO = join(FIXTURES, "..", "..", "..");
-const config = loadConfig(REPO);
-const ctx = { config, audit: { record: () => undefined } } as unknown as ToolContext;
-
-const canCompile = existsSync(join(config.gmodBin, "vbsp.exe"));
+const ctx = sharedCtx as unknown as ToolContext;
+const canCompile = has.toolchain;
 const scratch = mkdtempSync(join(tmpdir(), "hammer-compile-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -210,7 +205,7 @@ describe("compiling for real, under wine", () => {
 
 describe("choosing the Hammer++ toolchain", () => {
   const plusDir = toolchainDir(config, "plusplus");
-  const hasPlus = existsSync(join(plusDir, "vbspplusplus.exe"));
+  const hasPlus = has.plusplus;
 
   it("resolves the binaries of each chain to its own directory", () => {
     // The correction gate C forced: the ++ compilers are not siblings of the stock ones.
@@ -239,12 +234,9 @@ describe("choosing the Hammer++ toolchain", () => {
     expect(r.ok).toBe(true);
   }, 300_000);
 
-  const TTT = join(
-    REPO,
-    "srcds/garrysmod/gamemodes/terrortown/mapexamples/ttt_traps.vmf",
-  );
+  const TTT = paths.tttSource;
 
-  it.skipIf(!hasPlus || !existsSync(TTT))("culls what it says it culls", async () => {
+  it.skipIf(!hasPlus || !has.tttSource)("culls what it says it culls", async () => {
     // The probe map is six brushes and would show nothing. ttt_traps is the only real
     // Hammer-written source here -- and it lives under srcds/, where the repo hooks
     // refuse writes, while the compilers write the .bsp beside their source. Hence the

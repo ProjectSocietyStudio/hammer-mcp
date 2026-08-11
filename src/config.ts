@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { loadConfig as coreLoadConfig } from "@rolists/mcp-core";
+import { loadConfig as coreLoadConfig } from "@projectsociety/mcp-core";
 import { z } from "zod";
 
 const STEAM_GMOD = join(
@@ -76,4 +76,4 @@ export function loadConfig(cwd: string = process.cwd()): Config {
   );
 }
 
-export { findRepoRoot } from "@rolists/mcp-core";
+export { findRepoRoot } from "@projectsociety/mcp-core";

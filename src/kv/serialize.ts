@@ -5,10 +5,14 @@ import type { KvBlock, KvNode } from "./parse.js";
  * line, and `"key" "value"` separated by a single space.
  *
  * This is the formatter for content we CREATE. It is not the write path for content we
- * edit -- see `../vmf/edit.ts`, which splices ranges of the original text so that
+ * edit -- see `../entity/edit.ts`, which splices ranges of the original text so that
  * everything untouched stays byte-identical. Reserialising a whole file would lose
  * Hammer's own irregular whitespace and reformat floats like `5416.0312`, producing a
  * diff of thousands of lines for a one-entity change.
+ *
+ * That splice path currently serves the entity lump only. **There is no VMF write tool
+ * yet**: a `.vmf` can be read and linted here, not edited. When one arrives it must reuse
+ * the same splice, for the same reason.
  */
 export function serialize(nodes: readonly KvNode[], indent = 0): string {
   return nodes.map((n) => serializeNode(n, indent)).join("");

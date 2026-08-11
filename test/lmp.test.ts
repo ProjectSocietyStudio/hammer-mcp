@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readEntityLump } from "../src/bsp/entities.js";
 import { readHeader } from "../src/bsp/header.js";
@@ -13,11 +12,11 @@ import {
   LMP_HEADER_BYTES,
 } from "../src/lmp/codec.js";
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+import { FIXTURES, paths } from "./support/env.js";
+
 const PROBE = join(FIXTURES, "hmcp_probe.bsp");
-const REPO = join(FIXTURES, "..", "..", "..");
 /** One of the three lump patches Valve ships with Half-Life 2, via GMod's maps folder. */
-const STOCK_LMP = join(REPO, "srcds", "garrysmod", "maps", "c1a1_l_0.lmp");
+const STOCK_LMP = paths.stockLmp;
 
 describe("lmp codec", () => {
   it("writes the 20-byte header Source expects", () => {

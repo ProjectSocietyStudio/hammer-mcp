@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+
+      # The runner has no Source game, no wine and no Python sidecar, so most of this
+      # suite skips. That is the point: it proves the package builds and its pure logic
+      # holds on a bare machine, which is the machine a new contributor has.
+      - run: pnpm test --reporter=json --outputFile=vitest-report.json
+
+      # A green run with zero tests executed looks exactly like a green run that proved
+      # something. If a skip guard is ever widened too far, this is what notices.
+      #
+      # Measured on a machine with no game, no wine and no sidecar (11/08/2026):
+      # 82 passed, 46 skipped. The floor sits below that so ordinary churn does not trip
+      # it, and far above zero so a collapse does.
+      - name: Refuse a green run that tested nothing
+        run: |
+          passed=$(node -e "process.stdout.write(String(require('./vitest-report.json').numPassedTests))")
+          echo "passed on a bare runner: $passed"
+          if [ "$passed" -lt 70 ]; then
+            echo "::error::only $passed tests actually ran; a skip guard is too wide"
+            exit 1
+          fi
