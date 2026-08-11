@@ -219,6 +219,7 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_map_geometry` | `map` | | Contenu de chaque lump et marge restante avant le plafond de vbsp |
 | `read_prop_survey` | `map` | | Inventaire des props, et ceux qui sont `prop_dynamic` pour rien |
 | `read_pakfile` | `map` | | Contenu du pakfile embarqué (lump 40), et les preuves de compilation qu'il porte |
+| `read_sightlines` | `map` | | Les plus longues lignes de vue dégagées, tracées contre l'arbre du monde |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
@@ -260,6 +261,44 @@ Et un lump **dépasse** : `MODELS` à **1218 pour un plafond de 1024**, soit 119
 charge tous les jours. Ce n'est donc pas une carte cassée, **c'est la preuve que les compilateurs
 qui l'ont produite relèvent ce plafond** — l'outil le dit dans ces termes plutôt que de crier à
 l'erreur.
+
+### Les lignes de vue, et les trois façons de se tromper avant d'y arriver
+
+`read_sightlines` descend l'arbre BSP exactement comme le moteur le fait pour un
+`util.TraceLine` — la récursion est celle de `SV_RecursiveHullCheck`, inchangée depuis Quake.
+Trois lumps suffisent (PLANES, NODES, LEAFS) : 1,6 Mo lus sur une carte de 1,13 Go, arbre chargé en
+**20 ms**, puis 26 000 tracés en 22 ms.
+
+**Le traceur est validé contre un échantillonnage dense** — marcher le segment point par point doit
+rendre le même verdict qu'une descente d'arbre. Mesuré le 11/08/2026 : **1275 accords sur 1276**
+sur la carte de production, l'unique écart étant un mur plus fin que le pas d'échantillonnage. Sur
+la carte sonde, qui est une pièce scellée, un rayon vers l'extérieur **doit** être bloqué : c'est le
+contrôle négatif sans lequel un traceur qui répond « dégagé » partout passerait tous les autres
+tests.
+
+Restait à savoir **où échantillonner**. Trois méthodes ont été essayées et rendaient toutes des
+nombres confiants et faux :
+
+| Méthode | Ce qu'elle a rendu | Pourquoi c'était faux |
+|---|---|---|
+| Origines d'entités (`info_player_start`, `path_track`) | 706 m | les `path_track` montent à z=3980 — ce sont des trajets d'ascenseurs ; la médiane des spawns est à z=-380, une salle enterrée |
+| Première surface sous un tracé vers le bas | 852 m, sol jusqu'à z=7232 | depuis le ciel, la première surface rencontrée est **le toit** |
+| Surface la plus basse de la colonne | 820 m, z médian -6080 | le point le plus bas est le **plancher de la boîte à ciel**, sous la ville |
+
+La méthode retenue ne s'appuie sur aucune convention inventée : **l'altitude où le mappeur a mis
+son contenu**. La médiane des origines des 3452 entités tombe à **z=195**, et les entités de rue
+confirment indépendamment — props à 76, portes à 121, ambiances à 168, lampadaires à 232. Un
+histogramme des surfaces praticables place 320 d'entre elles dans la bande `z=0`, deuxième pic
+derrière le plancher du vide. Deux signaux indépendants, même réponse.
+
+**Ce que l'outil ne sait pas, et le dit** : un `.bsp` n'a aucune notion de « rue ». Les
+`prop_static` (3986 sur cette carte) et les entités-brush ne sont pas dans l'arbre du monde — une
+porte fermée s'y lit comme ouverte. L'outil renvoie ces réserves dans un champ `excludes` plutôt
+que de laisser croire qu'il mesure ce qu'il ne mesure pas.
+
+Résultat sur `rp_nycity_day`, pas de 512 u, 1051 points en zone bâtie, 551 775 paires en **387 ms** :
+la plus longue ligne dégagée fait **30 278 u = 769 m**. Elle est réelle — vérifiée point par point —
+mais elle traverse des dégagements, pas une avenue.
 
 ### Le garde-fou qui empêche d'inventer un chiffre
 

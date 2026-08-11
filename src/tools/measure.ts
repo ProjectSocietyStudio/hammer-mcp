@@ -2,6 +2,12 @@ import { z } from "zod";
 import { readEntityLump } from "../bsp/entities.js";
 import { readGeometry } from "../bsp/geometry.js";
 import { METRES_PER_UNIT, readModels, worldExtents } from "../bsp/models.js";
+import {
+  columnSurfaces,
+  distance,
+  isVisible,
+  readTree,
+} from "../bsp/trace.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
 import { resolveInput } from "./paths.js";
@@ -281,4 +287,159 @@ export const readPakfile = defineTool({
   },
 });
 
-export const measureTools = [readMapExtents, readMapGeometry, readPropSurvey, readPakfile];
+
+
+/** Median of a numeric list. Empty gives 0, which callers treat as "no signal". */
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)]!;
+}
+
+export const readSightlines = defineTool({
+  name: "read_sightlines",
+  description:
+    "Longest unobstructed lines of sight across a compiled map, traced against the same " +
+    "world tree the engine walks for a TraceLine. Samples standable ground on a grid at " +
+    "the elevation where the map's content sits, then measures every pair. Answers " +
+    "'how far can someone actually see here', which is what sets engagement range. " +
+    "It does NOT know what a street is, and it ignores static props and brush entities " +
+    "(a door counts as open) -- see the `excludes` field it returns.",
+  realm: "map",
+  inputSchema: {
+    path: z.string().describe("Path to the .bsp, absolute or relative to the repo root."),
+    spacing: z
+      .number()
+      .int()
+      .min(64)
+      .max(8192)
+      .default(512)
+      .describe("Grid step in Hammer units. Smaller is finer and quadratically slower."),
+    eyeHeight: z
+      .number()
+      .min(0)
+      .max(256)
+      .default(64)
+      .describe("Height above ground for the sample point. 64 is a standing player's eye."),
+    elevation: z
+      .number()
+      .optional()
+      .describe("Ground elevation to sample. Defaults to the median entity origin z."),
+    elevationTolerance: z
+      .number()
+      .min(0)
+      .default(512)
+      .describe("How far a surface may sit from `elevation` and still be sampled."),
+    requireNearbyContent: z
+      .boolean()
+      .default(true)
+      .describe("Keep only points with a map entity nearby, as a proxy for built-up area."),
+    limit: z.number().int().min(1).max(50).default(5),
+  },
+  outputSchema: {
+    path: z.string(),
+    elevation: z.number(),
+    spacing: z.number(),
+    samplePoints: z.number(),
+    pairsTested: z.number(),
+    excludes: z.array(z.string()),
+    longest: z.array(
+      z.object({
+        units: z.number(),
+        metres: z.number(),
+        from: VEC3,
+        to: VEC3,
+      }),
+    ),
+  },
+  handler: (args, ctx) => {
+    const path = resolveInput(args.path, ctx.config);
+    const tree = readTree(path);
+    const extents = worldExtents(readModels(path));
+    const entities = readEntityLump(path).entities.filter((e) => e.origin);
+
+    const elevation =
+      args.elevation ?? median(entities.map((e) => e.origin![2]));
+
+    const near = args.spacing;
+    const points: Array<[number, number, number]> = [];
+    const half = args.spacing / 2;
+    for (let x = extents.mins[0] + half; x < extents.maxs[0]; x += args.spacing) {
+      for (let y = extents.mins[1] + half; y < extents.maxs[1]; y += args.spacing) {
+        const levels = columnSurfaces(
+          tree,
+          x,
+          y,
+          extents.maxs[2] - 16,
+          extents.mins[2] + 1,
+          args.eyeHeight,
+        );
+        let best: (typeof levels)[number] | undefined;
+        let bestDelta = Infinity;
+        for (const l of levels) {
+          const d = Math.abs(l.groundZ - elevation);
+          if (d < bestDelta) {
+            bestDelta = d;
+            best = l;
+          }
+        }
+        if (!best || bestDelta > args.elevationTolerance) continue;
+        if (args.requireNearbyContent) {
+          const g = best;
+          const hasContent = entities.some(
+            (e) =>
+              Math.abs(e.origin![0] - x) < near &&
+              Math.abs(e.origin![1] - y) < near &&
+              Math.abs(e.origin![2] - g.groundZ) < near,
+          );
+          if (!hasContent) continue;
+        }
+        points.push(best.eye);
+      }
+    }
+
+    const longest: Array<{ d: number; a: [number, number, number]; b: [number, number, number] }> =
+      [];
+    let pairs = 0;
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        pairs++;
+        const d = distance(points[i]!, points[j]!);
+        // Once the shortlist is full, anything shorter than its tail cannot enter it,
+        // and the trace is the expensive part.
+        if (longest.length >= args.limit && d <= longest[longest.length - 1]!.d) continue;
+        if (!isVisible(tree, points[i]!, points[j]!)) continue;
+        longest.push({ d, a: points[i]!, b: points[j]! });
+        longest.sort((p, q) => q.d - p.d);
+        longest.length = Math.min(longest.length, args.limit);
+      }
+    }
+
+    return {
+      path,
+      elevation,
+      spacing: args.spacing,
+      samplePoints: points.length,
+      pairsTested: pairs,
+      excludes: [
+        "static props: 'prop_static' geometry is not in the world tree",
+        "brush entities: a func_door or func_brush is not in the world tree, so a closed door reads as open",
+        "displacements are in the tree, but no notion of 'street' exists in a .bsp -- an open line may cross terrain rather than a road",
+      ],
+      longest: longest.map((l) => ({
+        units: Math.round(l.d),
+        metres: Math.round(l.d * METRES_PER_UNIT * 10) / 10,
+        from: l.a.map((n) => Math.round(n)) as [number, number, number],
+        to: l.b.map((n) => Math.round(n)) as [number, number, number],
+      })),
+    };
+  },
+});
+
+export const measureTools = [
+  readMapExtents,
+  readMapGeometry,
+  readPropSurvey,
+  readPakfile,
+  readSightlines,
+];
