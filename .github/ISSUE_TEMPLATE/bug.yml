@@ -1,0 +1,44 @@
+name: Bug
+description: A tool returns something wrong, or nothing at all.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else, please run the `health` tool and paste its output below.
+        Most reports here turn out to be a missing prerequisite — no Wine, no sidecar venv,
+        no game — and `health` says which in one call.
+
+  - type: textarea
+    id: health
+    attributes:
+      label: Output of `health`
+      render: json
+    validations:
+      required: true
+
+  - type: input
+    id: tool
+    attributes:
+      label: Which tool
+      placeholder: read_vmf_lint
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what you got
+      description: |
+        If you can say **how you know** the expected answer is right — another tool, the
+        compiler's own output, a count from in game — say that too. It is usually the
+        fastest route to the cause.
+    validations:
+      required: true
+
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Only Garry's Mod has actually been run by the maintainers. Other games are expected to work and unverified.
+      placeholder: Garry's Mod / CS:S / TF2 ...
