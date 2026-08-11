@@ -182,6 +182,33 @@ describe("arch", () => {
       }),
     ).toThrow(/quarter turn/);
 
+    // And the same arch written the other way round. A negative arcDegrees is how a
+    // clockwise arch is spelled, and testing the signed step let it straight through.
+    expect(() =>
+      expandShape({
+        shape: "arch",
+        centre: [0, 0, 0],
+        innerRadius: 64,
+        outerRadius: 128,
+        height: 32,
+        arcDegrees: -270,
+        segments: 1,
+      }),
+    ).toThrow(/quarter turn/);
+
+    // A clockwise arch with enough segments is fine.
+    everyBrushIsValid(
+      build({
+        shape: "arch",
+        centre: [0, 0, 0],
+        innerRadius: 64,
+        outerRadius: 128,
+        height: 32,
+        arcDegrees: -180,
+        segments: 4,
+      }).solids,
+    );
+
     // Exactly a quarter turn is the common case -- a full ring in four segments -- and
     // must still work.
     const ring = build({

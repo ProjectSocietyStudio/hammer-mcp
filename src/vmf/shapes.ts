@@ -250,11 +250,16 @@ function arch(spec: ArchSpec): Expansion {
   // This used to be a note claiming the shape "was refused" while the specs were returned
   // anyway. A tool that says it refused something and did not is worse than one that
   // simply got the geometry wrong, because the output cannot be trusted to report itself.
-  if (step > Math.PI / 2 + 1e-9) {
+  //
+  // Compared in absolute value: a negative arcDegrees is how a clockwise arch is written,
+  // and the first version of this check tested the signed step, so `arcDegrees: -270` with
+  // one segment sailed past it and built the very wedge the check exists to prevent.
+  if (Math.abs(step) > Math.PI / 2 + 1e-9) {
     throw new VmfBuildError(
-      `each segment would span ${Math.round((step * 180) / Math.PI)} degrees, and past a ` +
-        `quarter turn a four-cornered segment describes the complement of the sector rather ` +
-        `than the sector. Use at least ${Math.ceil(spec.arcDegrees / 90)} segments.`,
+      `each segment would span ${Math.round(Math.abs((step * 180) / Math.PI))} degrees, and ` +
+        `past a quarter turn a four-cornered segment describes the complement of the sector ` +
+        `rather than the sector. Use at least ` +
+        `${Math.ceil(Math.abs(spec.arcDegrees) / 90)} segments.`,
     );
   }
   const [cx, cy, cz] = spec.centre;
