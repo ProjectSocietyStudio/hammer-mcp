@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy to <repoRoot>/.hammer-mcp/config.json, then delete every field you do not need -- all of them are optional, and the server fills in defaults documented in the README. Paths must be ABSOLUTE: nothing here expands ~ or $HOME. Replace /home/you with your own home directory.",
+
+  "gmodBin": "/home/you/.steam/steam/steamapps/common/GarrysMod/bin",
+  "gmodGameDir": "/home/you/.steam/steam/steamapps/common/GarrysMod/garrysmod",
+  "gmodBinPlusPlus": "/home/you/.steam/steam/steamapps/common/GarrysMod/bin/win64",
+
+  "backend": "wine",
+  "winePrefix": "/home/you/.wine",
+
+  "toolAllowlist": [],
+  "plugins": []
+}

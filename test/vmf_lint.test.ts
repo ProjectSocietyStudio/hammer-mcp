@@ -1,29 +1,19 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { Config } from "../src/config.js";
-import { loadConfig } from "../src/config.js";
 import { luaEntityClasses } from "../src/lua/entities.js";
 import type { ToolContext } from "../src/mcp/registry.js";
-import { pythonPath } from "../src/sidecar/client.js";
 import { readFgdClass, readVmf, readVmfLint } from "../src/tools/vmf.js";
+import { FIXTURES, config, ctx as sharedCtx, has, paths } from "./support/env.js";
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const PROBE_VMF = join(FIXTURES, "hmcp_probe.vmf");
-const REPO = join(FIXTURES, "..", "..", "..");
+const ctx = sharedCtx as unknown as ToolContext;
 
-const config = loadConfig(REPO);
-const ctx = { config, audit: { record: () => undefined } } as unknown as ToolContext;
-
-const ready = existsSync(pythonPath(config)) && existsSync(config.gmodBin);
-const TTT = join(
-  REPO,
-  "srcds/garrysmod/gamemodes/terrortown/mapexamples/ttt_traps.vmf",
-);
-const hasTtt = existsSync(TTT);
+const ready = has.sidecar && has.fgd;
+const TTT = paths.tttSource;
+const hasTtt = has.tttSource;
 
 const scratch = mkdtempSync(join(tmpdir(), "hammer-lint-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -44,7 +34,7 @@ async function lint(path: string): Promise<{
 }
 
 describe("the repo's Lua entity classes", () => {
-  it("finds the scripted entities the FGD cannot know about", () => {
+  it.skipIf(!has.luaEntities)("finds the scripted entities the FGD cannot know about", () => {
     // Without these the lint calls every TTT entity an unknown class. The two named
     // here are the ones it actually got wrong before this existed.
     const classes = luaEntityClasses(config);
@@ -158,7 +148,7 @@ describe("read_vmf_lint finds faults that were put there on purpose", () => {
 });
 
 describe("the Hammer++ compilers' own FGD", () => {
-  const hasPlusFgd = existsSync(join(config.gmodBin, "win64/toolsplusplus.fgd"));
+  const hasPlusFgd = has.plusFgd;
 
   it.skipIf(!ready)("says which schemas a verdict was reached against", async () => {
     // Reported rather than assumed. A lint that quietly widens its schema is a lint that

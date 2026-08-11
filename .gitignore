@@ -7,3 +7,10 @@ dist/
 
 # Local configuration, derived from config.example.json.
 config.json
+
+# Python bytecode from the sidecar.
+__pycache__/
+*.pyc
+
+# Python venv, when sidecar/setup.sh builds it in place.
+.venv/

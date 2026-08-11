@@ -1,23 +1,23 @@
 ficool2 - vbspplusplus.exe (Jun 23 2026)
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\female_whi'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_ara'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_bla'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_chi'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_lat'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_pak'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_whi'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\ps_modeltest'
-Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\society_shaders'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_a'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_b'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_c'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_d'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_e'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_f'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_g'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\custom_models'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\custom_shaders'
 16 threads
 ---------------
 gamedir: Z:\games\GarrysMod\garrysmod\
 ---------------
 Loading Z:\scratch\leaky.vmf
 Locating GameData file 'garrysmod.fgd'...
-Parsing GameData file Z:\games\garrysmod\bin\garrysmod.fgd
-Parsing GameData file Z:\games\garrysmod\bin\base.fgd
-Parsing GameData file Z:\games\garrysmod\bin\halflife2.fgd
-Parsing GameData file Z:\games\garrysmod\bin\base.fgd
+Parsing GameData file Z:\games\GarrysMod\bin\garrysmod.fgd
+Parsing GameData file Z:\games\GarrysMod\bin\base.fgd
+Parsing GameData file Z:\games\GarrysMod\bin\halflife2.fgd
+Parsing GameData file Z:\games\GarrysMod\bin\base.fgd
 fixing up env_cubemap materials on brush sides...
 FloodEntities...
 entity reached from outside -- no filling

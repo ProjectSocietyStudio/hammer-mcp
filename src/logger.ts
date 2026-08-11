@@ -1,4 +1,4 @@
-import { AuditLog as CoreAuditLog } from "@rolists/mcp-core";
+import { AuditLog as CoreAuditLog } from "@projectsociety/mcp-core";
 
 /**
  * Audit entry kinds. Widens the shared base with this server's own vocabulary: it drives
@@ -22,4 +22,4 @@ export type AuditKind =
  */
 export class AuditLog extends CoreAuditLog<AuditKind> {}
 
-export type { AuditEntry } from "@rolists/mcp-core";
+export type { AuditEntry } from "@projectsociety/mcp-core";

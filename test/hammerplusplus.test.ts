@@ -1,20 +1,14 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { loadConfig } from "../src/config.js";
 import type { ToolContext } from "../src/mcp/registry.js";
-import { pythonPath } from "../src/sidecar/client.js";
 import { readVmf, readVmfLint } from "../src/tools/vmf.js";
+import { FIXTURES, ctx as sharedCtx, has } from "./support/env.js";
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const PROBE_VMF = join(FIXTURES, "hmcp_probe.vmf");
-const REPO = join(FIXTURES, "..", "..", "..");
-
-const config = loadConfig(REPO);
-const ctx = { config, audit: { record: () => undefined } } as unknown as ToolContext;
-const ready = existsSync(pythonPath(config)) && existsSync(config.gmodBin);
+const ctx = sharedCtx as unknown as ToolContext;
+const ready = has.sidecar && has.fgd;
 
 const scratch = mkdtempSync(join(tmpdir(), "hammer-hpp-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));

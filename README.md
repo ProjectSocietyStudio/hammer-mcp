@@ -1,17 +1,38 @@
 # hammer-mcp
 
-Serveur MCP local pour le travail de carte Source : lecture et édition de `.vmf`, lecture de
-`.bsp`, patch d'entités sans recompilation, compilation sous Wine, et audit d'une carte contre les
-exigences du dépôt.
+Serveur MCP local pour le travail de carte Source : lecture de `.vmf` et de `.bsp`, lint contre la
+FGD du jeu, patch d'entités sans recompilation, compilation sous Wine — chaîne stock **ou
+Hammer++** — et mesure d'une carte contre les limites du format.
 
-Dépôt séparé, cloné en frère de `gmod-mcp/` dans le workspace Project Society. Le `.gitignore`
-parent ignore tout à la racine (`/*`) puis ré-autorise nommément : ce dossier lui est donc
-invisible sans qu'aucune ligne y soit ajoutée.
+**Il ne parle jamais à un moteur en cours d'exécution.** Il lit et écrit des fichiers, lance des
+compilateurs, et rien d'autre. C'est ce qui lui permet de ne poser aucun verrou et de tourner à
+côté d'un serveur vivant sans le perturber.
 
-**Il ne parle jamais à un serveur en cours d'exécution.** Il ne touche aucun chemin sous
-`srcds/garrysmod/data/gmod_mcp/` et ne pose aucun verrou — un second lecteur de ce répertoire
-efface les résultats que le daemon `gmod-mcp` attend. Tout ce qui demande le moteur vivant vit
-dans `gmod-mcp`, pas ici.
+## Installation
+
+```bash
+git clone https://github.com/ProjectSocietyStudio/hammer-mcp
+cd hammer-mcp && pnpm install && pnpm build
+./sidecar/setup.sh          # venv Python + srctools, pour les outils VMF/FGD/pakfile
+node dist/index.js install  # déclare le serveur dans <repoRoot>/.mcp.json
+```
+
+Prérequis, et ce qui se passe s'ils manquent — **rien ne lève, tout se rapporte** : lancez `health`,
+il dit exactement ce qui est absent.
+
+| | Pour quoi | Absent ? |
+|---|---|---|
+| Node ≥ 20 | tout | rien ne démarre |
+| Python 3 + [`srctools`](https://github.com/TeamSpen210/srctools) | VMF, FGD, pakfile | ces outils-là seulement |
+| Wine (mesuré sur 9.0) | `run_compile`, `run_pack` | ces deux-là seulement |
+| Une installation Source avec ses compilateurs | idem | idem |
+
+⚠️ **Les compilateurs sont livrés avec le *client* du jeu, pas avec le serveur dédié.** `srcds/bin/`
+n'en contient aucun. Voir [Configuration](#configuration) pour pointer `gmodBin` ailleurs.
+
+Le développement s'est fait contre Garry's Mod ; les lecteurs `.bsp`/`.vmf` sont du Source
+générique, mais **seul GMod a été mesuré ici** — le reste est plausible, pas prouvé, et ce README
+distingue partout les deux.
 
 ## État
 
@@ -262,9 +283,15 @@ comme une erreur.
 Les seules cibles d'écriture sont `server-config/**`, `.hammer-mcp/**` et ce que l'appelant passe
 explicitement. `srcds/` et `reference/` sont refusés.
 
-`srcds/` est géré par SteamCMD : un `validate` ou un changement de branche y remplace des fichiers,
-donc ce qui est à nous y serait perdu sans avertissement. Ce qui est à nous vit dans
-`server-config/` et est déployé par `./tools/sync-server-config.sh`.
+⚠️ **Ces quatre noms sont ceux de l'arbre pour lequel ce serveur a été construit, et ils sont
+aujourd'hui codés en dur** (`src/fs/guard.ts:19`, `src/tools/lmp.ts:46`). Sur un autre dépôt ils ne
+désignent rien : la garde ne refuse alors rien, et les patches de lump atterrissent dans un
+`server-config/maps/` qui n'existait pas. Les rendre configurables est du travail identifié, pas
+du travail fait — c'est dit ici plutôt que découvert.
+
+Le raisonnement derrière le refus, lui, se transpose : `srcds/` est géré par SteamCMD, et un
+`validate` ou un changement de branche y remplace des fichiers, donc ce qui est à nous y serait
+perdu sans avertissement. Ce qui est à nous vit ailleurs et y est déployé par un script.
 
 **C'est de la discipline, pas de l'application.** Le hook `deny-readonly-trees.sh` du dépôt
 intercepte les outils Edit/Write, il ne voit pas un `node:fs` appelé dans un serveur MCP. D'où
@@ -633,7 +660,8 @@ inscrit ici était « un troisième serveur MCP, ou le même bug de plomberie co
 **Il a été atteint le 11/08/2026** : la dérive était déjà mesurable (`clip()` recopiée deux fois
 côté gmod-mcp, `stripAnsi()` d'un seul côté, le bloc image de l'autre) et la montée du SDK de
 `^1.12` à `1.30` allait devoir être faite et prouvée deux fois. Ces six fichiers sont désormais des
-adaptateurs de trois lignes au-dessus de [`@rolists/mcp-core`](../mcp-core/README.md), dépôt frère.
+adaptateurs de trois lignes au-dessus de
+[`@projectsociety/mcp-core`](https://github.com/ProjectSocietyStudio/mcp-core).
 
 Ce qui **ne monte pas** au noyau : `src/fs/guard.ts`, propre à nos arbres d'écriture, et l'enum
 `Realm` — `map`/`local` reste délibérément distinct des `sv`/`cl`/`local` de gmod-mcp. Les cycles
@@ -652,23 +680,36 @@ pnpm typecheck   # tsc --noEmit, tests inclus
 Enregistrement auprès de Claude Code :
 
 ```bash
-node dist/index.js install     # fusionne dans <repoRoot>/.mcp.json, préserve gmod-mcp
+node dist/index.js install     # fusionne dans <repoRoot>/.mcp.json
 ```
 
-`.claude/settings.json` du dépôt parent porte déjà `"hammer-mcp"` dans `enabledMcpjsonServers` et
-les outils `read_*` dans sa liste d'autorisations — les outils gardés en sont volontairement
-absents.
+`install` **fusionne** plutôt qu'il n'écrase : les autres serveurs déclarés dans le fichier sont
+préservés. `.mcp.json` porte des chemins **absolus**, donc il n'a pas sa place dans git et la
+commande est à relancer dans chaque clone, après `pnpm build`.
 
-**`.mcp.json` n'est pas suivi par git** : la liste blanche du `.gitignore` parent l'exclut, parce
-qu'il porte des chemins **absolus** — le même motif qui en exclut les `.luarc.json`. La commande
-`install` est donc à relancer **dans chaque clone**, après `pnpm build`.
+### Ce que les tests peuvent prouver chez vous, et ce qu'ils ne peuvent pas
+
+La majorité de cette suite n'est pas unitaire : elle pilote les vrais compilateurs sous Wine, le
+vrai sidecar Python et de vraies cartes. Rien de tout cela n'est livré avec le dépôt, donc `pnpm
+test` sur une machine nue **saute** ce qu'il ne peut pas exécuter — et le dit :
+
+```
+[hammer-mcp] Tests needing these are SKIPPED, not passing:
+  - the Python sidecar venv (run sidecar/setup.sh)
+  - a large production .bsp
+  ...
+```
+
+C'est délibéré : un test sauté en silence et un test qui passe se ressemblent trop. `test/support/env.ts`
+décide seul ce que la machine possède, et **`HAMMER_MCP_REPO`** pointe la suite vers l'arbre qui
+porte votre contenu de jeu quand il n'est pas le parent du dépôt.
 
 ### Fixtures
 
 `test/fixtures/hmcp_probe.{vmf,bsp}` sont à nous — produits par `gen_probe.py`, compilés par la
-porte A. Les fichiers de Valve (`ttt_traps.vmf`, `c1a1_l_0.lmp`) sont lus depuis `srcds/` et non
-commités : cet arbre est géré par SteamCMD, et ces fichiers ne sont pas les nôtres. Les tests qui
-en dépendent se sautent proprement quand ils sont absents ; les deux ont bien tourné le 02/08/2026.
+porte A. **Aucun fichier de Valve n'est commité ici** : ceux dont les tests se servent
+(`ttt_traps.vmf`, `c1a1_l_0.lmp`) sont lus dans l'installation du jeu, jamais copiés, et les tests
+qui en dépendent se sautent quand ils sont absents.
 
 ## Configuration
 
