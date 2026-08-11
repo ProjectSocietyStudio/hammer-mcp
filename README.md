@@ -378,6 +378,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Compiling, both toolchains | **proven** — a leak caused, then located, on stock and Hammer++ |
 | Python sidecar (srctools) | **proven** |
 | Game discovery | **proven for Garry's Mod only** — the readers are generic Source, but one game has been run here |
+| Moving and deleting brushes | **proven** — a room turned 45 degrees compiles sealed, and leaks when one of its walls is deleted |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
 | `read_vprof` | **not written**: no real sample to calibrate it against |
@@ -439,6 +440,8 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
+| `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
+| `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
 | `write_hint_brush` | `map` | ● | Places a hint brush, straight or diagonal, to shape where vvis splits the map |
 | `set_solid_class` | `map` | ● | Moves brushes between the world and a brush entity — `func_detail` and back |
 | `set_lightmap_scale` | `map` | ● | Sets `lightmapscale` on selected faces, and projects the luxel bill before writing |
