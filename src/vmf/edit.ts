@@ -32,6 +32,7 @@
  */
 import { children, get, pairs, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
+import { lineRange, pairRange } from "./select.js";
 import { applySplices } from "./splice.js";
 import type { Splice } from "./splice.js";
 
@@ -190,10 +191,9 @@ function setPair(
 function removePair(text: string, block: KvBlock, key: string, splices: Splice[]): void {
   for (const node of block.entries) {
     if (node.kind !== "pair" || node.key !== key) continue;
-    // Take the line with it, indentation included, or removal leaves a blank indented line.
-    const lineStart = text.lastIndexOf("\n", node.start - 1) + 1;
-    const end = text[node.end] === "\n" ? node.end + 1 : node.end;
-    splices.push({ start: lineStart, end, text: "" });
+    // The line goes with it when the pair has the line to itself, and only then. Taking it
+    // unconditionally removed any key sharing the line -- see `pairRange`.
+    splices.push({ ...pairRange(text, node), text: "" });
   }
 }
 
@@ -252,15 +252,13 @@ export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult 
     switch (op.op) {
       case "remove":
         for (const e of targets) {
-          const lineStart = text.lastIndexOf("\n", e.block.start - 1) + 1;
-          const end = text[e.block.end] === "\n" ? e.block.end + 1 : e.block.end;
           if (e.solidCount > 0) {
             w.push(
               `entity ${e.id ?? e.index} (${e.classname}) carries ${e.solidCount} solid(s); ` +
                 `removing it removes that geometry too`,
             );
           }
-          splices.push({ start: lineStart, end, text: "" });
+          splices.push({ ...lineRange(text, e.block), text: "" });
         }
         delta -= targets.length;
         break;
@@ -297,9 +295,7 @@ export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult 
           for (const node of conn.entries) {
             if (node.kind !== "pair" || node.key !== op.output) continue;
             if (op.valueContains && !node.value.includes(op.valueContains)) continue;
-            const lineStart = text.lastIndexOf("\n", node.start - 1) + 1;
-            const end = text[node.end] === "\n" ? node.end + 1 : node.end;
-            splices.push({ start: lineStart, end, text: "" });
+            splices.push({ ...pairRange(text, node), text: "" });
           }
         }
         break;

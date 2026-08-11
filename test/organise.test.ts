@@ -8,6 +8,7 @@ import {
   setVisgroup,
   VmfOrganiseError,
 } from "../src/vmf/organise.js";
+import { applyVmfOps } from "../src/vmf/edit.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
 import type { SolidCheck } from "../src/vmf/solid.js";
 import { FIXTURES, paths } from "./support/env.js";
@@ -122,6 +123,25 @@ describe("setVisgroup", () => {
     expect(readOrganisation(removed.text).visgroups[0]!.solidCount).toBe(1);
   });
 
+  it("does not hand a new visgroup an id some brush is already wearing", () => {
+    // A map carrying an orphaned membership -- an id on a brush whose visgroup is gone,
+    // which a hand edit or a bad merge leaves behind -- would otherwise have that id given
+    // to the next new visgroup, adopting every unselected brush wearing it. The handler's
+    // orphan check then sees nothing wrong, because nothing is orphaned any more.
+    const added = setVisgroup(probe(), { ids: [WALL] }, { name: "Ghost" });
+    const orphaned = added.text.replace(/visgroups\n\{[\s\S]*?\n\}\n/, "");
+    expect(readOrganisation(orphaned).warnings.join(" ")).toMatch(/declared nowhere/);
+
+    const fresh = setVisgroup(orphaned, { ids: [FLOOR] }, { name: "North" });
+    expect(fresh.visgroupId).not.toBe(added.visgroupId);
+
+    const after = readOrganisation(fresh.text);
+    expect(after.visgroups[0]!.solidCount, "only the brush that was selected").toBe(1);
+    expect(after.warnings.join(" "), "and the orphan is still an orphan").toMatch(
+      /declared nowhere/,
+    );
+  });
+
   it("refuses to remove from a visgroup that does not exist", () => {
     expect(() =>
       setVisgroup(probe(), { ids: [FLOOR] }, { name: "Nothing", remove: true }),
@@ -198,6 +218,47 @@ describe("groupSolids", () => {
     expect(readOrganisation(loose.text).groups[0]!.solidCount).toBe(1);
   });
 
+  it("counts an entity in a group as an entity, not as a solid", () => {
+    // Hammer groups a point entity as readily as a brush. Counting one as the other
+    // overreported how many solids a mixed group held.
+    const grouped = groupSolids(probe(), { ids: [FLOOR, WALL] });
+    const id = readOrganisation(grouped.text).groups[0]!.id;
+    const withEntity = applyVmfOps(grouped.text, [
+      {
+        op: "update",
+        match: { classname: "info_target" },
+        set: { probe_marker: "1" },
+      },
+    ]).text.replace(
+      /(entity\n\{\n\t"id" "\d+"\n\t"classname" "info_target")/,
+      `$1\n\teditor\n\t{\n\t\t"color" "220 30 220"\n\t\t"groupid" "${id}"\n\t}`,
+    );
+    expect(withEntity).toContain(`"groupid" "${id}"`);
+
+    const after = readOrganisation(withEntity);
+    expect(after.groups[0]!.solidCount, "two brushes, and not three").toBe(2);
+    expect(after.groups[0]!.entityCount).toBe(1);
+  });
+
+  it("removes only the membership when another key shares its line", () => {
+    // The same fault as lineRange, one level down: cutting from the previous newline took
+    // whatever key shared the line. The geometry check downstream saw nothing wrong,
+    // because the geometry was fine.
+    const grouped = groupSolids(probe(), { ids: [FLOOR, WALL] });
+    const id = readOrganisation(grouped.text).groups[0]!.id;
+    const squashed = grouped.text.replace(
+      new RegExp(`"color" "0 180 220"\\n\\t+"groupid" "${id}"`),
+      `"color" "9 8 7" "groupid" "${id}"`,
+    );
+    const oneLine = squashed !== grouped.text;
+
+    const loose = groupSolids(oneLine ? squashed : grouped.text, { ids: [FLOOR] }, {
+      ungroup: true,
+    });
+    expect(loose.solidsChanged).toBe(1);
+    if (oneLine) expect(loose.text, "the colour must survive").toContain('"color" "9 8 7"');
+  });
+
   it("refuses an empty selector", () => {
     expect(() => groupSolids(probe(), {})).toThrow(VmfOrganiseError);
   });
@@ -219,6 +280,28 @@ describe("setCordon", () => {
     const after = readOrganisation(second.text);
     expect(after.cordons).toHaveLength(1);
     expect(after.cordons[0]!.maxs).toEqual([128, 128, 128]);
+  });
+
+  it("keeps the other cordons a map has saved", () => {
+    // A map with one test region per district lost all of them the first time a new one
+    // was set, because the whole cordons body was replaced.
+    const north = setCordon(probe(), { mins: [0, 0, 0], maxs: [128, 128, 128] }, {
+      name: "north",
+    });
+    const south = setCordon(north.text, { mins: [-256, -256, 0], maxs: [-128, -128, 128] }, {
+      name: "south",
+    });
+    const after = readOrganisation(south.text);
+    expect(after.cordons.map((c) => c.name).sort()).toEqual(["north", "south"]);
+
+    // And setting one of them again updates that one and leaves the other alone.
+    const again = setCordon(south.text, { mins: [0, 0, 0], maxs: [64, 64, 64] }, {
+      name: "north",
+    });
+    const back = readOrganisation(again.text);
+    expect(back.cordons).toHaveLength(2);
+    expect(back.cordons.find((c) => c.name === "north")!.maxs).toEqual([64, 64, 64]);
+    expect(back.cordons.find((c) => c.name === "south")!.maxs).toEqual([-128, -128, 128]);
   });
 
   it("says out loud what an active cordon does to a compile", () => {

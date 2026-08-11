@@ -17,7 +17,7 @@
  * would be the selection state this file exists to avoid.
  */
 import { children, get } from "../kv/parse.js";
-import type { KvBlock } from "../kv/parse.js";
+import type { KvBlock, KvPair } from "../kv/parse.js";
 import type { SolidCheck, SolidSide, Vec3 } from "./solid.js";
 
 export interface FaceSelector {
@@ -162,6 +162,28 @@ export function lineRange(text: string, block: KvBlock): { start: number; end: n
   // Anything else after the block on its line stays where it is.
   if (end !== block.end && !alone) end = block.end;
   return { start, end };
+}
+
+/**
+ * The span to cut when removing a keyvalue, so nothing else on its line goes with it.
+ *
+ * The same rule as `lineRange`, one level down, and it was written naively in four places
+ * before Codex found it: cutting from the previous newline removed any key sharing the
+ * line. A `.vmf` that puts `"color" "1 2 3" "visgroupid" "1"` on one line -- legal, and
+ * what a hand-edited or generated file can look like -- lost its colour when the
+ * membership was removed, and the geometry check downstream saw nothing wrong because the
+ * geometry was fine.
+ */
+export function pairRange(text: string, pair: KvPair): { start: number; end: number } {
+  const lineStart = text.lastIndexOf("\n", pair.start - 1) + 1;
+  const alone = /^[\t ]*$/.test(text.slice(lineStart, pair.start));
+  let i = pair.end;
+  while (i < text.length && (text[i] === "\t" || text[i] === " ")) i += 1;
+  const endsLine = i >= text.length || text[i] === "\n";
+  if (alone && endsLine) return { start: lineStart, end: i < text.length ? i + 1 : i };
+  // Otherwise take the pair and the space that separated it from what follows, so the
+  // remaining keys do not run together.
+  return { start: pair.start, end: i };
 }
 
 /**
