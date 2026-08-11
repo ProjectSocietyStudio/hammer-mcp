@@ -1,15 +1,15 @@
 ficool2 - vradplusplus.exe (Jun 22 2026)
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\female_whi'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\male_ara'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\male_bla'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\male_chi'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\male_lat'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\male_pak'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\male_whi'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\ps_modeltest'
-Adding filesystem addon 'z:\home\sycatle\.steam\debian-installation\steamapps\common\garrysmod\garrysmod\addons\society_shaders'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_a'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_b'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_c'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_d'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_e'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_f'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\player_g'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\custom_models'
+Adding filesystem addon 'Z:\games\GarrysMod\garrysmod\addons\custom_shaders'
 ---------------
-gamedir: Z:\home\sycatle\.steam\debian-installation\steamapps\common\GarrysMod\garrysmod\
+gamedir: Z:\games\GarrysMod\garrysmod\
 ---------------
 16 threads
 Compiling in LDR mode
