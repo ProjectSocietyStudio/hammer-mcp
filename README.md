@@ -220,6 +220,7 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_prop_survey` | `map` | | Inventaire des props, et ceux qui sont `prop_dynamic` pour rien |
 | `read_pakfile` | `map` | | Contenu du pakfile embarqué (lump 40), et les preuves de compilation qu'il porte |
 | `read_sightlines` | `map` | | Les plus longues lignes de vue dégagées, tracées contre l'arbre du monde |
+| `read_brush_volumes` | `map` | | Emprise au sol et volume de chaque entité-brush, par classe |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
@@ -299,6 +300,26 @@ que de laisser croire qu'il mesure ce qu'il ne mesure pas.
 Résultat sur `rp_nycity_day`, pas de 512 u, 1051 points en zone bâtie, 551 775 paires en **387 ms** :
 la plus longue ligne dégagée fait **30 278 u = 769 m**. Elle est réelle — vérifiée point par point —
 mais elle traverse des dégagements, pas une avenue.
+
+### Les surfaces bâties
+
+`read_brush_volumes` lit la boîte englobante du modèle de chaque entité-brush (`model` `"*N"`,
+lump 14). Sur `rp_nycity_day`, **les 1217 modèles sont attribués à 100 %** à une entité — c'est
+l'oracle du raccord : un modèle orphelin signifierait que la correspondance est fausse.
+
+| Classe | n | Emprise médiane |
+|---|---|---|
+| `func_door_rotating` | 451 | 0,14 m² |
+| `trigger_soundscape` | 211 | 208,1 m² |
+| `func_door` | 171 | 0,14 m² |
+| `func_brush` | 26 | 64,0 m² |
+
+Les comptes de portes retombent sur l'histogramme du jalon 1, et les ordres de grandeur se tiennent :
+une porte est une dalle mince, une ambiance sonore couvre une pièce. **Ce sont des boîtes
+englobantes, pas des volumes réels** — une pièce en L se mesure comme son rectangle enveloppant, et
+l'outil le dit. Ce qu'il ne peut pas faire, c'est nommer un « lot » : un `.bsp` ne porte pas cette
+notion, et `etalonnage-bronx` devra la définir par une convention explicite avant qu'on puisse la
+mesurer.
 
 ### Le garde-fou qui empêche d'inventer un chiffre
 

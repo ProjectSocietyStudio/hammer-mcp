@@ -436,10 +436,109 @@ export const readSightlines = defineTool({
   },
 });
 
+
+export const readBrushVolumes = defineTool({
+  name: "read_brush_volumes",
+  description:
+    "Footprint and volume of every brush entity in a compiled map, grouped by classname. " +
+    "Each func_* entity owns a brush model (*N in lump 14) whose bounding box this reads. " +
+    "Use it to size the built environment -- shop fronts, rooms behind a func_door, " +
+    "areaportal openings -- when a spec needs a floor area rather than a guess. It reports " +
+    "bounding boxes, not true volumes: an L-shaped room measures as its enclosing box.",
+  realm: "map",
+  inputSchema: {
+    path: z.string().describe("Path to the .bsp, absolute or relative to the repo root."),
+    classname: z.string().optional().describe("Restrict to one classname, e.g. func_door."),
+    limit: z.number().int().min(1).max(1000).default(50),
+  },
+  outputSchema: {
+    path: z.string(),
+    brushModels: z.number(),
+    attributed: z.number().describe("Models an entity claims through its `model` key."),
+    byClass: z.array(
+      z.object({
+        classname: z.string(),
+        count: z.number(),
+        medianFloorSquareMetres: z.number(),
+        totalFloorSquareMetres: z.number(),
+      }),
+    ),
+    largest: z.array(
+      z.object({
+        model: z.string(),
+        classname: z.string(),
+        targetname: z.string().nullable(),
+        floorSquareMetres: z.number(),
+        heightMetres: z.number(),
+        origin: VEC3,
+      }),
+    ),
+  },
+  handler: (args, ctx) => {
+    const path = resolveInput(args.path, ctx.config);
+    const lump = readModels(path);
+    const entities = readEntityLump(path).entities;
+
+    // Model 0 is the world; brush entities claim models 1..n through "model" "*N".
+    const owner = new Map<number, { classname: string; targetname?: string }>();
+    for (const e of entities) {
+      const raw = e.keyvalues.find(([k]) => k.toLowerCase() === "model")?.[1];
+      if (!raw || !raw.startsWith("*")) continue;
+      const n = Number(raw.slice(1));
+      if (Number.isInteger(n)) {
+        owner.set(n, { classname: e.classname, ...(e.targetname ? { targetname: e.targetname } : {}) });
+      }
+    }
+
+    const rows = lump.models
+      .filter((m) => m.index > 0)
+      .map((m) => {
+        const o = owner.get(m.index);
+        const w = (m.maxs[0] - m.mins[0]) * METRES_PER_UNIT;
+        const d = (m.maxs[1] - m.mins[1]) * METRES_PER_UNIT;
+        const h = (m.maxs[2] - m.mins[2]) * METRES_PER_UNIT;
+        return {
+          model: `*${m.index}`,
+          classname: o?.classname ?? "(unclaimed)",
+          targetname: o?.targetname ?? null,
+          floorSquareMetres: Math.round(w * d * 100) / 100,
+          heightMetres: Math.round(h * 100) / 100,
+          origin: m.origin.map((n) => Math.round(n)) as [number, number, number],
+        };
+      })
+      .filter((r) => !args.classname || r.classname === args.classname);
+
+    const groups = new Map<string, number[]>();
+    for (const r of rows) {
+      const g = groups.get(r.classname) ?? [];
+      g.push(r.floorSquareMetres);
+      groups.set(r.classname, g);
+    }
+
+    return {
+      path,
+      brushModels: lump.models.length - 1,
+      attributed: rows.filter((r) => r.classname !== "(unclaimed)").length,
+      byClass: [...groups]
+        .map(([classname, areas]) => ({
+          classname,
+          count: areas.length,
+          medianFloorSquareMetres: Math.round(median(areas) * 100) / 100,
+          totalFloorSquareMetres: Math.round(areas.reduce((a, b) => a + b, 0) * 100) / 100,
+        }))
+        .sort((a, b) => b.count - a.count),
+      largest: [...rows]
+        .sort((a, b) => b.floorSquareMetres - a.floorSquareMetres)
+        .slice(0, args.limit),
+    };
+  },
+});
+
 export const measureTools = [
   readMapExtents,
   readMapGeometry,
   readPropSurvey,
   readPakfile,
   readSightlines,
+  readBrushVolumes,
 ];

@@ -9,6 +9,7 @@ import type { Config } from "../src/config.js";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { pythonPath } from "../src/sidecar/client.js";
 import {
+  readBrushVolumes,
   readMapExtents,
   readMapGeometry,
   readPakfile,
@@ -169,5 +170,33 @@ describe("pakfile audit", () => {
     // Explicit: opening a 1 GB pakfile takes ~1.3 s alone and more under a parallel
     // run. On the 5 s default this passed in isolation and failed in the full suite,
     // which is the worst kind of flake -- it accuses the code rather than the clock.
+  }, 60_000);
+});
+
+describe("brush volumes", () => {
+  it.skipIf(!hasProd)("attributes every brush model to the entity that claims it", async () => {
+    // Model 0 is the world and 1..n belong to brush entities through "model" "*N".
+    // Anything unattributed would mean the mapping is wrong, not that a model is
+    // ownerless, so the two counts must agree exactly.
+    const out = (await readBrushVolumes.handler(
+      { path: NYCITY, limit: 5 },
+      ctx,
+    )) as {
+      brushModels: number;
+      attributed: number;
+      byClass: Array<{ classname: string; count: number; medianFloorSquareMetres: number }>;
+    };
+    expect(out.brushModels).toBe(1217);
+    expect(out.attributed).toBe(out.brushModels);
+    expect(() => z.object(readBrushVolumes.outputSchema!).parse(out)).not.toThrow();
+
+    // The door counts match the entity histogram measured at milestone 1.
+    const byName = new Map(out.byClass.map((g) => [g.classname, g]));
+    expect(byName.get("func_door_rotating")?.count).toBe(451);
+    expect(byName.get("func_door")?.count).toBe(171);
+    // A door's footprint is a thin slab; a soundscape covers a room. If those two came
+    // out the same, the bounding boxes would be being read wrong.
+    expect(byName.get("func_door")!.medianFloorSquareMetres).toBeLessThan(5);
+    expect(byName.get("trigger_soundscape")!.medianFloorSquareMetres).toBeGreaterThan(20);
   }, 60_000);
 });
