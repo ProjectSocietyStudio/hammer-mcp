@@ -153,6 +153,9 @@ export function loadConfig(cwd: string = process.cwd()): Config {
     "gmodGameDir",
     () => config.explicit.gmodGameDir ?? active()?.gameDir ?? join(STEAM_GMOD, "garrysmod"),
   );
+  // The profile already derives this from an explicitly configured gmodBin -- see
+  // applyOverride in games/resolve.ts. Deliberately not duplicated here: two paths to the
+  // same answer means a test can only ever prove one of them.
   lazy(
     config,
     "gmodBinPlusPlus",

@@ -68,6 +68,9 @@ function legacyOverride(config: Config): GameProfileOverride {
   if (e.gmodBin !== undefined) out.binDir = e.gmodBin;
   if (e.gmodGameDir !== undefined) out.gameDir = e.gmodGameDir;
   if (e.gmodBinPlusPlus !== undefined) out.plusPlusBinDir = e.gmodBinPlusPlus;
+  // Same reasoning as in config.ts: a hand-set stock directory implies its own bin/win64,
+  // never the one discovery found somewhere else.
+  else if (e.gmodBin !== undefined) out.plusPlusBinDir = join(e.gmodBin, "win64");
   return out;
 }
 
