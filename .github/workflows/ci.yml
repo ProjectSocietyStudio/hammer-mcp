@@ -14,7 +14,25 @@ jobs:
         node: ["20", "22"]
 
     steps:
+      # Two checkouts, side by side inside the workspace.
+      #
+      # `package.json` depends on @projectsociety/mcp-core through `file:../mcp-core`,
+      # which resolves on a developer machine holding both checkouts and does not exist on
+      # a runner that clones this repository alone. Until mcp-core is on a registry, the
+      # runner has to reproduce that layout -- otherwise `pnpm install` dies with ENOENT
+      # before a single test runs, which is exactly what it did for five consecutive
+      # merges while the badge said "failing" and everyone learned to ignore it.
+      #
+      # actions/checkout refuses a `path` outside the workspace, so neither repository sits
+      # at the workspace root: both are subdirectories, and every step below names its own.
       - uses: actions/checkout@v4
+        with:
+          path: hammer-mcp
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ProjectSocietyStudio/mcp-core
+          path: mcp-core
 
       - uses: pnpm/action-setup@v4
         with:
@@ -23,28 +41,46 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm typecheck
+      # mcp-core is consumed as its built `dist/`, so it must be built first. A stale or
+      # absent dist/ is the trap that makes tests pass and typecheck fail on one tree.
+      - name: Build mcp-core
+        working-directory: mcp-core
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Install
+        working-directory: hammer-mcp
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: hammer-mcp
+        run: pnpm build
+
+      - name: Typecheck
+        working-directory: hammer-mcp
+        run: pnpm typecheck
 
       # The runner has no Source game, no wine and no Python sidecar, so most of this
       # suite skips. That is the point: it proves the package builds and its pure logic
       # holds on a bare machine, which is the machine a new contributor has.
-      - run: pnpm test --reporter=json --outputFile=vitest-report.json
+      - name: Test
+        working-directory: hammer-mcp
+        run: pnpm test --reporter=json --outputFile=vitest-report.json
 
       # A green run with zero tests executed looks exactly like a green run that proved
       # something. If a skip guard is ever widened too far, this is what notices.
       #
       # Measured on a machine with no game, no wine and no sidecar (11/08/2026):
-      # 82 passed, 46 skipped. The floor sits below that so ordinary churn does not trip
+      # 139 passed, 55 skipped. The floor sits below that so ordinary churn does not trip
       # it, and far above zero so a collapse does.
       - name: Refuse a green run that tested nothing
+        working-directory: hammer-mcp
         run: |
           passed=$(node -e "process.stdout.write(String(require('./vitest-report.json').numPassedTests))")
           echo "passed on a bare runner: $passed"
-          if [ "$passed" -lt 70 ]; then
+          if [ "$passed" -lt 100 ]; then
             echo "::error::only $passed tests actually ran; a skip guard is too wide"
             exit 1
           fi
