@@ -1,18 +1,17 @@
-import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
-import { loadConfig } from "../src/config.js";
-import { callSidecar, probeSidecar, pythonPath, SidecarError } from "../src/sidecar/client.js";
+import { callSidecar, probeSidecar, SidecarError } from "../src/sidecar/client.js";
+import { config as sharedConfig, has } from "./support/env.js";
 
-const REPO = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
-
+/**
+ * The real configuration, overridable only in the interpreter it points at.
+ *
+ * This file used to build its own, rooted two levels up from the test file -- that is,
+ * at the hammer-mcp checkout rather than at the tree holding `.hammer-mcp/`. The venv is
+ * never there, so `installed` was always false and every test below silently skipped.
+ */
 function configWith(python?: string): Config {
-  return {
-    repoRoot: REPO,
-    stateDir: `${REPO}/.hammer-mcp`,
-    toolAllowlist: [],
-    ...(python ? { sidecarPython: python } : {}),
-  } as unknown as Config;
+  return { ...sharedConfig, ...(python ? { sidecarPython: python } : {}) } as Config;
 }
 
 describe("sidecar client, when it is not installed", () => {
@@ -38,7 +37,7 @@ describe("sidecar client, when it is not installed", () => {
 
 describe("sidecar client, against the real venv", () => {
   const config = configWith();
-  const installed = existsSync(pythonPath(config));
+  const installed = has.sidecar;
 
   // `skipIf` rather than an early return: a test that quietly returns reports green,
   // and a green suite on a machine with no venv would claim a proof it never made.
