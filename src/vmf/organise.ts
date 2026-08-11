@@ -31,6 +31,34 @@ import type { SolidCheck, Vec3 } from "./solid.js";
 import { applySplices } from "./splice.js";
 import type { Splice } from "./splice.js";
 
+/**
+ * Refuses a string that cannot survive being written into a `.vmf`.
+ *
+ * A keyvalue is delimited by quotes and nothing here escapes them -- neither this writer
+ * nor `src/kv/parse.ts`, which reads a quoted string up to the next quote and no further.
+ * A visgroup called `North "tenement"` therefore came back as `North ` with the rest of it
+ * loose in the block, and a name containing a newline produced a file the parser could not
+ * read at all. The tool's own read-back would have caught the second as a parse error, but
+ * a diagnosis is worth more than a stack trace, and the first was silent.
+ *
+ * Refused rather than escaped, because escaping would need the reader to understand it too,
+ * and a visgroup with a quote in its name is not worth a change to the parser.
+ */
+function assertWritableValue(what: string, value: string): void {
+  if (value.includes('"')) {
+    throw new VmfOrganiseError(
+      `a ${what} cannot contain a quote: a .vmf delimits every value with one, and nothing ` +
+        `here escapes them. ${JSON.stringify(value)} would be cut short at the quote.`,
+    );
+  }
+  if (/[\n\r]/.test(value)) {
+    throw new VmfOrganiseError(
+      `a ${what} cannot contain a line break: it would end the value where the line ends ` +
+        `and leave the rest of the file unreadable`,
+    );
+  }
+}
+
 export class VmfOrganiseError extends Error {
   constructor(message: string) {
     super(message);
@@ -272,6 +300,8 @@ export function setVisgroup(
   if (options.name.trim().length === 0) {
     throw new VmfOrganiseError("a visgroup needs a name");
   }
+  assertWritableValue("visgroup name", options.name);
+  if (options.color !== undefined) assertWritableValue("colour", options.color);
 
   const nodes = parse(source);
   const roots = nodes.filter(isBlock);
@@ -514,6 +544,7 @@ export function setCordon(
     }
   }
   const name = options.name ?? "cordon";
+  assertWritableValue("cordon name", name);
   const active = options.active !== false;
 
   const roots = parse(source).filter(isBlock);

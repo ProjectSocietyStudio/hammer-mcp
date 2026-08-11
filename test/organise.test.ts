@@ -135,6 +135,24 @@ describe("setVisgroup", () => {
     );
   });
 
+  it("refuses a name a .vmf cannot hold", () => {
+    // A keyvalue is delimited by quotes and nothing here escapes them, so `North
+    // "tenement"` came back as `North ` with the rest loose in the block -- silently. A
+    // newline was worse: the file it produced could not be parsed at all.
+    expect(() => setVisgroup(probe(), { ids: [FLOOR] }, { name: 'North "tenement"' })).toThrow(
+      /cannot contain a quote/,
+    );
+    expect(() => setVisgroup(probe(), { ids: [FLOOR] }, { name: "a\nb" })).toThrow(
+      /line break/,
+    );
+    expect(() =>
+      setVisgroup(probe(), { ids: [FLOOR] }, { name: "ok", color: '1 "2 3' }),
+    ).toThrow(/cannot contain a quote/);
+    expect(() => setCordon(probe(), { mins: [0, 0, 0], maxs: [1, 1, 1] }, { name: 'a"b' })).toThrow(
+      /cannot contain a quote/,
+    );
+  });
+
   it("leaves the geometry untouched", () => {
     const before = read(probe());
     const after = read(setVisgroup(probe(), { ids: [FLOOR] }, { name: "Shell" }).text);
