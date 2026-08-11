@@ -127,7 +127,12 @@ def _load_vmf(path: str, req: dict[str, Any] | None = None) -> tuple[Any, dict[s
 
     from instances import collapse_instances
 
-    info = collapse_instances(vmf, path, (req or {}).get("gameDir"))
+    info = collapse_instances(
+        vmf,
+        path,
+        (req or {}).get("gameDir"),
+        instance_path=(req or {}).get("instancePath"),
+    )
     info["requested"] = True
     return vmf, info
 
