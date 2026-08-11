@@ -6,6 +6,7 @@ import { healthTools } from "./health.js";
 import { lmpTools } from "./lmp.js";
 import { measureTools } from "./measure.js";
 import { vmfTools } from "./vmf.js";
+import { vmfEditTools } from "./vmfedit.js";
 
 export const allTools: AnyToolDef[] = [
   ...healthTools,
@@ -13,6 +14,7 @@ export const allTools: AnyToolDef[] = [
   ...bspTools,
   ...measureTools,
   ...vmfTools,
+  ...vmfEditTools,
   ...compileTools,
   ...lmpTools,
 ];
