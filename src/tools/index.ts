@@ -16,6 +16,7 @@ import { materialsTools } from "./materials.js";
 import { measureTools } from "./measure.js";
 import { modifyTools } from "./modify.js";
 import { optimiseTools } from "./optimise.js";
+import { organiseTools } from "./organise.js";
 import { reportTools } from "./report.js";
 import { solidTools } from "./solids.js";
 import { vertexTools } from "./vertex.js";
@@ -41,6 +42,7 @@ export const allTools: AnyToolDef[] = [
   ...vertexTools,
   ...hollowTools,
   ...faceTools,
+  ...organiseTools,
   ...optimiseTools,
   ...depsTools,
   ...gmaTools,

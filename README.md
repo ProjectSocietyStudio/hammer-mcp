@@ -449,6 +449,10 @@ from and whether a file was read; `health` reports it. See
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
+| `read_map_organisation` | `map` | | Visgroups, groups and the cordon, with what belongs to each |
+| `set_visgroup` | `map` | ● | Names a selection so later calls can say the name instead of a box |
+| `group_solids` | `map` | ● | Hammer groups: several brushes that click as one |
+| `set_cordon` | `map` | ● | The cordon box, and whether it is on — the one setting that changes what compiles |
 | `hollow_solids` | `map` | ● | Turns a block into the walls of a room, mitred — Hammer's version overlaps |
 | `clip_solids` | `map` | ● | Cuts brushes with a plane — front, back, or both. Hammer's most-used tool |
 | `move_vertices` | `map` | ● | Moves a brush's corners — Hammer's VM tool, with its refusals |
