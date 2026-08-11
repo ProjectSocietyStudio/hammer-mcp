@@ -24,6 +24,13 @@ So the AST keeps `[start, end)` for every block and every pair, and edits are ra
 applied right to left. **Everything untouched is byte-identical by construction.** Only brand-new
 blocks are formatted.
 
+One implementation of that, in `src/vmf/splice.ts`. It used to be three, one per write module, and
+neither copy did the two things the single one does: it **refuses overlapping ranges** rather than
+producing text that depends on which sorted first, and it resolves ties at one offset **in push
+order** rather than backwards. Both cases are reachable through `applyVmfOps` — an op that removes
+an entity alongside one that edits it, and a single op setting two new keyvalues — and neither had
+a test, because the behaviour was an accident of a sort rather than a decision.
+
 `serialize()` exists, but to format what we **create**, not to rewrite what we edit. Its test oracle
 is `findOffsetGaps()`: it checks that the parsed offsets account for the entire source — nodes
 ordered, non-overlapping, and nothing between them but whitespace or a comment. That is exactly the

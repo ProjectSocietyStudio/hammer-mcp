@@ -20,6 +20,27 @@ export const CONFIRM = z
   .describe("Required (true) to run this tool: it writes or executes.");
 
 /**
+ * The two flags every tool that edits a file in place declares, and the two fields it
+ * reports back.
+ *
+ * They are here rather than repeated per tool because they had already drifted: `dryRun`
+ * was `.default(false)` in one place and `.optional()` in four, and `backup` existed only
+ * in `edit_vmf` -- the least destructive of the five, since it cannot touch geometry.
+ */
+export const DRY_RUN = z
+  .boolean()
+  .optional()
+  .describe("Check and report without writing. Every verification runs either way.");
+
+export const BACKUP = z
+  .boolean()
+  .default(true)
+  .describe("Copy the file to <file>.bak before writing. Nothing is copied on a no-op.");
+
+/** Null unless a backup was actually taken -- a no-op and a dry run both leave it null. */
+export const BACKUP_PATH = z.string().nullable();
+
+/**
  * The game profile a call works against. Absent means the configured default.
  *
  * An unknown id is refused, naming the ids that exist -- never resolved to the default.

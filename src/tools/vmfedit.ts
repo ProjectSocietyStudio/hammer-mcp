@@ -1,10 +1,10 @@
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { assertWritable } from "../fs/guard.js";
+import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { applyVmfOps } from "../vmf/edit.js";
 import type { VmfOp } from "../vmf/edit.js";
-import { CONFIRM, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
 
 const MATCH = z
   .object({
@@ -71,21 +71,15 @@ export const editVmf = defineTool({
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
     ops: z.array(OP).min(1),
-    dryRun: z
-      .boolean()
-      .default(false)
-      .describe("Compute the result and report it without writing anything."),
-    backup: z
-      .boolean()
-      .default(true)
-      .describe("Write <file>.bak beside the map before changing it."),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
     confirm: CONFIRM,
   },
   outputSchema: {
     path: z.string(),
     dryRun: z.boolean(),
     written: z.boolean(),
-    backupPath: z.string().nullable(),
+    backupPath: BACKUP_PATH,
     unchanged: z
       .boolean()
       .describe("True when the ops produced the exact same bytes. Nothing is written then."),
@@ -107,22 +101,17 @@ export const editVmf = defineTool({
   handler: (args, ctx) => {
     const path = resolveInput(args.path, ctx.config);
     if (!existsSync(path)) throw new Error(`${path} does not exist`);
-    if (!args.dryRun) assertWritable(path, ctx.config);
 
     const before = readFileSync(path, "utf8");
     const result = applyVmfOps(before, args.ops as unknown as VmfOp[]);
 
-    // An op list that changes nothing writes nothing -- including no backup. Rewriting a
-    // file with identical bytes still moves its mtime, and a mapper's build tooling
-    // watches mtimes.
-    const shouldWrite = !args.dryRun && !result.unchanged;
-    let backupPath: string | null = null;
-    if (shouldWrite && args.backup) {
-      backupPath = `${path}.bak`;
-      assertWritable(backupPath, ctx.config);
-      copyFileSync(path, backupPath);
-    }
-    if (shouldWrite) writeFileSync(path, result.text, "utf8");
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+      unchanged: result.unchanged,
+    });
+    const shouldWrite = write.written;
+    const backupPath = write.backupPath;
 
     ctx.audit.record({
       kind: "vmf_edit",

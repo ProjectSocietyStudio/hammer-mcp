@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { insertSolids } from "../vmf/build.js";
 import type { FaceInfo } from "../vmf/build.js";
@@ -7,7 +8,7 @@ import { MAX_BRUSH_LUXELS_PER_AXIS, setLightmapScale } from "../vmf/lightmap.js"
 import { reclassSolids } from "../vmf/reclass.js";
 import type { ReclassTarget } from "../vmf/reclass.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { CONFIRM, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -45,12 +46,14 @@ export const writeHintBrushTool = defineTool({
         "Which faces carry the hint. 'largest' (default) hints the two biggest opposing " +
           "faces, which for a thin slab is the plane you meant. 'all' hints every face.",
       ),
-    dryRun: z.boolean().optional().describe("Report without writing. The checks run either way."),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
     confirm: CONFIRM,
   },
   outputSchema: {
     path: z.string(),
     written: z.boolean(),
+    backupPath: BACKUP_PATH,
     solidId: z.number(),
     hintFaceCount: z.number(),
     skipFaceCount: z.number(),
@@ -106,12 +109,15 @@ export const writeHintBrushTool = defineTool({
       );
     }
 
-    const write = args.dryRun !== true;
-    if (write) writeFileSync(path, result.text, "utf8");
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+    });
 
     return {
       path,
-      written: write,
+      written: write.written,
+      backupPath: write.backupPath,
       solidId: result.solidIds[0]!,
       hintFaceCount: hintCount,
       skipFaceCount: skipCount,
@@ -163,12 +169,14 @@ export const setSolidClassTool = defineTool({
         "Existing entity of that class to add to. Omit to create one. Grouping is taste, " +
           "not performance: vbsp dissolves every func_detail into the world regardless.",
       ),
-    dryRun: z.boolean().optional().describe("Report without writing. The checks run either way."),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
     confirm: CONFIRM,
   },
   outputSchema: {
     path: z.string(),
     written: z.boolean(),
+    backupPath: BACKUP_PATH,
     unchanged: z.boolean(),
     moved: z.array(z.object({ id: z.number(), from: z.string(), to: z.string() })),
     createdEntityId: z.number().nullable(),
@@ -215,12 +223,16 @@ export const setSolidClassTool = defineTool({
     }
 
     const worldSolidsAfter = now.solids.filter((s) => s.owner === "world").length;
-    const write = args.dryRun !== true && !result.unchanged;
-    if (write) writeFileSync(path, result.text, "utf8");
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+      unchanged: result.unchanged,
+    });
 
     return {
       path,
-      written: write,
+      written: write.written,
+      backupPath: write.backupPath,
       unchanged: result.unchanged,
       moved: result.moved,
       createdEntityId: result.createdEntityId,
@@ -274,12 +286,14 @@ export const setLightmapScaleTool = defineTool({
       .boolean()
       .optional()
       .describe("Required to act on every face of the map when no other selector is given."),
-    dryRun: z.boolean().optional().describe("Report without writing. The projection runs either way."),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
     confirm: CONFIRM,
   },
   outputSchema: {
     path: z.string(),
     written: z.boolean(),
+    backupPath: BACKUP_PATH,
     unchanged: z.boolean(),
     facesChanged: z.number(),
     alreadyAtScale: z.number(),
@@ -324,13 +338,17 @@ export const setLightmapScaleTool = defineTool({
     const before = readFileSync(path, "utf8");
     const result = setLightmapScale(before, args.scale, selector);
 
-    const write = args.dryRun !== true && !result.unchanged;
-    if (write) writeFileSync(path, result.text, "utf8");
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+      unchanged: result.unchanged,
+    });
 
     const LIMIT = 50;
     return {
       path,
-      written: write,
+      written: write.written,
+      backupPath: write.backupPath,
       unchanged: result.unchanged,
       facesChanged: result.changed.length,
       alreadyAtScale: result.alreadyAtScale,

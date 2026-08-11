@@ -8,11 +8,14 @@ import {
   checkVmfSolids,
   hullFromPlanes,
   largestGrid,
+  orderedLoop,
   parsePlanePoints,
   parseTextureAxis,
   planeFromPoints,
+  pointsFromPlane,
   WORLD_BOUND,
 } from "../src/vmf/solid.js";
+import type { Vec3 } from "../src/vmf/solid.js";
 import { ctx as sharedCtx, FIXTURES, has, paths } from "./support/env.js";
 
 const PROBE = join(FIXTURES, "hmcp_probe.vmf");
@@ -195,5 +198,146 @@ describe("read_vmf_solids", () => {
     const h = checkVmfSolids(paths.tttSource, readFileSync(paths.tttSource, "utf8")).gridHistogram;
     expect(Object.keys(h).length).toBeGreaterThan(3);
     expect(h["0"]).toBeUndefined();
+  });
+});
+
+describe("orderedLoop", () => {
+  const NORMAL: Vec3 = [0, 0, 1];
+  const SQUARE: Vec3[] = [
+    [0, 0, 0],
+    [16, 16, 0],
+    [16, 0, 0],
+    [0, 16, 0],
+  ];
+
+  it("walks the perimeter instead of the order it was handed", () => {
+    // Shuffled on purpose: the input above visits the square's diagonal first, which is
+    // the order hullFromPlanes produces and which no face can be emitted from.
+    const loop = orderedLoop(SQUARE, NORMAL);
+    for (let i = 0; i < loop.length; i++) {
+      const a = loop[i]!;
+      const b = loop[(i + 1) % loop.length]!;
+      const edge = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      expect(edge, "consecutive corners must share an edge, never the diagonal").toBeCloseTo(16);
+    }
+  });
+
+  it("turns counter-clockwise seen from the normal side", () => {
+    const loop = orderedLoop(SQUARE, NORMAL);
+    let signed = 0;
+    for (let i = 0; i < loop.length; i++) {
+      const a = loop[i]!;
+      const b = loop[(i + 1) % loop.length]!;
+      signed += a[0] * b[1] - b[0] * a[1];
+    }
+    expect(signed).toBeGreaterThan(0);
+  });
+
+  it("gives back what it was given when there is no loop to find", () => {
+    expect(orderedLoop([[1, 2, 3]], NORMAL)).toEqual([[1, 2, 3]]);
+  });
+});
+
+describe("pointsFromPlane", () => {
+  const TOP: Vec3[] = [
+    [0, 0, 64],
+    [64, 0, 64],
+    [64, 64, 64],
+    [0, 64, 64],
+  ];
+
+  it("states a plane the reader recovers unchanged", () => {
+    // The round trip is the whole point: plane -> three points -> plane. A sign error in
+    // the winding survives neither direction, because the second reading contradicts it.
+    const plane = { normal: [0, 0, 1] as Vec3, dist: 64 };
+    const pts = pointsFromPlane(plane, TOP)!;
+    expect(pts).not.toBeNull();
+    const back = planeFromPoints(pts[0], pts[1], pts[2])!;
+    expect(back.normal[0]).toBeCloseTo(0);
+    expect(back.normal[1]).toBeCloseTo(0);
+    expect(back.normal[2]).toBeCloseTo(1);
+    expect(back.dist).toBeCloseTo(64);
+  });
+
+  it("flips a triple that would state the opposite face", () => {
+    // Same corners, opposite plane. Reading them in the order the loop produced would
+    // give a normal pointing up; the result must point down, or the brush is inside out.
+    const plane = { normal: [0, 0, -1] as Vec3, dist: -64 };
+    const pts = pointsFromPlane(plane, TOP)!;
+    const back = planeFromPoints(pts[0], pts[1], pts[2])!;
+    expect(back.normal[2]).toBeCloseTo(-1);
+    expect(back.dist).toBeCloseTo(-64);
+  });
+
+  it("answers the same however the corners arrive", () => {
+    // The real guard against taking whatever triple comes first. Three of these five
+    // corners lie on one edge, and orderedLoop starts the perimeter opposite its first
+    // input -- so rotating the input walks the starting point all the way round, and one
+    // rotation puts the three collinear corners first. A first-triple rule states a
+    // degenerate plane there and returns null; only choosing the widest survives all five.
+    const withMidpoint: Vec3[] = [[0, 0, 64], [32, 0, 64], [64, 0, 64], [64, 64, 64], [0, 64, 64]];
+    const plane = { normal: [0, 0, 1] as Vec3, dist: 64 };
+    for (let r = 0; r < withMidpoint.length; r++) {
+      const rotated = [...withMidpoint.slice(r), ...withMidpoint.slice(0, r)];
+      const pts = pointsFromPlane(plane, rotated);
+      expect(pts, `rotation ${r}`).not.toBeNull();
+      const back = planeFromPoints(pts![0], pts![1], pts![2])!;
+      expect(back.normal[2], `rotation ${r}`).toBeCloseTo(1);
+      expect(back.dist, `rotation ${r}`).toBeCloseTo(64);
+    }
+  });
+
+  it("picks the widest triple the face offers, not the first one it meets", () => {
+    // Five corners, three of them on one edge, so some triples are degenerate and others
+    // are merely thin. Asserting "not collinear" is too weak -- a first-triple rule passes
+    // it by luck often enough that a sabotage run stayed green. So this asserts what the
+    // code actually claims: the triangle it chose is the largest one available.
+    const withMidpoint: Vec3[] = [[0, 0, 64], [32, 0, 64], [64, 0, 64], [64, 64, 64], [0, 64, 64]];
+    const area = (a: Vec3, b: Vec3, c: Vec3): number => {
+      const u: Vec3 = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+      const v: Vec3 = [c[0] - b[0], c[1] - b[1], c[2] - b[2]];
+      return Math.hypot(
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+      );
+    };
+    let widest = 0;
+    for (let i = 0; i < withMidpoint.length; i++)
+      for (let j = i + 1; j < withMidpoint.length; j++)
+        for (let k = j + 1; k < withMidpoint.length; k++)
+          widest = Math.max(widest, area(withMidpoint[i]!, withMidpoint[j]!, withMidpoint[k]!));
+
+    const pts = pointsFromPlane({ normal: [0, 0, 1], dist: 64 }, withMidpoint);
+    expect(pts).not.toBeNull();
+    expect(area(pts![0], pts![1], pts![2])).toBeCloseTo(widest);
+  });
+
+  it("refuses a face that is only a line", () => {
+    const line: Vec3[] = [[0, 0, 0], [16, 0, 0], [32, 0, 0]];
+    expect(pointsFromPlane({ normal: [0, 0, 1], dist: 0 }, line)).toBeNull();
+    expect(pointsFromPlane({ normal: [0, 0, 1], dist: 0 }, [[0, 0, 0], [1, 1, 0]])).toBeNull();
+  });
+
+  it("restates every face of the probe's own brushes", () => {
+    // The strongest form available without a compile: take a fixture that has been through
+    // vbsp and srcds, read each face's plane and corners, and write the plane back out.
+    // Every one must come back identical.
+    const report = checkVmfSolids(PROBE, source());
+    let faces = 0;
+    for (const solid of report.solids) {
+      for (const side of solid.sides) {
+        if (!side.plane || side.vertices.length < 3) continue;
+        const pts = pointsFromPlane(side.plane, side.vertices);
+        expect(pts, `solid ${solid.id} face ${side.id}`).not.toBeNull();
+        const back = planeFromPoints(pts![0], pts![1], pts![2])!;
+        expect(back.normal[0]).toBeCloseTo(side.plane.normal[0]);
+        expect(back.normal[1]).toBeCloseTo(side.plane.normal[1]);
+        expect(back.normal[2]).toBeCloseTo(side.plane.normal[2]);
+        expect(back.dist).toBeCloseTo(side.plane.dist);
+        faces++;
+      }
+    }
+    expect(faces, "the probe has six brushes of six faces").toBe(36);
   });
 });

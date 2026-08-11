@@ -12,9 +12,14 @@ import type { Config } from "../config.js";
  *
  * The repo's `deny-readonly-trees.sh` hook enforces this for the Edit/Write *tools* --
  * it cannot see `node:fs` calls made inside an MCP server. So this is discipline, not
- * enforcement, and `assertWritable` is the single choke point that makes it auditable:
- * every write in this codebase goes through it, and a contract test asserts that no
- * tool's default output path resolves under a forbidden tree.
+ * enforcement, and `assertWritable` is the choke point that makes it auditable.
+ *
+ * That last sentence used to end "every write in this codebase goes through it", which was
+ * not true and had no test able to say so: the contract test inspected each tool's default
+ * output path, and the four VMF geometry writers have none -- the path is always the
+ * caller's -- so it found nothing to object to while they called `writeFileSync` directly.
+ * File edits now go through `./write.ts`, and a contract test calls each writer for real on
+ * a map inside `srcds/` and requires it to refuse.
  */
 export const FORBIDDEN_TREES = ["srcds", "reference"] as const;
 

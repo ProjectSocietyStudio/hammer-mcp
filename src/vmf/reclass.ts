@@ -24,6 +24,8 @@
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
 import { maxId } from "./edit.js";
+import { applySplices } from "./splice.js";
+import type { Splice } from "./splice.js";
 
 export class VmfReclassError extends Error {
   constructor(message: string) {
@@ -209,7 +211,7 @@ export function reclassSolids(
     return source.slice(start, end);
   });
 
-  const splices: Array<{ start: number; end: number; text: string }> = moving.map((s) => {
+  const splices: Splice[] = moving.map((s) => {
     const { start, end } = lineRange(source, s.block);
     return { start, end, text: "" };
   });
@@ -219,11 +221,7 @@ export function reclassSolids(
     text: newEntityPrefix + body.join("") + newEntitySuffix,
   });
 
-  // Last-first, so every offset still refers to the text it was measured against.
-  let text = source;
-  for (const s of [...splices].sort((a, b) => b.start - a.start)) {
-    text = text.slice(0, s.start) + s.text + text.slice(s.end);
-  }
+  const text = applySplices(source, splices);
 
   const leftInWorld = found.filter(
     (s) => s.owner === "world" && !moving.some((m) => m.id === s.id),

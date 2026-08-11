@@ -32,6 +32,8 @@
  */
 import { children, get, pairs, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
+import { applySplices } from "./splice.js";
+import type { Splice } from "./splice.js";
 
 export class VmfEditError extends Error {
   constructor(message: string) {
@@ -164,12 +166,6 @@ function insertionPoint(block: KvBlock): number {
     last = node.end;
   }
   return last;
-}
-
-interface Splice {
-  start: number;
-  end: number;
-  text: string;
 }
 
 function setPair(
@@ -340,11 +336,7 @@ export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult 
     }
   }
 
-  // Right-to-left, so every offset computed above stays valid as the text is rewritten.
-  let out = text;
-  for (const s of [...splices].sort((a, b) => b.start - a.start)) {
-    out = out.slice(0, s.start) + s.text + out.slice(s.end);
-  }
+  let out = applySplices(text, splices);
   if (appends.length > 0) {
     if (out.length > 0 && !out.endsWith("\n")) out += "\n";
     out += appends.join("");
