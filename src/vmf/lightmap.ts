@@ -25,6 +25,8 @@
  */
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
+import { applySplices } from "./splice.js";
+import type { Splice } from "./splice.js";
 import { checkSolid, parsePlanePoints, parseTextureAxis, planeFromPoints } from "./solid.js";
 import type { SolidSide, Vec3 } from "./solid.js";
 
@@ -184,7 +186,7 @@ export function setLightmapScale(
   }
 
   const wanted = selector.solidIds ? new Set(selector.solidIds) : null;
-  const splices: Array<{ start: number; end: number; text: string }> = [];
+  const splices: Splice[] = [];
   const changed: FaceChange[] = [];
   let alreadyAtScale = 0;
   let luxelsBefore = 0;
@@ -256,10 +258,7 @@ export function setLightmapScale(
     );
   }
 
-  let text = source;
-  for (const s of [...splices].sort((a, b) => b.start - a.start)) {
-    text = text.slice(0, s.start) + s.text + text.slice(s.end);
-  }
+  const text = applySplices(source, splices);
 
   return {
     text,
