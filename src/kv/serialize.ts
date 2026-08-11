@@ -5,14 +5,19 @@ import type { KvBlock, KvNode } from "./parse.js";
  * line, and `"key" "value"` separated by a single space.
  *
  * This is the formatter for content we CREATE. It is not the write path for content we
- * edit -- see `../entity/edit.ts`, which splices ranges of the original text so that
- * everything untouched stays byte-identical. Reserialising a whole file would lose
- * Hammer's own irregular whitespace and reformat floats like `5416.0312`, producing a
- * diff of thousands of lines for a one-entity change.
+ * edit -- see `../entity/edit.ts` and `../vmf/edit.ts`, which splice ranges of the
+ * original text so that everything untouched stays byte-identical.
  *
- * That splice path currently serves the entity lump only. **There is no VMF write tool
- * yet**: a `.vmf` can be read and linted here, not edited. When one arrives it must reuse
- * the same splice, for the same reason.
+ * What reserialising actually costs, measured on 11/08/2026 rather than assumed: this
+ * formatter copies every value verbatim, so numbers survive it -- a VMF of canonical
+ * Hammer output round-trips byte for byte, which is why an earlier version of the VMF
+ * edit tests failed to notice a deliberate reserialisation. What does NOT survive is
+ * everything the grammar does not model: `//` comments, blank lines, and indentation
+ * that is not one tab per level. Hand-edited maps and third-party editors have all three.
+ *
+ * (A parser that reads values as typed numbers -- srctools, on the Python side -- would
+ * reformat `5416.0312` as well. That is a reason never to write a VMF through the
+ * sidecar, not a property of this file.)
  */
 export function serialize(nodes: readonly KvNode[], indent = 0): string {
   return nodes.map((n) => serializeNode(n, indent)).join("");

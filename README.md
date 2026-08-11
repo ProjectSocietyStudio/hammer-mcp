@@ -41,6 +41,7 @@ distingue partout les deux.
 | BSP (`read_bsp_info`, `read_bsp_entities`) | **prouvé** — jalon 1 ci-dessous |
 | Patch de lump (`read_lump_patch`, `write_lump_patch`, `read_lump_patch_status`) | codec prouvé ; **effet en jeu non prouvé** (porte B) |
 | VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée ; `func_instance` dépliés |
+| Écriture VMF (`edit_vmf`) | **prouvé** — splice : commentaires, lignes vides et indentation préservés ; pas de géométrie |
 | Compile (`run_compile`, `read_compile_log`, `read_leak`, `run_pack`) | **prouvé** — fuite provoquée puis localisée, sur les deux chaînes |
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
@@ -400,6 +401,7 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_brush_volumes` | `map` | | Emprise au sol et volume de chaque entité-brush, par classe |
 | `read_fgd_class` | `map` | | Le schéma d'une classe selon la FGD du jeu : keyvalues, entrées, sorties |
 | `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement. `collapseInstances` déplie les `func_instance` |
+| `edit_vmf` | `map` | ● | Modifie un `.vmf` par splice : entités, keyvalues, sorties. Rien d'autre ne bouge |
 | `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler. `collapseInstances` idem |
 | `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape. `toolchain: "plusplus"` pour la chaîne Hammer++ |
 | `read_compile_log` | `map` | | Traduit la sortie d'un compilateur en findings expliqués |
