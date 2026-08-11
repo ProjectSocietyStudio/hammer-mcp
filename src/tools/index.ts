@@ -2,6 +2,7 @@ import type { AnyToolDef } from "../mcp/registry.js";
 import { bspTools } from "./bsp.js";
 import { buildTools } from "./build.js";
 import { compileTools } from "./compile.js";
+import { contentTools } from "./content.js";
 import { depsTools } from "./deps.js";
 import { gmaTools } from "./gma.js";
 import { faceTools } from "./face.js";
@@ -29,6 +30,7 @@ export const allTools: AnyToolDef[] = [
   ...visleafTools,
   ...reportTools,
   ...vmfTools,
+  ...contentTools,
   ...solidTools,
   ...buildTools,
   ...modifyTools,

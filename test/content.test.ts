@@ -1,0 +1,151 @@
+import { describe, expect, it } from "vitest";
+import type { ToolContext } from "../src/mcp/registry.js";
+import { readGameContentTool, readModelInfoTool } from "../src/tools/content.js";
+import { ctx as sharedCtx, has } from "./support/env.js";
+
+const ctx = sharedCtx as unknown as ToolContext;
+const ready = has.sidecar && has.gameContent;
+
+interface SearchReply {
+  mounted: boolean;
+  total: number;
+  shown?: number;
+  truncated?: boolean;
+  results: Array<{ path: string; name?: string; shader?: string | null; toolTexture?: boolean }>;
+  error?: string;
+}
+
+interface ModelReply {
+  found: boolean;
+  mins?: number[] | null;
+  maxs?: number[] | null;
+  size?: number[] | null;
+  skinCount?: number;
+  sequences?: string[];
+  materials?: string[];
+  model: string;
+}
+
+const search = (args: Record<string, unknown>): Promise<SearchReply> =>
+  readGameContentTool.handler(
+    { kind: "material", limit: 100, ...args } as never,
+    ctx,
+  ) as unknown as Promise<SearchReply>;
+
+describe("read_game_content", () => {
+  it("refuses an empty pattern rather than returning the whole game", async () => {
+    // Refused in TypeScript, before the sidecar is reached, so this holds on a bare
+    // machine -- which is the machine CI runs on and where every other test here skips.
+    await expect(search({ pattern: "   " })).rejects.toThrow(/needs a pattern/);
+  });
+
+  it.skipIf(!ready)("finds a material every Source game has", async () => {
+    const r = await search({ pattern: "brickwall001a" });
+    expect(r.mounted).toBe(true);
+    expect(r.total).toBeGreaterThan(0);
+    expect(r.results.map((x) => x.path)).toContain("materials/brick/brickwall001a.vmt");
+  });
+
+  it.skipIf(!ready)("returns the name in the form a .vmf stores, not the path", async () => {
+    // The whole point of the tool: what comes out here goes straight into
+    // set_face_material, with no prefix to strip and no case to fix.
+    const r = await search({ pattern: "brickwall001a" });
+    const hit = r.results.find((x) => x.path === "materials/brick/brickwall001a.vmt")!;
+    expect(hit.name).toBe("BRICK/BRICKWALL001A");
+  });
+
+  it.skipIf(!ready)("treats a bare word as a substring and a starred one as a glob", async () => {
+    // The glob must actually find something. Asserting only that it finds fewer than the
+    // substring passes when it finds nothing at all, and `.every()` on an empty array is
+    // vacuously true -- which is how a sabotage run that removed globbing stayed green.
+    const substring = await search({ pattern: "brick" });
+    const glob = await search({ pattern: "brick/brickwall*" });
+    expect(glob.total).toBeGreaterThan(0);
+    expect(substring.total).toBeGreaterThan(glob.total);
+    expect(glob.results.every((x) => x.path.includes("brick/brickwall"))).toBe(true);
+
+    // A wildcard in the middle is the case a substring match cannot express at all:
+    // `brickwall00?a` finds 001a and 003a, and no path contains that literal text.
+    const middle = await search({ pattern: "brickwall00?a" });
+    expect(middle.total).toBeGreaterThan(1);
+  });
+
+  it.skipIf(!ready)("says how many it found, not only how many it returned", async () => {
+    // A truncated list that reports its own length as the total is how a caller concludes
+    // the game has four bricks.
+    const r = await search({ pattern: "brick", limit: 2 });
+    expect(r.results).toHaveLength(2);
+    expect(r.shown).toBe(2);
+    expect(r.total).toBeGreaterThan(2);
+    expect(r.truncated).toBe(true);
+  });
+
+  it.skipIf(!ready)("reads the shader only when asked, and marks tool textures", async () => {
+    const plain = await search({ pattern: "brickwall001a" });
+    expect(plain.results[0]!.shader).toBeUndefined();
+
+    const detailed = await search({ pattern: "brickwall001a", details: true });
+    expect(detailed.results[0]!.shader).toBe("LightmappedGeneric");
+    expect(detailed.results[0]!.toolTexture).toBe(false);
+
+    const tool = await search({ pattern: "tools/toolsnodraw", details: true });
+    expect(tool.results[0]!.toolTexture).toBe(true);
+  });
+
+  it.skipIf(!ready)("finds models as well as materials", async () => {
+    const r = await search({ pattern: "props_c17/oildrum001", kind: "model" });
+    expect(r.results.map((x) => x.path)).toContain("models/props_c17/oildrum001.mdl");
+  });
+
+  it.skipIf(!ready)("returns nothing, and says nothing is there, for a name that is not", async () => {
+    const r = await search({ pattern: "no_such_material_anywhere_12345" });
+    expect(r.mounted).toBe(true);
+    expect(r.total).toBe(0);
+    expect(r.results).toEqual([]);
+  });
+});
+
+describe("read_model_info", () => {
+  const info = (model: string): Promise<ModelReply> =>
+    readModelInfoTool.handler({ model } as never, ctx) as unknown as Promise<ModelReply>;
+
+  it.skipIf(!ready)("measures a prop's own hull", async () => {
+    // Measured 11/08/2026 against Garry's Mod's copy of Half-Life 2's content. The numbers
+    // are the reason the tool exists: the origin sits at the centre of the drum, so placing
+    // it at a floor's own z buries half of it, and nothing downstream reports that.
+    const r = await info("props_c17/oildrum001");
+    expect(r.found).toBe(true);
+    expect(r.size![0]).toBeCloseTo(29, 1);
+    expect(r.size![1]).toBeCloseTo(29, 1);
+    expect(r.size![2]).toBeCloseTo(45.562, 2);
+    expect(r.mins![2]).toBeLessThan(0);
+    expect(r.maxs![2]).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!ready)("adds the prefix and the suffix a caller left off", async () => {
+    const bare = await info("props_c17/oildrum001");
+    const full = await info("models/props_c17/oildrum001.mdl");
+    expect(bare.model).toBe("models/props_c17/oildrum001.mdl");
+    expect(bare.size).toEqual(full.size);
+  });
+
+  it.skipIf(!ready)("lists the skins and materials a mapper chooses between", async () => {
+    const r = await info("props_c17/oildrum001");
+    expect(r.skinCount).toBe(6);
+    expect(r.materials!.length).toBeGreaterThan(0);
+    expect(r.materials![0]).toMatch(/^materials\/models\//);
+  });
+
+  it.skipIf(!ready)("names its sequences rather than dumping their internals", async () => {
+    // srctools reprs a Sequence with its bounding box and its event list, a few hundred
+    // characters each, answering a question nobody asked.
+    const r = await info("props_c17/oildrum001");
+    expect(r.sequences).toEqual(["idle"]);
+  });
+
+  it.skipIf(!ready)("says a model is absent instead of failing", async () => {
+    const r = await info("models/nope/nope.mdl");
+    expect(r.found).toBe(false);
+    expect(r.size ?? null).toBeNull();
+  });
+});

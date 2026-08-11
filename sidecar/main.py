@@ -145,6 +145,22 @@ def _map_dependencies(req: dict[str, Any]) -> dict[str, Any]:
     return map_dependencies(req)
 
 
+@verb("search_content")
+def _search_content(req: dict[str, Any]) -> dict[str, Any]:
+    """Materials and models the game actually has, by name."""
+    from content import search_content
+
+    return search_content(req)
+
+
+@verb("model_info")
+def _model_info(req: dict[str, Any]) -> dict[str, Any]:
+    """Bounds, skins and materials of one .mdl -- what Hammer's model browser shows."""
+    from content import model_info
+
+    return model_info(req)
+
+
 @verb("fgd_class")
 def _fgd_class(req: dict[str, Any]) -> dict[str, Any]:
     """Describes one class as the game's own FGD declares it, or lists the classes."""
