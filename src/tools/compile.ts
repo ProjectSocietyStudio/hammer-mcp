@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
-import { clip } from "@rolists/mcp-core";
+import { clip } from "@projectsociety/mcp-core";
 import { z } from "zod";
 import { parseCompileLog } from "../compile/log.js";
 import { locateLeak, readPointfile } from "../compile/leak.js";

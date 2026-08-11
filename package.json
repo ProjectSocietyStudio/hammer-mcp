@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@rolists/mcp-core": "file:../mcp-core",
+    "@projectsociety/mcp-core": "file:../mcp-core",
     "zod": "^3.23.8"
   },
   "devDependencies": {

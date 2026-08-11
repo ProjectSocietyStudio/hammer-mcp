@@ -2,8 +2,8 @@ import type {
   AnyToolDef as CoreAnyToolDef,
   BaseToolContext,
   ToolDef as CoreToolDef,
-} from "@rolists/mcp-core";
-import { makeToolkit, ToolRegistry as CoreToolRegistry } from "@rolists/mcp-core";
+} from "@projectsociety/mcp-core";
+import { makeToolkit, ToolRegistry as CoreToolRegistry } from "@projectsociety/mcp-core";
 import type { ZodRawShape } from "zod";
 import type { Config } from "../config.js";
 import type { AuditLog } from "../logger.js";
@@ -42,4 +42,4 @@ const toolkit = makeToolkit<ToolContext, Realm>();
 /** Preserves type inference at the definition site. */
 export const defineTool = toolkit.defineTool;
 
-export { clip, isCallAllowed, type ToolResult } from "@rolists/mcp-core";
+export { clip, isCallAllowed, type ToolResult } from "@projectsociety/mcp-core";

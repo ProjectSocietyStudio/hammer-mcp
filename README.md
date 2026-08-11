@@ -633,7 +633,8 @@ inscrit ici était « un troisième serveur MCP, ou le même bug de plomberie co
 **Il a été atteint le 11/08/2026** : la dérive était déjà mesurable (`clip()` recopiée deux fois
 côté gmod-mcp, `stripAnsi()` d'un seul côté, le bloc image de l'autre) et la montée du SDK de
 `^1.12` à `1.30` allait devoir être faite et prouvée deux fois. Ces six fichiers sont désormais des
-adaptateurs de trois lignes au-dessus de [`@rolists/mcp-core`](../mcp-core/README.md), dépôt frère.
+adaptateurs de trois lignes au-dessus de
+[`@projectsociety/mcp-core`](https://github.com/ProjectSocietyStudio/mcp-core).
 
 Ce qui **ne monte pas** au noyau : `src/fs/guard.ts`, propre à nos arbres d'écriture, et l'enum
 `Realm` — `map`/`local` reste délibérément distinct des `sv`/`cl`/`local` de gmod-mcp. Les cycles
