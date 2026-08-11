@@ -2,10 +2,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { LUMP_SPECS } from "../bsp/geometry.js";
+import type { Config } from "../config.js";
+import type { ResolvedGame } from "../games/profile.js";
+import { fgdNamesFor, gameBlock, gameFor } from "../games/resolve.js";
 import { luaEntityClasses } from "../lua/entities.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
-import { resolveInput } from "./paths.js";
+import { GAME, GAME_BLOCK, resolveInput } from "./paths.js";
 
 const FINDING = z.object({
   severity: z.string(),
@@ -41,11 +44,25 @@ const FINDING = z.object({
  */
 const OPTIONAL_FGDS = ["win64/toolsplusplus.fgd"];
 
-function fgdNames(config: { gmodBin: string }): string[] {
-  return [
-    "garrysmod.fgd",
-    ...OPTIONAL_FGDS.filter((rel) => existsSync(join(config.gmodBin, rel))),
-  ];
+/**
+ * Resolves the game a call works against and the FGDs to check against.
+ *
+ * The required list is no longer written here: it comes from the game's own
+ * `gameinfo.txt` (`GameData`). That is what makes this work for a game nobody on this
+ * machine owns -- CS:S declares `cstrike.fgd` itself.
+ */
+function fgdContext(
+  config: Config,
+  id?: string,
+): { game: ResolvedGame; from: "argument" | "config"; binDir: string; fgd: string[] } {
+  const { game, from } = gameFor(config, id);
+  const withOptional: ResolvedGame = { ...game, optionalFgd: OPTIONAL_FGDS };
+  return {
+    game,
+    from,
+    binDir: game.binDir ?? config.gmodBin,
+    fgd: fgdNamesFor(withOptional, existsSync),
+  };
 }
 
 const COUNTS = z.object({
@@ -70,6 +87,7 @@ export const readFgdClass = defineTool({
   inputSchema: {
     classname: z.string().optional().describe("Exact class, e.g. logic_relay."),
     prefix: z.string().optional().describe("When listing: keep classes starting with this."),
+    game: GAME,
     limit: z.number().int().min(1).max(2000).default(200),
   },
   outputSchema: {
@@ -99,8 +117,8 @@ export const readFgdClass = defineTool({
     callSidecar(
       "fgd_class",
       {
-        binDir: ctx.config.gmodBin,
-        fgd: fgdNames(ctx.config),
+        binDir: fgdContext(ctx.config, args.game).binDir,
+        fgd: fgdContext(ctx.config, args.game).fgd,
         ...(args.classname ? { classname: args.classname } : {}),
         ...(args.prefix ? { prefix: args.prefix } : {}),
         limit: args.limit,
@@ -130,10 +148,12 @@ export const readVmf = defineTool({
           "counts are far too low, and outputs crossing an instance look like they target " +
           "nothing. Off by default because it changes every count and every targetname.",
       ),
+    game: GAME,
     limit: z.number().int().min(1).max(2000).default(200),
   },
   outputSchema: {
     path: z.string(),
+    game: GAME_BLOCK,
     counts: COUNTS,
     instances: z.object({
       requested: z.boolean(),
@@ -165,19 +185,24 @@ export const readVmf = defineTool({
       }),
     ),
   },
-  handler: async (args, ctx) =>
-    callSidecar(
+  handler: async (args, ctx) => {
+    const { game, from } = gameFor(ctx.config, args.game);
+    const reply = await callSidecar<Record<string, unknown>>(
       "vmf_read",
       {
         path: resolveInput(args.path, ctx.config),
         ...(args.classname ? { classname: args.classname } : {}),
         collapseInstances: args.collapseInstances,
-        gameDir: ctx.config.gmodGameDir,
+        gameDir: game.gameDir ?? ctx.config.gmodGameDir,
+        // The game states where its instances live; before profiles this was guessed.
+        ...(game.instancePath ? { instancePath: game.instancePath } : {}),
         limit: args.limit,
       },
       ctx.config,
       300_000,
-    ),
+    );
+    return { ...reply, game: gameBlock(game, from) };
+  },
 });
 
 interface LintReply {
@@ -226,6 +251,7 @@ export const readVmfLint = defineTool({
           "counts are far too low, and outputs crossing an instance look like they target " +
           "nothing. Off by default because it changes every count and every targetname.",
       ),
+    game: GAME,
     limit: z.number().int().min(1).max(2000).default(200),
   },
   outputSchema: {
@@ -249,6 +275,7 @@ export const readVmfLint = defineTool({
     luaClassesKnown: z.number(),
     toleratedHelpers: z.record(z.number()),
     fgdsLoaded: z.array(z.string()),
+    game: GAME_BLOCK,
     total: z.number(),
     bySeverity: z.record(z.number()),
     byRule: z.record(z.number()),
@@ -257,14 +284,16 @@ export const readVmfLint = defineTool({
     findings: z.array(FINDING),
   },
   handler: async (args, ctx) => {
+    const { game, from, binDir, fgd } = fgdContext(ctx.config, args.game);
     const reply = await callSidecar<LintReply>(
       "vmf_lint",
       {
         path: resolveInput(args.path, ctx.config),
-        binDir: ctx.config.gmodBin,
-        fgd: fgdNames(ctx.config),
+        binDir,
+        fgd,
         collapseInstances: args.collapseInstances,
-        gameDir: ctx.config.gmodGameDir,
+        gameDir: game.gameDir ?? ctx.config.gmodGameDir,
+        ...(game.instancePath ? { instancePath: game.instancePath } : {}),
         luaClasses: luaEntityClasses(ctx.config),
         limit: 2000,
       },
@@ -314,6 +343,7 @@ export const readVmfLint = defineTool({
       luaClassesKnown: reply.luaClassesKnown,
       toleratedHelpers: reply.toleratedHelpers,
       fgdsLoaded: reply.fgdsLoaded,
+      game: gameBlock(game, from),
       total: reply.total,
       bySeverity: reply.bySeverity,
       byRule: reply.byRule,

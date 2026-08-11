@@ -24,26 +24,38 @@ class InstanceError(Exception):
     """Something about the instances made the map unreadable, with a reason to report."""
 
 
-def _search_paths(vmf_path: str, game_dir: str | None) -> Any:
+def _search_paths(
+    vmf_path: str, game_dir: str | None, instance_path: str | None = None
+) -> Any:
     """Where an instance's `file` keyvalue is resolved from.
 
     Beside the map first, which is what a mapper working in one folder expects, then the
     game's `maps/`, which is where vbsp looks. Not the SDK layout srctools defaults to:
     GMod has no `sdk_content`.
+
+    `instance_path` is the game's own `InstancePath` from `gameinfo.txt` -- GMod declares
+    `maps/instances/`. It used to be guessed at; the game states it, so it is passed in
+    rather than inferred, and games that put instances elsewhere work without a change.
     """
     from srctools.filesys import RawFileSystem
     from srctools.instancing import get_inst_locs
 
     fsys = get_inst_locs(Path(vmf_path))
-    if game_dir:
-        maps = Path(game_dir) / "maps"
-        if maps.is_dir():
-            fsys.add_sys(RawFileSystem(str(maps)))
+    for candidate in (
+        Path(game_dir) / instance_path if game_dir and instance_path else None,
+        Path(game_dir) / "maps" if game_dir else None,
+    ):
+        if candidate is not None and candidate.is_dir():
+            fsys.add_sys(RawFileSystem(str(candidate)))
     return fsys
 
 
 def collapse_instances(
-    vmf: Any, vmf_path: str, game_dir: str | None = None, recur_limit: int = 16
+    vmf: Any,
+    vmf_path: str,
+    game_dir: str | None = None,
+    recur_limit: int = 16,
+    instance_path: str | None = None,
 ) -> dict[str, Any]:
     """Expands every `func_instance` in place. Returns what was expanded.
 
@@ -60,7 +72,7 @@ def collapse_instances(
         return {"collapsed": 0, "files": [], "depthLimit": recur_limit}
 
     try:
-        collapse_all(vmf, _search_paths(vmf_path, game_dir), recur_limit)
+        collapse_all(vmf, _search_paths(vmf_path, game_dir, instance_path), recur_limit)
     except FileNotFoundError as exc:
         # Named, because the alternative is a traceback about a path the caller never
         # wrote: the instance file is referenced from inside the map, not passed in.
