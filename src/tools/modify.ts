@@ -3,6 +3,7 @@ import { z } from "zod";
 import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { deleteSolids, transformSolids } from "../vmf/modify.js";
+import { matchesSolid } from "../vmf/select.js";
 import type { SolidSelector } from "../vmf/select.js";
 import { checkVmfSolids } from "../vmf/solid.js";
 import { mirror, rotation, scaling, translation } from "../vmf/transform.js";
@@ -122,7 +123,10 @@ export const transformSolidsTool = defineTool({
         id: z.number(),
         owner: z.string(),
         volumeBefore: z.number(),
+        /** Measured from the result, not predicted: snapping is not an affine map. */
         volumeAfter: z.number(),
+        /** What the determinant said it would be. A gap between the two is the snap. */
+        volumePredicted: z.number(),
         minsAfter: Vec3,
         maxsAfter: Vec3,
       }),
@@ -151,11 +155,10 @@ export const transformSolidsTool = defineTool({
     // where the selection is.
     const selector = selectorFrom(args);
     const report = checkVmfSolids(path, before);
-    const chosenSolids = report.solids.filter((s) => {
-      if (args.solidIds && (s.id === null || !args.solidIds.includes(s.id))) return false;
-      if (args.owner && s.owner !== args.owner) return false;
-      return true;
-    });
+    // The whole selector, not half of it. Filtering on ids and owner only meant that a
+    // rotation selected by material or by bounding box turned the narrower selection
+    // around the centre of a wider one, which moves it as well as turning it.
+    const chosenSolids = report.solids.filter((s) => matchesSolid(s, selector));
     const centre = (): [number, number, number] => {
       if (chosenSolids.length === 0) return [0, 0, 0];
       const mins = [0, 1, 2].map((a) => Math.min(...chosenSolids.map((s) => s.mins[a]!)));
@@ -232,14 +235,22 @@ export const transformSolidsTool = defineTool({
       backupPath: write.backupPath,
       unchanged: result.unchanged,
       matched: result.matched,
-      solids: result.solids.map((s) => ({
-        id: s.id,
-        owner: s.owner,
-        volumeBefore: s.volumeBefore,
-        volumeAfter: s.volumeAfter,
-        minsAfter: s.minsAfter as unknown as [number, number, number],
-        maxsAfter: s.maxsAfter as unknown as [number, number, number],
-      })),
+      // Measured from the file this produced, not predicted from the determinant. Snapping
+      // to a grid is not an affine map, so the prediction can be wrong by more than the
+      // four decimals the plane points are written to -- and the reader has already been
+      // run, so the real number was there for the asking.
+      solids: result.solids.map((s) => {
+        const measured = after.solids.find((x) => x.id === s.id);
+        return {
+          id: s.id,
+          owner: s.owner,
+          volumeBefore: s.volumeBefore,
+          volumeAfter: measured?.volume ?? s.volumeAfter,
+          volumePredicted: s.volumeAfter,
+          minsAfter: (measured?.mins ?? s.minsAfter) as unknown as [number, number, number],
+          maxsAfter: (measured?.maxs ?? s.maxsAfter) as unknown as [number, number, number],
+        };
+      }),
       planarityError: result.worstPlanarityError,
       warnings: result.warnings,
       nextStep:

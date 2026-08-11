@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { runCompile } from "../src/tools/compile.js";
+import { transformSolidsTool } from "../src/tools/modify.js";
 import { applyVmfOps, readEntities } from "../src/vmf/edit.js";
 import { deleteSolids, transformSolids, VmfModifyError } from "../src/vmf/modify.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
@@ -389,3 +390,51 @@ function shifted(source: string, classname: string, delta: Vec3): string {
   const [x, y, z] = (raw?.value ?? "0 0 0").split(/\s+/).map(Number);
   return `${x! + delta[0]} ${y! + delta[1]} ${z! + delta[2]}`;
 }
+
+describe("transform_solids: what the tool reports", () => {
+  const ctx = sharedCtx as unknown as ToolContext;
+  const scratch2 = mkdtempSync(join(tmpdir(), "hammer-transform-"));
+  afterAll(() => rmSync(scratch2, { recursive: true, force: true }));
+
+  interface Reply {
+    solids: Array<{ id: number; volumeAfter: number; volumePredicted: number; minsAfter: number[] }>;
+  }
+
+  const run = (args: Record<string, unknown>): Reply => {
+    const file = join(scratch2, `t${Math.round(performance.now() * 1000)}.vmf`);
+    writeFileSync(file, probe());
+    return transformSolidsTool.handler(
+      { path: file, backup: false, confirm: true, ...args } as never,
+      ctx,
+    ) as unknown as Reply;
+  };
+
+  it("turns a selection about its own centre, whatever named it", () => {
+    // The default pivot was computed from ids and owner only, so selecting by material or
+    // by bounding box turned the narrower selection around the centre of a wider one --
+    // which moves it as well as turning it. Here the box holds one wall, and a half turn
+    // about that wall's own centre must leave its bounding box exactly where it was.
+    const wall = byId(probe(), WALL);
+    const r = run({
+      within: { mins: wall.mins, maxs: wall.maxs },
+      rotate: { axis: [0, 0, 1], degrees: 180 },
+    });
+    expect(r.solids).toHaveLength(1);
+    for (let a = 0; a < 3; a++) {
+      expect(r.solids[0]!.minsAfter[a], `axis ${a}`).toBeCloseTo(wall.mins[a]!, 3);
+    }
+  });
+
+  it("reports the volume the file really has, not the one the determinant predicted", () => {
+    // Snapping to a grid is not an affine map, so the prediction can be off by more than
+    // the four decimals the plane points carry. The reader has already run by then.
+    const before = byId(probe(), WALL);
+    const r = run({
+      solidIds: [WALL],
+      rotate: { axis: [0, 0, 1], degrees: 37 },
+      grid: 16,
+    });
+    expect(r.solids[0]!.volumePredicted).toBeCloseTo(before.volume, 3);
+    expect(r.solids[0]!.volumeAfter).not.toBe(r.solids[0]!.volumePredicted);
+  });
+});
