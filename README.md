@@ -381,6 +381,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Moving and deleting brushes | **proven** — a room turned 45 degrees compiles sealed, and leaks when one of its walls is deleted |
 | Reading the game's content | **proven** — searches and model bounds checked against Garry's Mod's own install |
 | Vertex editing | **proven** — a slab tilted into a wedge stays a valid brush; every move that would break a face is refused |
+| Writing displacements | **proven** — srctools reads back the grid, the relief and the blend this wrote |
 | Reading displacements | **proven** — srctools reads the same power, grid, start and extremes from the same file |
 | Hollowing | **proven** — the walls sum exactly to the outer volume less the room, and the hollowed probe still seals |
 | Clipping | **proven** — a room whose every wall was cut diagonally compiles sealed; the two halves sum to the original volume |
@@ -448,6 +449,10 @@ from and whether a file was read; `health` reports it. See
 | `read_model_info` | `map` | | A prop's hull, skins, sequences and materials, before you place it |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `read_displacements` | `map` | | The terrain grids of a `.vmf`, their vertices in world space, and their seams |
+| `write_displacement` | `map` | ● | Creates terrain grids on selected faces — 5×5, 9×9 or 17×17 |
+| `sew_displacements` | `map` | ● | Pulls displacements back together along the edges they share |
+| `sculpt_displacement` | `map` | ● | Flatten, raise, slope or noise — with a seed, so it can be made twice |
+| `paint_displacement` | `map` | ● | The blend channel: uniform, by height, or by slope |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
