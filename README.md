@@ -124,6 +124,7 @@ from and whether a file was read; `health` reports it. See
 | `read_brush_volumes` | `map` | | Footprint and volume of each brush entity, by class |
 | `read_materials` | `map` | | Material table of a compiled map, and how many `TEXINFO` reference each one |
 | `read_lightmap_budget` | `map` | | Where a compiled map's lightmap resolution went: total luxels, distribution, costliest faces |
+| `read_visleaf_stats` | `map` | | Quality of a compiled map's visibility split: leaf/cluster counts, leaf volume distribution |
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
