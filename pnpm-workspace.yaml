@@ -1,5 +1,7 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@projectsociety/mcp-core@0.1.0'
 onlyBuiltDependencies:
   - esbuild
 verifyDepsBeforeRun: false
