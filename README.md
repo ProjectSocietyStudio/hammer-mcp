@@ -96,6 +96,41 @@ Les quatre sorties brutes sont versionnées dans `test/fixtures/logs/` et rejou�
 fuite. Cela prouve ces deux cas, **pas** que toutes les erreurs des builds `++` sont couvertes —
 leurs messages propres n'ont pas encore d'échantillon.
 
+### Ce que la chaîne Hammer++ rapporte, et ce qu'elle ne rapporte pas
+
+Un seul flag est exposé — `cull` sur `run_compile` — parce qu'un seul a pu être mesuré ici.
+
+**`cull`** active `-cullverts -cullplanes -cullbrushes -cullbrushsides` : vbsp ne supprime
+normalement ce que rien ne référence qu'une fois une limite atteinte. Sur `ttt_traps.vmf`,
+mesuré le 11/08/2026 :
+
+| | sans | avec | écart |
+|---|---|---|---|
+| `PLANES` | 400 | 318 | **−20,5 %** |
+| `VERTEXES` | 725 | 632 | **−12,8 %** |
+| `FACES` | 441 | 441 | 0 |
+| `TEXINFO` | 101 | 101 | 0 |
+| octets | 218 912 | 195 936 | **−10,5 %** |
+
+Faces et texinfos inchangés : c'est ce qui distingue un élagage d'une carte cassée. `BRUSHES` et
+`BRUSHSIDES` n'ont pas bougé non plus — cette carte n'a rien d'inutilisé de ce côté, pas la preuve
+que les deux flags ne servent à rien.
+
+`cull` sur la chaîne stock est **refusé**, pas ignoré : vbsp accepte les options inconnues en
+silence, et une compile qui annonce un succès sans avoir rien élagué est pire qu'une erreur.
+
+**Deux flags que la veille annonçait et qui ne tiennent pas ici** :
+
+- **`-allowdynamicpropsasstatic` ne convertit rien.** Il lève le refus de vbsp sur un
+  `prop_static` dont le modèle n'est pas marqué statique ; la conversion elle-même reste une
+  édition du VMF. Non exposé : `ttt_traps.vmf` n'a **aucun** prop, et la seule carte qui en a 59
+  (`rp_nycity_day`) n'a pas de source. Sans oracle constructible, pas d'outil — même règle que
+  pour `read_vprof`.
+- **`bspzip -threads` ne concerne pas `run_pack`.** Le multithread de BSPZIP++ est sur `-repack`,
+  une autre opération ; `run_pack` fait `-addlist`. `toolchain: "plusplus"` lui donne quand même
+  le binaire `++`. `-repack -compress` n'a pas été essayé : rien ne dit que GMod lise un lump
+  compressé en LZMA.
+
 ### Porte B — GMod honore-t-il `maps/<map>_l_0.lmp` ? : **NON TESTÉE**
 
 Le codec est écrit et prouvé contre un fichier de Valve (`srcds/garrysmod/maps/c1a1_l_0.lmp`), mais

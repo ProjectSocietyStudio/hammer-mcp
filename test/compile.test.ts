@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { readGeometry } from "../src/bsp/geometry.js";
 import { locateLeak, readPointfile } from "../src/compile/leak.js";
 import { parseCompileLog } from "../src/compile/log.js";
 import {
@@ -153,6 +154,7 @@ async function compile(
   vmf: string,
   toolchain: "stock" | "plusplus" = "stock",
   stages: Array<"vbsp" | "vvis" | "vrad"> = ["vbsp"],
+  cull = false,
 ): Promise<{
   ok: boolean;
   leaked: boolean;
@@ -162,7 +164,7 @@ async function compile(
   stages: Array<{ stage: string; stdoutTail: string }>;
 }> {
   return (await runCompile.handler(
-    { vmf, fast: true, hdr: false, stages, toolchain, timeoutMinutes: 10, confirm: true },
+    { vmf, fast: true, hdr: false, stages, toolchain, cull, timeoutMinutes: 10, confirm: true },
     ctx,
   )) as never;
 }
@@ -236,6 +238,48 @@ describe("choosing the Hammer++ toolchain", () => {
     expect(r.bspExists).toBe(true);
     expect(r.ok).toBe(true);
   }, 300_000);
+
+  const TTT = join(
+    REPO,
+    "srcds/garrysmod/gamemodes/terrortown/mapexamples/ttt_traps.vmf",
+  );
+
+  it.skipIf(!hasPlus || !existsSync(TTT))("culls what it says it culls", async () => {
+    // The probe map is six brushes and would show nothing. ttt_traps is the only real
+    // Hammer-written source here -- and it lives under srcds/, where the repo hooks
+    // refuse writes, while the compilers write the .bsp beside their source. Hence the
+    // copy: this is the trap anyone hits the first time they compile a repo map.
+    const plain = join(scratch, "cull-off.vmf");
+    const culled = join(scratch, "cull-on.vmf");
+    copyFileSync(TTT, plain);
+    copyFileSync(TTT, culled);
+
+    expect((await compile(plain, "plusplus")).ok).toBe(true);
+    expect((await compile(culled, "plusplus", ["vbsp"], true)).ok).toBe(true);
+
+    const countOf = (bsp: string, lump: string): number =>
+      readGeometry(bsp).lumps.find((l) => l.name === lump)!.count!;
+    const off = plain.replace(/\.vmf$/, ".bsp");
+    const on = culled.replace(/\.vmf$/, ".bsp");
+
+    // Measured 11/08/2026: 400 -> 318 planes, 725 -> 632 vertices. Asserted as a real
+    // reduction rather than as those exact numbers, which would break on any compiler
+    // update without anything actually being wrong.
+    expect(countOf(on, "PLANES")).toBeLessThan(countOf(off, "PLANES"));
+    expect(countOf(on, "VERTEXES")).toBeLessThan(countOf(off, "VERTEXES"));
+    // And the point of culling: it removes what nothing referenced, so the map itself
+    // is untouched. A "reduction" that also dropped faces would be a broken map.
+    expect(countOf(on, "FACES")).toBe(countOf(off, "FACES"));
+    expect(countOf(on, "TEXINFO")).toBe(countOf(off, "TEXINFO"));
+  }, 600_000);
+
+  it("refuses cull on the stock chain instead of dropping it", async () => {
+    // vbsp accepts unknown flags in silence. Ignoring cull here would produce a compile
+    // that reports success and culled nothing, which is worse than an error.
+    await expect(compile(join(scratch, "irrelevant.vmf"), "stock", ["vbsp"], true)).rejects.toThrow(
+      /Hammer\+\+ flag/,
+    );
+  });
 
   it("names the missing chain rather than blaming the GMod install", async () => {
     // The negative control, and the reason the message is not the generic one: without
