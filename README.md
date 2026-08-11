@@ -19,7 +19,7 @@ dans `gmod-mcp`, pas ici.
 |---|---|
 | BSP (`read_bsp_info`, `read_bsp_entities`) | **prouvé** — jalon 1 ci-dessous |
 | Patch de lump (`read_lump_patch`, `write_lump_patch`, `read_lump_patch_status`) | codec prouvé ; **effet en jeu non prouvé** (porte B) |
-| VMF | à écrire |
+| VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée |
 | Compile | porte A passée ; outils à écrire |
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
@@ -221,6 +221,9 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_pakfile` | `map` | | Contenu du pakfile embarqué (lump 40), et les preuves de compilation qu'il porte |
 | `read_sightlines` | `map` | | Les plus longues lignes de vue dégagées, tracées contre l'arbre du monde |
 | `read_brush_volumes` | `map` | | Emprise au sol et volume de chaque entité-brush, par classe |
+| `read_fgd_class` | `map` | | Le schéma d'une classe selon la FGD du jeu : keyvalues, entrées, sorties |
+| `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement |
+| `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
@@ -336,6 +339,60 @@ les clés de la classe avec leur valeur par défaut : les 59 props portent les t
 **valeur non vide** signifie quelque chose — 29 parentés, 14 nommés, 2 animés. Le filtre corrigé
 rend **17 candidats**, et l'outil accompagne la liste d'une réserve : convertir exige une
 recompilation, et un modèle sans support statique ne se convertit pas du tout.
+
+## La FGD comme schéma, et le lint qui s'y adosse
+
+La FGD est ce que Hammer applique : quelles keyvalues une classe accepte, à quelles entrées elle
+répond, quelles sorties elle sait émettre. Un VMF vérifié contre elle rend, **avant une compilation
+de quarante minutes**, la faute qui ne se voit sinon qu'en jeu — une entité qui ne fait rien, sans
+la moindre erreur.
+
+C'est `garrysmod.fgd` de l'installation GMod qui fait foi, pas la base multi-jeux qu'embarque
+srctools. Cette dernière est plus large et plus fausse pour nous : son `prop_dynamic` réunit **111
+keyvalues** de tous les jeux Source, là où celui de GMod en déclare **39** ; et elle ignore
+`sent_ball`, qu'un lint traiterait alors comme une classe inconnue.
+
+**Un helper malformé ne coûte pas la FGD entière.** La ligne 187 de `garrysmod.fgd` déclare
+`sphere(ball_size, 255, 255, 255, diameter)` — cinq arguments là où srctools en accepte 0, 1 ou 4 —
+et le parse s'arrête. Les helpers sont des indices d'affichage pour Hammer : ils ne disent rien de
+la validité d'une keyvalue. On les rend donc tolérants, et **ce qui a été toléré est compté et
+rapporté** (`toleratedHelpers`) plutôt que d'être avalé en silence. Résultat : **563 classes en
+0,22 s, un seul helper toléré**.
+
+### En GMod, la FGD n'est pas toute la vérité
+
+Un gamemode ou un addon enregistre ses propres entités en Lua, et Hammer n'en entend jamais parler.
+Sur `ttt_traps.vmf`, le lint rendait **11 erreurs `unknown-classname` toutes fausses** :
+`ttt_damageowner` est bel et bien défini par
+`gamemodes/terrortown/entities/entities/ttt_damageowner.lua`.
+
+`read_vmf_lint` scanne donc les entités Lua du dépôt — **488 classes trouvées** — et ne les accuse
+plus. Le scan penche volontairement vers l'excès de savoir : une classe listée à tort coûte un
+avertissement manqué, une classe oubliée coûte une accusation fausse sur toutes les cartes qui
+l'utilisent.
+
+Même prudence sur les cibles de sortie : une sortie qui vise un nom absent de la carte est un
+**avertissement, pas une erreur**, parce qu'en GMod une entité créée par Lua peut porter ce nom à
+l'exécution. C'est une piste, pas un verdict, et le message le dit.
+
+### Chaque règle est prouvée par une faute injectée
+
+Un lint qui ne trouve rien et un lint cassé se ressemblent exactement. Chaque règle a donc son
+contrôle : une copie de la carte sonde, une faute précise dedans, et l'assurance que la règle la
+nomme — et qu'elle reste muette sur l'original.
+
+| Règle | La faute injectée |
+|---|---|
+| `unknown-classname` | `info_player_strat` au lieu de `info_player_start` |
+| `unknown-keyvalue` | une clé inventée sur `info_player_start` |
+| `bad-texture-scale` | échelle 0,01 — vbsp répond « Bad surface extents » en nommant une face introuvable dans Hammer |
+| `output-target-missing` | un `logic_auto` qui vise `no_such_entity` |
+| `displacement-on-entity` | rendue avec **le vrai identifiant de brush**, que vbsp n'imprime jamais (il affiche toujours 0) |
+
+`read_fgd_class` propose les classes voisines quand on se trompe de nom — par distance d'édition,
+pas par sous-chaîne : `prop_dynamik` ne contient aucune classe et n'est contenu par aucune, alors
+qu'il est à une lettre de `prop_dynamic`. Et il restitue la casse déclarée (`SetAnimation`), que
+srctools normalise en minuscules dans ses index.
 
 ## Architecture
 

@@ -99,6 +99,135 @@ def _pakfile(req: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _load_vmf(path: str) -> Any:
+    from srctools import Keyvalues, VMF
+
+    with open(path, encoding="utf8", errors="replace") as f:
+        return VMF.parse(Keyvalues.parse(f))
+
+
+@verb("fgd_class")
+def _fgd_class(req: dict[str, Any]) -> dict[str, Any]:
+    """Describes one class as the game's own FGD declares it, or lists the classes."""
+    from fgd_support import describe_class, load_fgd
+
+    fgd, tolerated = load_fgd(req["binDir"], req.get("fgd", "garrysmod.fgd"))
+    name = req.get("classname")
+
+    if not name:
+        prefix = (req.get("prefix") or "").lower()
+        names = sorted(c for c in fgd.entities if c.lower().startswith(prefix))
+        return {
+            "classCount": len(fgd.entities),
+            "toleratedHelpers": tolerated,
+            "classnames": names[: int(req.get("limit", 200))],
+            "returned": min(len(names), int(req.get("limit", 200))),
+            "matched": len(names),
+        }
+
+    entity = fgd.entities.get(name)
+    if entity is None:
+        # Substring matching misses the mistake people actually make: a single wrong
+        # letter. "prop_dynamik" contains no class as a substring and is contained by
+        # none, yet it is one edit from prop_dynamic.
+        import difflib
+
+        near = difflib.get_close_matches(name, list(fgd.entities), n=8, cutoff=0.6)
+        near += [c for c in sorted(fgd.entities) if name.lower() in c.lower() and c not in near]
+        near = near[:10]
+        raise KeyError(
+            f"no class {name!r} in this FGD"
+            + (f"; did you mean {', '.join(near)}?" if near else "")
+        )
+    return {
+        "classCount": len(fgd.entities),
+        "toleratedHelpers": tolerated,
+        **describe_class(entity),
+    }
+
+
+@verb("vmf_read")
+def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
+    """Entities, brushes and counts of a .vmf, without judging any of it."""
+    from vmf_lint import count_vmf
+
+    vmf = _load_vmf(req["path"])
+    limit = int(req.get("limit", 200))
+    wanted = req.get("classname")
+
+    entities = []
+    for ent in vmf.entities:
+        classname = ent["classname", ""]
+        if wanted and classname != wanted:
+            continue
+        entities.append(
+            {
+                "id": int(ent.id),
+                "classname": classname,
+                "targetname": ent["targetname", ""] or None,
+                "origin": [float(v) for v in ent.get_origin()] if ent.is_brush() is False else None,
+                "solidCount": len(list(ent.solids)),
+                "keyvalues": {k: str(v) for k, v in ent.items()},
+                "outputs": [
+                    {
+                        "output": o.output,
+                        "target": o.target,
+                        "input": o.input,
+                        "params": o.params,
+                        "delay": o.delay,
+                        "times": o.times,
+                    }
+                    for o in ent.outputs
+                ],
+            }
+        )
+
+    histogram: dict[str, int] = {}
+    for ent in vmf.entities:
+        c = ent["classname", ""]
+        histogram[c] = histogram.get(c, 0) + 1
+
+    return {
+        "path": req["path"],
+        "counts": count_vmf(vmf),
+        "histogram": dict(sorted(histogram.items(), key=lambda kv: -kv[1])),
+        "matched": len(entities),
+        "returned": min(len(entities), limit),
+        "entities": entities[:limit],
+    }
+
+
+@verb("vmf_lint")
+def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
+    """Checks a .vmf against the FGD and against what the compilers accept."""
+    from fgd_support import load_fgd
+    from vmf_lint import count_vmf, lint_vmf
+
+    fgd, tolerated = load_fgd(req["binDir"], req.get("fgd", "garrysmod.fgd"))
+    vmf = _load_vmf(req["path"])
+    lua_classes = frozenset(req.get("luaClasses") or ())
+    findings = lint_vmf(vmf, fgd, lua_classes)
+
+    by_rule: dict[str, int] = {}
+    by_severity: dict[str, int] = {}
+    for f in findings:
+        by_rule[f["rule"]] = by_rule.get(f["rule"], 0) + 1
+        by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
+
+    limit = int(req.get("limit", 200))
+    return {
+        "path": req["path"],
+        "counts": count_vmf(vmf),
+        "toleratedHelpers": tolerated,
+        "luaClassesKnown": len(lua_classes),
+        "total": len(findings),
+        "bySeverity": by_severity,
+        "byRule": dict(sorted(by_rule.items(), key=lambda kv: -kv[1])),
+        "returned": min(len(findings), limit),
+        "findings": findings[:limit],
+    }
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         json.dump({"error": {"kind": "usage", "message": "missing verb"}}, sys.stdout)
