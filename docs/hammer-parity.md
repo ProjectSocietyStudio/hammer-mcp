@@ -87,7 +87,8 @@ Last checked against the tool list on 12/08/2026: **57 tools**.
 | `func_instance` | `edit_vmf` | Created as an entity; `read_vmf` expands them with `collapseInstances` |
 | Areaportals | `write_portal` | |
 | Occluders | `write_portal` | |
-| Map Properties | `set_map_properties` | Says when `detailvbsp` and `detailmaterial` are set apart |
+| Map Properties | `set_map_properties` | worldspawn only. Says when `detailvbsp` and `detailmaterial` are set apart |
+| Fog | `edit_vmf` | Source reads it from an `env_fog_controller`, not from worldspawn — `set_map_properties` offered fog keys for one commit and produced none in game |
 
 ## Organisation
 

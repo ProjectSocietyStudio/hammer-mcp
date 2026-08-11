@@ -19,29 +19,38 @@ const text = (): string => readFileSync(DOC, "utf8");
 describe("docs/hammer-parity.md", () => {
   const names = new Set(allTools.map((t) => t.name));
 
-  it("names only tools this server has", () => {
-    // Every backticked snake_case word in the table columns. A tool that was renamed or
-    // removed leaves its name here, and nothing else would catch it.
-    const mentioned = new Set(
-      [...text().matchAll(/`([a-z_]{4,})`/g)]
-        .map((m) => m[1]!)
-        .filter((word) => word.includes("_")),
+  it("names only tools this server has, in the column that claims one", () => {
+    // Scoped to the "Here" column of a table row. An allow-list of everything else that
+    // gets backticked -- keyvalues, classnames like env_fog_controller, console commands
+    // like mat_leafvis -- was the first version, and a list of exceptions that grows every
+    // time the prose does is a check that will eventually be turned off rather than fixed.
+    // The column is the claim; the prose is prose.
+    // And only under a header that has a "Here" column: the "Beyond Hammer" table puts the
+    // tool in column 1 and what Hammer has instead in column 2, so reading column 2 there
+    // finds console commands rather than claims.
+    const claimed = new Set<string>();
+    let inParityTable = false;
+    for (const line of text().split("\n")) {
+      if (line.startsWith("| Hammer |")) {
+        inParityTable = line.includes("| Here |");
+        continue;
+      }
+      if (!line.startsWith("|")) {
+        inParityTable = false;
+        continue;
+      }
+      if (!inParityTable || line.includes("|---")) continue;
+      const here = line.split("|")[2] ?? "";
+      for (const m of here.matchAll(/`([a-z_]{4,})`/g)) {
+        if (m[1]!.includes("_")) claimed.add(m[1]!);
+      }
+    }
+    expect(claimed.size, "the table must claim some tools").toBeGreaterThan(20);
+
+    const unknown = [...claimed].filter((n) => !names.has(n));
+    expect(unknown, `claimed in the Here column and not registered: ${unknown.join(", ")}`).toEqual(
+      [],
     );
-    const unknown = [...mentioned].filter(
-      (n) =>
-        !names.has(n) &&
-        // Words that are legitimately not tools: option names, keyvalues, engine concepts.
-        ![
-          "func_instance",
-          "prop_static",
-          "collapse_instances",
-          "detail_material",
-          // Console commands and keyvalues, which are backticked for the same reason a
-          // tool name is and are not tools.
-          "mat_leafvis",
-        ].includes(n),
-    );
-    expect(unknown, `named in the table and not registered: ${unknown.join(", ")}`).toEqual([]);
   });
 
   it("states the tool count it was last checked against", () => {
