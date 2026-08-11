@@ -56,7 +56,8 @@ flowchart LR
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
 | **Optimise** | `func_detail`, hint brushes including diagonal ones, per-face lightmap scale — the decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
-| **Ship** | resolve every asset a map references and find what will be missing, pack files into a `.bsp`, check a nav mesh still matches its map |
+| **Ship** | resolve every asset a map references and find what will be missing, pack them into a `.bsp` — by hand or derived from the map — check a nav mesh still matches |
+| **Open** | a Workshop `.gma`: read its index, pull one map out of a gigabyte without unpacking the rest |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
 
 ## Knowing when you are done
@@ -171,8 +172,33 @@ this walk does not follow. A soundscape is named by a string defined in a manife
 What is left — 254 on that map — is the only number that means anything, and it is **still
 not a delete list.**
 
-And **`game` is not the same answer as `packed`**: an asset resolved from Counter-Strike's
-content is fine on a machine with CS:S mounted and a checkerboard on one without.
+And **where in the game it was found matters as much as whether**. An asset inside a VPK is
+base content: every player who owns that game has it. An asset sitting **loose** in the
+content tree usually is not — it resolves at home because it is on that disk, and it is a
+checkerboard for everyone else.
+
+`run_pack` with `auto: true` packs exactly those, deriving the list from the map and
+returning it so what was packed is visible rather than inferred. It never packs VPK content.
+
+⚠️ Loose is a **candidate**, not a certainty, and that is measured rather than assumed:
+Garry's Mod ships `detail.vbsp` loose in its own root. No rule separates a mapper's work from
+a game's loose files — they live under the same install. The asymmetry is what makes erring
+toward inclusion right: packing a stock file wastes kilobytes, missing a custom one ships a
+broken map. `exclude` drops the ones you recognise.
+
+## Opening a Workshop archive
+
+A `.gma` is how the Workshop ships everything, maps included, so until now a Workshop map had
+to be unpacked by hand before anything here could look at it — which meant the corpus a mapper
+learns from was out of reach.
+
+The format concatenates every file after an index with no padding, so one pass over the index
+gives random access to the whole archive. `run_gma_extract` pulls `maps/rp_pinescity_v2b.bsp`
+out of a 245 MB addon without reading the materials beside it.
+
+Read across every archive on this machine, 11/08/2026: **56 archives, no failures** — the
+largest 1143 MB, the busiest 6521 entries, seven of them carrying a map. Header and index
+only.
 
 ## Where the lighting budget goes
 
@@ -421,7 +447,9 @@ from and whether a file was read; `health` reports it. See
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
 | `read_leak` | `map` | | Turns `**** leaked ****` into a position and a named entity |
 | `read_map_dependencies` | `map` | | Every asset a map references, and whether each will be there: packed, from the game, or missing |
-| `run_pack` | `local` | ● | Packs files into a `.bsp` via bspzip, and verifies by re-reading |
+| `read_gma` | `map` | | Header and index of a Workshop archive: what is in it, and where |
+| `run_gma_extract` | `map` | ● | Pulls matching files out of a `.gma` by offset, without unpacking the rest |
+| `run_pack` | `local` | ● | Packs files into a `.bsp` via bspzip. `auto` derives the list from the map itself |
 | `read_nav` | `map` | | Says whether a nav mesh still matches its map |
 | `read_lump_patch` | `map` | | Decodes a `.lmp` and its entities |
 | `write_lump_patch` | `map` | ● | Builds an entity patch from add/update/remove operations |

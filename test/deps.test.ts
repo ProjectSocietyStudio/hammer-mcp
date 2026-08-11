@@ -1,9 +1,12 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { readMapDependenciesTool } from "../src/tools/deps.js";
-import { ctx as sharedCtx, FIXTURES, has, paths } from "./support/env.js";
+import { callSidecar } from "../src/sidecar/client.js";
+import { config, ctx as sharedCtx, FIXTURES, has, paths } from "./support/env.js";
 
 const PROBE = join(FIXTURES, "hmcp_probe.bsp");
 const ctx = sharedCtx as unknown as ToolContext;
@@ -86,4 +89,67 @@ describe.skipIf(!has.sidecar)("read_map_dependencies", () => {
     },
     600_000,
   );
+});
+
+/**
+ * The distinction `run_pack auto` is built on.
+ *
+ * A dependency found inside a VPK is base game content: every player who owns the game has
+ * it. One found as a **loose file** in the content tree is almost always the mapper's own
+ * work in progress -- it resolves at home because it is on that disk, and it is a
+ * checkerboard for everyone else. The two are indistinguishable until you ask which
+ * filesystem answered, and getting it wrong either wastes megabytes or ships a broken map.
+ *
+ * Tested by pointing the same map at two different game trees: one real, one a temporary
+ * tree holding a loose copy of the material the probe uses.
+ */
+describe.skipIf(!has.sidecar)("loose files versus VPK content", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "hammer-loose-"));
+  afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
+  function fakeGame(): string {
+    const root = join(scratch, "fakegame");
+    mkdirSync(join(root, "materials", "dev"), { recursive: true });
+    writeFileSync(
+      join(root, "gameinfo.txt"),
+      `"GameInfo"\n{\n\tgame\t"Fake"\n\tFileSystem\n\t{\n\t\tSteamAppId\t4000\n` +
+        `\t\tSearchPaths\n\t\t{\n\t\t\tgame+mod\t|gameinfo_path|.\n\t\t}\n\t}\n}\n`,
+    );
+    // The material the probe's every face uses, placed loose rather than in a VPK.
+    writeFileSync(
+      join(root, "materials", "dev", "dev_measuregeneric01.vmt"),
+      `LightmappedGeneric\n{\n\t"$basetexture" "dev/dev_measuregeneric01"\n}\n`,
+    );
+    writeFileSync(join(root, "materials", "dev", "dev_measuregeneric01.vtf"), "not a real vtf");
+    return root;
+  }
+
+  const call = (gameDir: string) =>
+    callSidecar<{
+      bySource: Record<string, number>;
+      loose: Array<{ path: string; diskPath: string | null }>;
+      looseCount: number;
+    }>("map_dependencies", { path: PROBE, gameDir, limit: 50 }, ctx.config, 300_000);
+
+  it("calls a loose file loose, and says where on disk it is", async () => {
+    const r = await call(fakeGame());
+    expect(r.looseCount).toBeGreaterThan(0);
+    expect(r.bySource["game-loose"]).toBeGreaterThan(0);
+    expect(r.bySource["game-vpk"] ?? 0).toBe(0);
+
+    const vmt = r.loose.find((f) => f.path.endsWith("dev_measuregeneric01.vmt"));
+    expect(vmt).toBeDefined();
+    // The disk path is what run_pack auto hands to bspzip, so it has to be real.
+    expect(vmt!.diskPath).not.toBeNull();
+    expect(existsSync(vmt!.diskPath!)).toBe(true);
+  }, 300_000);
+
+  it("calls the same material VPK content when it comes from the real game", async () => {
+    const r = await call(config.gmodGameDir);
+    expect(r.bySource["game-vpk"] ?? 0).toBeGreaterThan(0);
+    // Not zero: Garry's Mod ships detail.vbsp loose in its own root. That is the measured
+    // reason a loose file is a candidate for packing rather than proof of a custom asset,
+    // and it is pinned here so the claim in the docs has something holding it up.
+    expect(r.loose.map((f) => f.path)).toEqual(["detail.vbsp"]);
+  }, 300_000);
 });

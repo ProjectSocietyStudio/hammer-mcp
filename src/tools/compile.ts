@@ -341,9 +341,14 @@ export const runPack = defineTool({
   description:
     "Packs files into a compiled .bsp with bspzip, so custom assets ship with the map " +
     "instead of appearing as purple checkerboards on every client that lacks them. " +
-    "Takes explicit pairs of in-game path and source file -- it does not guess what a " +
-    "map references. Verifies afterwards by re-reading the pakfile: bspzip reports " +
-    "success whether or not anything was added.",
+    "Takes explicit pairs of in-game path and source file. With auto:true it also derives " +
+    "the list from the map itself, via read_map_dependencies: every asset the map " +
+    "references that resolves from a LOOSE file in the game's content tree rather than " +
+    "from a VPK. Those are the ones that ship broken -- they work at home because they " +
+    "are on that disk. VPK content is never packed: every player who owns the game has it. " +
+    "The derived list is returned, so what was packed is visible rather than inferred. " +
+    "Verifies afterwards by re-reading the pakfile: bspzip reports success whether or not " +
+    "anything was added.",
   realm: "local",
   guarded: true,
   meta: { "anthropic/requiresUserInteraction": true },
@@ -358,7 +363,23 @@ export const runPack = defineTool({
           source: z.string().describe("File on disk to pack."),
         }),
       )
-      .min(1),
+      .optional()
+      .describe("Explicit pairs. Required unless auto is set; combined with it otherwise."),
+    auto: z
+      .boolean()
+      .optional()
+      .describe(
+        "Derive the list from the map: assets it references that sit loose in the game's " +
+          "content tree rather than in a VPK. Needs the Python sidecar.",
+      ),
+    exclude: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Substrings of in-game paths auto should skip. For the occasional stock file that " +
+          "ships loose -- Garry's Mod keeps detail.vbsp in its own root -- which auto " +
+          "would otherwise pack harmlessly but pointlessly.",
+      ),
     toolchain: TOOLCHAIN,
     game: GAME,
     confirm: z.boolean().default(false),
@@ -368,6 +389,9 @@ export const runPack = defineTool({
     toolchain: z.string(),
     game: GAME_BLOCK,
     requested: z.number(),
+    /** Pairs auto mode derived from the map, whether or not any were also given by hand. */
+    derived: z.array(z.object({ internal: z.string(), source: z.string() })),
+    autoNote: z.string().optional(),
     filesBefore: z.number(),
     filesAfter: z.number(),
     added: z.number(),
@@ -383,7 +407,59 @@ export const runPack = defineTool({
     const bsp = assertWritable(resolveInput(args.bsp, ctx.config), ctx.config);
     if (!existsSync(bsp)) throw new Error(`${bsp} does not exist`);
 
-    const missingSources = args.files
+    const derived: Array<{ internal: string; source: string }> = [];
+    let autoNote: string | undefined;
+    if (args.auto) {
+      const deps = await callSidecar<{
+        loose: Array<{ path: string; diskPath: string | null }>;
+        looseCount: number;
+        missingCount: number;
+      }>(
+        "map_dependencies",
+        {
+          path: bsp,
+          gameDir: packProfile.gameDir ?? ctx.config.gmodGameDir,
+          limit: 5000,
+        },
+        ctx.config,
+        600_000,
+      );
+      const excluded: string[] = [];
+      for (const entry of deps.loose) {
+        if (!entry.diskPath) continue;
+        if ((args.exclude ?? []).some((pat) => entry.path.includes(pat))) {
+          excluded.push(entry.path);
+          continue;
+        }
+        derived.push({ internal: entry.path, source: entry.diskPath });
+      }
+      autoNote =
+        `${deps.looseCount} asset(s) resolve from loose files in the game tree; ` +
+        `${derived.length} packed here` +
+        (excluded.length > 0 ? `, ${excluded.length} excluded by request` : "") +
+        `. A loose file is a candidate, not a certainty -- some games ship stock files ` +
+        `loose (Garry's Mod keeps detail.vbsp in its own root). Over-packing costs ` +
+        `kilobytes; under-packing ships a broken map, so this errs toward including. ` +
+        (deps.missingCount > 0
+          ? `${deps.missingCount} more are missing from everywhere and CANNOT be packed -- ` +
+            `read_map_dependencies lists them, and packing will not fix them.`
+          : `Nothing the map references is missing outright.`);
+    }
+
+    // Explicit pairs win: a caller who named a source meant that one.
+    const byInternal = new Map(derived.map((f) => [f.internal, f]));
+    for (const f of args.files ?? []) byInternal.set(f.internal, f);
+    const files = [...byInternal.values()];
+    if (files.length === 0) {
+      throw new Error(
+        args.auto
+          ? "auto found nothing to pack: no asset this map references sits loose in the " +
+            "game tree. That is the healthy answer, not a failure."
+          : "no files given, and auto is not set",
+      );
+    }
+
+    const missingSources = files
       .map((f) => resolveInput(f.source, ctx.config))
       .filter((p) => !existsSync(p));
     if (missingSources.length > 0) {
@@ -411,9 +487,7 @@ export const runPack = defineTool({
     mkdirSync(dirname(listPath), { recursive: true });
     writeFileSync(
       listPath,
-      args.files
-        .flatMap((f) => [f.internal, resolveInput(f.source, ctx.config)])
-        .join("\n") + "\n",
+      files.flatMap((f) => [f.internal, resolveInput(f.source, ctx.config)]).join("\n") + "\n",
     );
 
     const run = await runCompiler(
@@ -439,7 +513,9 @@ export const runPack = defineTool({
       bsp,
       toolchain: args.toolchain,
       game: gameBlock(packProfile, packFrom),
-      requested: args.files.length,
+      requested: files.length,
+      derived,
+      ...(autoNote !== undefined ? { autoNote } : {}),
       filesBefore,
       filesAfter,
       added: filesAfter - filesBefore,
@@ -448,7 +524,7 @@ export const runPack = defineTool({
       exitCode: run.code,
       // The exit code is not the oracle: what matters is that the pakfile grew by what
       // was asked for.
-      ok: filesAfter - filesBefore === args.files.length,
+      ok: filesAfter - filesBefore === files.length,
       missingSources,
       stdoutTail: clip(run.stdout.split(/\r?\n/).slice(-20).join("\n"), 2000),
     };

@@ -42,7 +42,15 @@ export const readMapDependenciesTool = defineTool({
     gameMounted: z.boolean(),
     gameError: z.string().nullable(),
     resolved: z.number(),
-    bySource: z.record(z.string(), z.number()).describe("How many resolved as packed, and as game."),
+    bySource: z
+      .record(z.string(), z.number())
+      .describe(
+        "packed, game-vpk, game-loose. The last is the one that matters: a loose file " +
+          "resolves at home because it is on that disk and is a checkerboard elsewhere.",
+      ),
+    /** Assets resolved from loose files in the game tree: what run_pack auto packs. */
+    loose: z.array(z.object({ path: z.string(), diskPath: z.string().nullable() })),
+    looseCount: z.number(),
     missing: z.array(MissingAsset),
     missingCount: z.number(),
     missingTruncated: z.boolean(),
@@ -75,9 +83,11 @@ export const readMapDependenciesTool = defineTool({
       ...reply,
       game: gameBlock(game, from),
       caveat:
-        "An asset resolved as `game` ships only if the player has that game mounted -- a " +
+        "An asset resolved from a VPK ships only if the player has that game mounted -- a " +
         "Counter-Strike texture is fine on a machine with CS:S and a checkerboard on one " +
-        "without, so `game` is not the same answer as `packed`. And `packedUnreferenced` " +
+        "without. An asset resolved as `game-loose` is worse: it sits on this disk and " +
+        "nowhere else, so it ships broken for everyone -- run_pack with auto:true packs " +
+        "exactly those. And `packedUnreferenced` " +
         "means this walk did not reach it, which is weaker than unused: sounds, particles " +
         "and scripts are counted separately under notWalked precisely because they are not " +
         "followed. Nothing here is a delete list.",
