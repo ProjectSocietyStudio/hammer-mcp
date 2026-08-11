@@ -4,6 +4,8 @@ import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { insertSolids } from "../vmf/build.js";
 import type { SolidSpec } from "../vmf/build.js";
+import { expandShape } from "../vmf/shapes.js";
+import type { CompoundSpec } from "../vmf/shapes.js";
 import { checkVmfSolids } from "../vmf/solid.js";
 import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
 
@@ -26,7 +28,49 @@ const Spec = z.discriminatedUnion("shape", [
     axis: z.enum(["x", "y", "z"]).optional(),
   }),
   z.object({ shape: z.literal("convex"), faces: z.array(z.array(Vec3)) }),
+  z.object({
+    shape: z.literal("cone"),
+    mins: Vec3,
+    maxs: Vec3,
+    sides: z.number().int().min(3).max(64),
+    axis: z.enum(["x", "y", "z"]).optional(),
+  }),
+  z.object({
+    shape: z.literal("stairs"),
+    mins: Vec3,
+    maxs: Vec3,
+    steps: z.number().int().min(1).max(256),
+    direction: z.enum(["+x", "-x", "+y", "-y"]).describe("Which way the flight climbs."),
+  }),
+  z.object({
+    shape: z.literal("arch"),
+    centre: Vec3.describe("Centre of the arc, at its base."),
+    innerRadius: z.number(),
+    outerRadius: z.number(),
+    height: z.number(),
+    arcDegrees: z.number().describe("180 is a doorway arch, 360 a full ring."),
+    segments: z.number().int().min(1).max(256),
+    startDegrees: z.number().optional(),
+  }),
+  z.object({
+    shape: z.literal("sphere"),
+    centre: Vec3,
+    radius: z.number(),
+    sides: z.number().int().min(3).max(64).describe("Faces around the equator."),
+    stacks: z.number().int().min(2).max(32).describe("Bands from pole to pole; each is a brush."),
+  }),
+  z.object({
+    shape: z.literal("torus"),
+    centre: Vec3,
+    majorRadius: z.number(),
+    minorRadius: z.number(),
+    majorSegments: z.number().int().min(3).max(64).describe("Each one is a brush."),
+    minorSides: z.number().int().min(3).max(32),
+  }),
 ]);
+
+/** Shapes that are several brushes rather than one. */
+const COMPOUND = new Set(["cone", "stairs", "arch", "sphere", "torus"]);
 
 export const writeVmfSolidTool = defineTool({
   name: "write_vmf_solid",
@@ -88,13 +132,31 @@ export const writeVmfSolidTool = defineTool({
       }),
     ),
     warnings: z.array(z.string()),
+    /** What a compound shape costs, in its own words. Empty for a plain brush. */
+    notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
     const path = resolveInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const beforeReport = checkVmfSolids(path, before);
 
-    const result = insertSolids(before, args.solids as SolidSpec[], {
+    // Compound shapes expand into the convex brushes that make them up, so the writer
+    // below sees nothing it did not see before. The count is reported back because a
+    // caller who asks for one sphere and gets eight brushes has spent a budget it did not
+    // know it was spending.
+    const notes: string[] = [];
+    const flattened: SolidSpec[] = [];
+    for (const spec of args.solids) {
+      if (COMPOUND.has(spec.shape)) {
+        const expansion = expandShape(spec as unknown as CompoundSpec);
+        flattened.push(...expansion.specs);
+        notes.push(...expansion.notes);
+      } else {
+        flattened.push(spec as SolidSpec);
+      }
+    }
+
+    const result = insertSolids(before, flattened, {
       ...(args.entityId !== undefined ? { entityId: args.entityId } : {}),
       ...(args.material !== undefined ? { material: args.material } : {}),
       ...(args.lightmapScale !== undefined ? { lightmapScale: args.lightmapScale } : {}),
@@ -154,6 +216,7 @@ export const writeVmfSolidTool = defineTool({
         valid: s.valid,
       })),
       warnings,
+      notes,
     };
   },
 });
