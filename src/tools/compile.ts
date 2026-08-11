@@ -69,6 +69,15 @@ export const runCompile = defineTool({
       .default(["vbsp", "vvis", "vrad"])
       .describe("Stages to run, in order. vbsp alone is enough to check a map seals."),
     toolchain: TOOLCHAIN,
+    cull: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Hammer++ only. Culls unreferenced planes, vertices, brushes and brush sides " +
+          "even when no limit is reached yet. Measured on ttt_traps: -20.5% PLANES, " +
+          "-12.8% VERTEXES, -10.5% file size. Changes no geometry; read_map_geometry " +
+          "before and after is the check.",
+      ),
     timeoutMinutes: z.number().int().min(1).max(600).default(60),
     confirm: z.boolean().default(false),
   },
@@ -84,6 +93,15 @@ export const runCompile = defineTool({
     ok: z.boolean(),
   },
   handler: async (args, ctx) => {
+    const chain = args.toolchain;
+    // Checked before anything touches the disk: this is an inconsistency between two
+    // arguments, and it stays true whether or not the map exists.
+    if (args.cull && chain !== "plusplus") {
+      // Refused rather than dropped: the stock vbsp accepts unknown flags in silence, so
+      // a stock compile with cull would report success and have culled nothing.
+      throw new Error(`cull is a Hammer++ flag; pass toolchain: "plusplus" to use it`);
+    }
+
     const vmf = resolveInput(args.vmf, ctx.config);
     if (!existsSync(vmf)) throw new Error(`${vmf} does not exist`);
     if (extname(vmf).toLowerCase() !== ".vmf") throw new Error(`${vmf} is not a .vmf`);
@@ -96,9 +114,14 @@ export const runCompile = defineTool({
     const target = toWindowsPath(vmf);
     const timeoutMs = args.timeoutMinutes * 60_000;
 
-    const chain = args.toolchain;
+    // The four go together: they cull the same way in four lumps, and read_map_geometry
+    // reports each one separately, so nothing here is hidden behind a single number.
+    const cull = args.cull
+      ? ["-cullverts", "-cullplanes", "-cullbrushes", "-cullbrushsides"]
+      : [];
+
     const plans: Record<string, { exe: string; argv: string[] }> = {
-      vbsp: { exe: compilerExe("vbsp", chain), argv: ["-game", game, target] },
+      vbsp: { exe: compilerExe("vbsp", chain), argv: [...cull, "-game", game, target] },
       vvis: {
         exe: compilerExe("vvis", chain),
         argv: [...(args.fast ? ["-fast"] : []), "-game", game, target],
