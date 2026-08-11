@@ -8,6 +8,7 @@ import { lmpTools } from "./lmp.js";
 import { materialsTools } from "./materials.js";
 import { measureTools } from "./measure.js";
 import { reportTools } from "./report.js";
+import { solidTools } from "./solids.js";
 import { visleafTools } from "./visleaf.js";
 import { vmfTools } from "./vmf.js";
 import { vmfEditTools } from "./vmfedit.js";
@@ -22,6 +23,7 @@ export const allTools: AnyToolDef[] = [
   ...visleafTools,
   ...reportTools,
   ...vmfTools,
+  ...solidTools,
   ...vmfEditTools,
   ...compileTools,
   ...lmpTools,

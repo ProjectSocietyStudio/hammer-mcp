@@ -91,6 +91,45 @@ Two things this design refuses to do:
   worse than an admitted gap, and the same goes for the overall verdict: a run that judged
   nothing comes back `skipped`, never `pass`.
 
+## Reading brushes backwards
+
+A VMF stores a brush as planes. `read_vmf_solids` intersects those half-spaces back into a
+volume, and checks what comes out: closed, convex, inside the world, on a grid, with texture
+axes that actually lie across their own faces.
+
+The direction is the point. Anything that *writes* a brush goes volume → planes; this goes
+planes → volume. A sign error or an inverted winding cannot survive both, so the two check
+each other instead of sharing a bug — which is what "no tool without an oracle" has to mean
+before this repository can write geometry at all.
+
+The subtle case, and the reason the closure test is not a corner count: reverse one side's
+winding on a box and its half-space faces outward, so the solid becomes an infinite prism.
+The four corners at the closed end survive and satisfy every half-space, so counting corners
+returns four and looks healthy. What gives it away is that those four are coplanar and the
+volume is zero. Removing the volume half of that test turns exactly one test red, which is
+how it was checked rather than reasoned about.
+
+### On grids
+
+Every solid also reports the coarsest grid all its corners land on, and the report carries
+the distribution. That turns a piece of workshop lore — *build everything on one grid, 8 is
+a good one* — into something a map can be asked about.
+
+Measured 11/08/2026 on `ttt_traps.vmf`, the only Hammer-written map shipped with the game:
+
+| Grid | Solids | |
+|---|---|---|
+| 16 | 3 | 4% |
+| 8 | 24 | 32% |
+| 4 | 1 | 1% |
+| 2 | 18 | 24% |
+| 1 | 29 | 39% |
+
+75 solids, none off-grid, no errors. So a map that shipped and plays is **not** built to one
+uniform grid. Read that carefully, though: this metric is the *coarsest* grid every corner
+fits, so a single odd coordinate anywhere on a brush drops the whole brush to 1. It measures
+how uniform the geometry ended up, not what grid someone worked at.
+
 ## Proven, and not proven
 
 The distinction matters more here than the feature list. Every claim below is backed by a dated
@@ -163,6 +202,7 @@ from and whether a file was read; `health` reports it. See
 | `read_map_report` | `map` | | Judges a map against a budget profile: a verdict per criterion, not another number |
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
+| `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
