@@ -31,6 +31,16 @@ export interface LumpSpec {
   bytesByVersion?: Readonly<Record<number, number>>;
   limit?: number;
   limitName?: string;
+  /**
+   * What the ceiling counts. Records unless stated.
+   *
+   * Not every `MAX_MAP_*` is a record count: `MAX_MAP_LIGHTING` and `MAX_MAP_VISIBILITY`
+   * are 0x1000000 **bytes**, and `MAX_MAP_TEXDATA_STRING_DATA` is 256000 bytes. Applying
+   * only record ceilings left those declared and never evaluated -- a limit this reader
+   * claimed to watch and did not. `rp_nycity_day` sits at 264% of MAX_MAP_LIGHTING and
+   * nothing said so until a second reader measured it by hand.
+   */
+  limitUnit?: "records" | "bytes";
 }
 
 export const LUMP_SPECS: readonly LumpSpec[] = [
@@ -38,11 +48,11 @@ export const LUMP_SPECS: readonly LumpSpec[] = [
   { index: 1, bytes: 20, limit: 65536, limitName: "MAX_MAP_PLANES" },
   { index: 2, bytes: 32, limit: 2048, limitName: "MAX_MAP_TEXDATA" },
   { index: 3, bytes: 12, limit: 65536, limitName: "MAX_MAP_VERTS" },
-  { index: 4 },
+  { index: 4, limit: 0x100_0000, limitName: "MAX_MAP_VISIBILITY", limitUnit: "bytes" },
   { index: 5, bytes: 32, limit: 65536, limitName: "MAX_MAP_NODES" },
   { index: 6, bytes: 72, limit: 12288, limitName: "MAX_MAP_TEXINFO" },
   { index: 7, bytes: 56, limit: 65536, limitName: "MAX_MAP_FACES" },
-  { index: 8 },
+  { index: 8, limit: 0x100_0000, limitName: "MAX_MAP_LIGHTING", limitUnit: "bytes" },
   { index: 9 },
   { index: 10, bytesByVersion: { 0: 56, 1: 32 }, limit: 65536, limitName: "MAX_MAP_LEAFS" },
   { index: 11 },
@@ -62,7 +72,7 @@ export const LUMP_SPECS: readonly LumpSpec[] = [
   { index: 35 },
   { index: 40 },
   { index: 42, bytes: 16, limit: 1024, limitName: "MAX_MAP_CUBEMAPSAMPLES" },
-  { index: 43, limit: 256000, limitName: "MAX_MAP_TEXDATA_STRING_DATA" },
+  { index: 43, limit: 256000, limitName: "MAX_MAP_TEXDATA_STRING_DATA", limitUnit: "bytes" },
   { index: 44, bytes: 4, limit: 65536 },
   { index: 45, bytes: 352, limit: 512, limitName: "MAX_MAP_OVERLAYS" },
   { index: 53 },
@@ -154,9 +164,20 @@ export function readGeometry(path: string): GeometryReport {
       ...(spec.limitName ? { limitName: spec.limitName } : {}),
       ...(note ? { note } : {}),
     };
-    if (count !== null && spec.limit !== undefined) {
-      report.usedFraction = Math.round((count / spec.limit) * 1000) / 1000;
-      if (count > spec.limit) {
+    // A byte-denominated ceiling needs no record count: the lump length IS the quantity.
+    const used = spec.limitUnit === "bytes" ? lump.length : count;
+    if (used === null && spec.limit !== undefined && report.note === undefined) {
+      // Said rather than skipped. ENTITIES is the standing case: its ceiling counts
+      // entities, and this reader measures bytes, so the limit is real and out of reach
+      // here. Reporting a limit with no fraction and no explanation is how a ceiling ends
+      // up declared and never watched, which is what MAX_MAP_TEXDATA_STRING_DATA did.
+      report.note =
+        `${spec.limitName ?? "the ceiling"} of ${spec.limit} counts records this reader ` +
+        `cannot derive from lump length; use read_bsp_entities for the real count`;
+    }
+    if (used !== null && spec.limit !== undefined) {
+      report.usedFraction = Math.round((used / spec.limit) * 1000) / 1000;
+      if (used > spec.limit) {
         // Measured on rp_nycity_day, which ships 1218 models against a stock ceiling
         // of 1024 and loads fine. A shipped map that exceeds a limit is evidence the
         // toolchain that built it raised that limit -- not evidence of a broken map.
