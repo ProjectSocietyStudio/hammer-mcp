@@ -363,6 +363,16 @@ repository. What is here is what survived a contradiction pass, together with wh
 [`corpus-mesure.md`](.claude/skills/source-mapping/references/corpus-mesure.md) keeps both, and
 the refutations are the more useful half.
 
+## Hammer, command by command
+
+[`docs/hammer-parity.md`](docs/hammer-parity.md) has a row for every command in the editor,
+naming the tool that covers it or the reason it never will be covered. Two rows say "not
+covered" rather than "not applicable" — displacement subdivision, and copying one face's
+alignment onto another — and those two are the whole of the gap.
+
+A test reads that document and fails if it names a tool this server does not have, if it
+omits one it does, or if the count it states has moved.
+
 ## Proven, and not proven
 
 The distinction matters more here than the feature list. Every claim below is backed by a dated
