@@ -54,7 +54,7 @@ flowchart LR
 | **Read and lint** | entities, outputs and brush counts of a `.vmf`; every finding checked against the FGD the game itself declares |
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
-| **Optimise** | hint brushes, including diagonal ones — the visibility decisions a compiled map no longer contains |
+| **Optimise** | `func_detail`, hint brushes including diagonal ones, per-face lightmap scale — the decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
 | **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
@@ -121,6 +121,71 @@ And because two programs written on the same afternoon agreeing proves less than
 **a six-brush room built entirely by this tool is compiled by vbsp for real, and seals.**
 Remove one wall and it leaks. Without that second half, a writer that emitted nothing at all
 would pass the first test just as happily.
+
+## Where the lighting budget goes
+
+`lightmapscale` is **units per luxel**, so it reads backwards: smaller is finer and more
+expensive, and the cost is an *area*. The probe room, compiled at four scales — 11/08/2026:
+
+| scale | luxels | `LIGHTING` |
+|---|---|---|
+| 8 | 17 424 | 69 760 B |
+| 16 (Hammer's default) | 4 624 | 18 560 B |
+| 32 | 1 296 | 5 248 B |
+| 64 | 400 | 1 664 B |
+
+Each doubling divides the bill by roughly four. That arithmetic is why the production map
+audited here carries **264% of `MAX_MAP_LIGHTING`** — nobody arrives there by choosing a fine
+lightmap once, but by never coarsening the surfaces that did not need one. A warehouse floor
+at 16 and the same floor at 32 are indistinguishable to a player and differ fourfold on disk.
+
+`set_lightmap_scale` selects by solid, material, which way a face points, minimum area, or a
+combination, and **projects the luxel count before writing**. It refuses to touch every face
+in the map unless told `all: true` — rescaling a whole map is legitimate and is never what
+someone meant by accident.
+
+⚠️ It also warns about the cost that does not look like one. A brush face may carry at most
+**32 luxels along either texture axis** (`MAX_BRUSH_LIGHTMAP_DIM_WITHOUT_BORDER`, read from
+`bspfile.h`). vbsp does not refuse more — it **splits the face** until each piece fits. So
+lowering the scale on a large surface multiplies faces as well as luxels, and `FACES` has a
+ceiling of its own. (The similarly-named `MAX_LIGHTMAP_DIM_WITHOUT_BORDER` in that header
+aliases the *displacement* value of 125; reading the obvious name gives four times the real
+limit for a brush face.)
+
+## `func_detail`, measured
+
+The largest single lever on a Source map's performance, and a `.bsp` cannot tell you it was
+ever pulled: vbsp folds `func_detail` into the world as detail brushes, so nothing in a
+shipped map records which brushes were structural. `set_solid_class` moves them, either way.
+
+A structural brush splits the BSP tree and spawns visleaves around itself. A pillar standing
+in a room, compiled three ways — 11/08/2026, stock compilers:
+
+| | leaves | clusters | VISIBILITY |
+|---|---|---|---|
+| empty room | 29 | 4 | 44 B |
+| pillar, structural | 33 | 7 | 74 B |
+| pillar, `func_detail` | 29 | 4 | 44 B |
+
+The detail pillar returns the tree to the empty room's numbers **exactly**. It is still there,
+still solid, still drawn — vvis simply no longer knows about it.
+
+Read that narrowly, because it is the easiest result on this page to over-read. It says the
+pillar left the visibility tree. It does **not** say the pillar became free: it still draws,
+still counts in `FACES`, and still costs its lightmap. On a real map that second bill is
+usually the one that decides, and `read_map_report` is what puts a number on it.
+
+⚠️ **And the trap, which is why the tool warns instead of congratulating you: a `func_detail`
+brush does not seal the map.** Move a wall into one and the next compile leaks. No static check
+here can rule that out — sealing is a property of the whole hull, not of one brush — so the
+tool returns what to compile next rather than implying the move was safe. The test suite
+proves both halves: detailing an interior pillar is clean, detailing a wall of the same room
+leaks.
+
+It refuses two things outright. A brush inside a `hidden` block — Hammer's storage for a
+visgroup-hidden brush — because moving it out would unhide it as a side effect of an edit that
+said nothing about visibility. And an entity whose classname is not the one asked for, rather
+than putting brushes somewhere the caller did not name.
 
 ## Hints, and what a compiled map has already forgotten
 
@@ -296,6 +361,8 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
 | `write_hint_brush` | `map` | ● | Places a hint brush, straight or diagonal, to shape where vvis splits the map |
+| `set_solid_class` | `map` | ● | Moves brushes between the world and a brush entity — `func_detail` and back |
+| `set_lightmap_scale` | `map` | ● | Sets `lightmapscale` on selected faces, and projects the luxel bill before writing |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
