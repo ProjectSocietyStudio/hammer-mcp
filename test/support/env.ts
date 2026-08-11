@@ -80,6 +80,14 @@ export const has = {
    * back is about counts, so an absent tree has to skip rather than assert zero.
    */
   luaEntities: existsSync(join(REPO, "srcds/garrysmod/addons")) || existsSync(join(REPO, "addons")),
+  /**
+   * The game's own materials and models, mounted through its VPKs.
+   *
+   * `gameinfo.txt` is what srctools reads to build the filesystem chain, so its presence
+   * is the honest predicate: a directory that exists but has no gameinfo mounts nothing,
+   * and the tests would report the content missing rather than the mount failing.
+   */
+  gameContent: existsSync(join(config.gmodGameDir, "gameinfo.txt")),
 } as const;
 
 const LABELS: Record<keyof typeof has, string> = {
@@ -93,6 +101,7 @@ const LABELS: Record<keyof typeof has, string> = {
   stockLmp: "a stock Valve .lmp",
   navPair: "a .nav / .bsp pair",
   luaEntities: "a GMod Lua entity tree",
+  gameContent: `the game's own content (${config.gmodGameDir})`,
 };
 
 let announced = false;

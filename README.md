@@ -379,6 +379,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Python sidecar (srctools) | **proven** |
 | Game discovery | **proven for Garry's Mod only** — the readers are generic Source, but one game has been run here |
 | Moving and deleting brushes | **proven** — a room turned 45 degrees compiles sealed, and leaks when one of its walls is deleted |
+| Reading the game's content | **proven** — searches and model bounds checked against Garry's Mod's own install |
 | Texture alignment | **proven** — aligning to world reproduces, on all 36 faces, the six axis pairs `gen_probe.py` states by hand |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
@@ -439,6 +440,8 @@ from and whether a file was read; `health` reports it. See
 | `read_map_report` | `map` | | Judges a map against a budget profile: a verdict per criterion, not another number |
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
+| `read_game_content` | `map` | | Hammer's texture and model browsers: what the game actually has, by name |
+| `read_model_info` | `map` | | A prop's hull, skins, sequences and materials, before you place it |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |

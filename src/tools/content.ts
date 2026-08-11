@@ -1,0 +1,135 @@
+import { z } from "zod";
+import { gameBlock, gameFor } from "../games/resolve.js";
+import { defineTool } from "../mcp/registry.js";
+import { callSidecar } from "../sidecar/client.js";
+import { GAME, GAME_BLOCK } from "./paths.js";
+
+export const readGameContentTool = defineTool({
+  name: "read_game_content",
+  description:
+    "Searches the game's installed content for materials and models, by name. This is " +
+    "Hammer's texture browser and model browser, which an agent otherwise does not have: " +
+    "without it a material is named from memory, and vbsp resolves a name literally, so a " +
+    "wrong one is a purple checkerboard nobody sees until a player loads the map. Returns " +
+    "material names in the form a .vmf stores -- uppercase, no materials/ prefix, no .vmt " +
+    "suffix -- which is exactly what set_face_material takes. A pattern with * or ? is a " +
+    "glob; anything else is a substring. Mounts the same VPK-and-loose chain the engine " +
+    "reads through, so this and read_map_dependencies cannot disagree about what exists. " +
+    "Needs the Python sidecar; see health.",
+  realm: "map",
+  inputSchema: {
+    pattern: z
+      .string()
+      .describe("Name to look for. 'brick' matches anything containing it; 'brick*' is a glob."),
+    kind: z
+      .enum(["material", "model"])
+      .default("material")
+      .describe("Materials (.vmt) or models (.mdl)."),
+    details: z
+      .boolean()
+      .optional()
+      .describe(
+        "Read the .vmt of each result for its shader, base texture and surface property. " +
+          "Off by default: a Garry's Mod install holds tens of thousands, and parsing them " +
+          "all to answer one search would cost seconds.",
+      ),
+    limit: z.number().int().min(1).max(1000).default(100),
+    game: GAME,
+  },
+  outputSchema: {
+    game: GAME_BLOCK,
+    gameDir: z.string().nullable(),
+    mounted: z.boolean(),
+    mountError: z.string().nullable(),
+    pattern: z.string(),
+    kind: z.string(),
+    /** Every match, not only those returned. */
+    total: z.number(),
+    shown: z.number().optional(),
+    truncated: z.boolean().optional(),
+    results: z.array(
+      z.object({
+        path: z.string(),
+        /** Materials only: the name as a .vmf writes it. */
+        name: z.string().optional(),
+        shader: z.string().nullable().optional(),
+        basetexture: z.string().nullable().optional(),
+        surfaceprop: z.string().nullable().optional(),
+        translucent: z.boolean().optional(),
+        toolTexture: z.boolean().optional(),
+        error: z.string().nullable().optional(),
+      }),
+    ),
+    note: z.string().optional(),
+    error: z.string().optional(),
+  },
+  handler: async (args, ctx) => {
+    // Refused here rather than in the sidecar so it holds on a machine with no venv: an
+    // empty pattern would walk the whole game and serialise tens of thousands of names.
+    if (args.pattern.trim().length === 0) {
+      throw new Error("a search needs a pattern; an empty one would return the whole game");
+    }
+    const { game, from } = gameFor(ctx.config, args.game);
+    const result = (await callSidecar(
+      "search_content",
+      {
+        gameDir: game.gameDir ?? ctx.config.gmodGameDir,
+        pattern: args.pattern,
+        kind: args.kind,
+        limit: args.limit,
+        ...(args.details !== undefined ? { details: args.details } : {}),
+      },
+      ctx.config,
+      120_000,
+    )) as Record<string, unknown>;
+    return { ...result, game: gameBlock(game, from) };
+  },
+});
+
+export const readModelInfoTool = defineTool({
+  name: "read_model_info",
+  description:
+    "Bounds, skins, sequences and materials of one .mdl -- what Hammer's model viewer " +
+    "shows before you place a prop. The bounds are the reason this exists: a model's " +
+    "origin is wherever the artist put it, so a prop placed at floor height sinks by " +
+    "however far its origin sits above its lowest point, and nothing downstream reports " +
+    "that. A barrel measured here is 52 units tall with its origin at the centre, which " +
+    "means 26 units underground if it is placed on the floor's own z. Needs the Python " +
+    "sidecar; see health.",
+  realm: "map",
+  inputSchema: {
+    model: z
+      .string()
+      .describe("Model path. The models/ prefix and the .mdl suffix are added if missing."),
+    game: GAME,
+  },
+  outputSchema: {
+    game: GAME_BLOCK,
+    model: z.string(),
+    mounted: z.boolean(),
+    mountError: z.string().nullable().optional(),
+    found: z.boolean(),
+    /** Corner of the model's own hull, relative to its origin. */
+    mins: z.array(z.number()).nullable().optional(),
+    maxs: z.array(z.number()).nullable().optional(),
+    size: z.array(z.number()).nullable().optional(),
+    skinCount: z.number().optional(),
+    sequenceCount: z.number().optional(),
+    sequences: z.array(z.string()).optional(),
+    materials: z.array(z.string()).optional(),
+    note: z.string().optional(),
+    error: z.string().optional(),
+  },
+  handler: async (args, ctx) => {
+    const { game, from } = gameFor(ctx.config, args.game);
+    const result = (await callSidecar(
+      "model_info",
+      { gameDir: game.gameDir ?? ctx.config.gmodGameDir, model: args.model },
+      ctx.config,
+      120_000,
+    )) as Record<string, unknown>;
+    return { ...result, game: gameBlock(game, from) };
+  },
+});
+
+export const contentTools = [readGameContentTool, readModelInfoTool];
