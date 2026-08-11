@@ -4,14 +4,15 @@ import { clip } from "@projectsociety/mcp-core";
 import { z } from "zod";
 import { parseCompileLog } from "../compile/log.js";
 import { locateLeak, readPointfile } from "../compile/leak.js";
-import { compilerExe, runCompiler, toWindowsPath } from "../compile/wine.js";
+import { ToolchainError, compilerExe, runCompiler, toWindowsPath } from "../compile/wine.js";
 import { readEntityLump } from "../bsp/entities.js";
 import { checkNavFreshness } from "../bsp/nav.js";
 import { parseEntityText } from "../bsp/entities.js";
 import { assertWritable } from "../fs/guard.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
-import { resolveInput } from "./paths.js";
+import { gameBlock, gameFor } from "../games/resolve.js";
+import { CONFIRM, GAME, GAME_BLOCK, resolveInput } from "./paths.js";
 
 const FINDING = z.object({
   severity: z.string(),
@@ -78,12 +79,14 @@ export const runCompile = defineTool({
           "-12.8% VERTEXES, -10.5% file size. Changes no geometry; read_map_geometry " +
           "before and after is the check.",
       ),
+    game: GAME,
     timeoutMinutes: z.number().int().min(1).max(600).default(60),
     confirm: z.boolean().default(false),
   },
   outputSchema: {
     vmf: z.string(),
     toolchain: z.string(),
+    game: GAME_BLOCK,
     bsp: z.string(),
     bspExists: z.boolean(),
     bspBytes: z.number().nullable(),
@@ -110,7 +113,13 @@ export const runCompile = defineTool({
     const bsp = join(dirname(vmf), `${basename(vmf, ".vmf")}.bsp`);
     assertWritable(bsp, ctx.config);
 
-    const game = toWindowsPath(ctx.config.gmodGameDir);
+    const { game: profile, from } = gameFor(ctx.config, args.game);
+    // Refused rather than attempted: a compile against a game whose toolchain we cannot
+    // locate fails deep inside wine, with a message about a missing DLL.
+    if (profile.unusableForCompile) {
+      throw new ToolchainError(`cannot compile against ${profile.id}: ${profile.unusableForCompile}`);
+    }
+    const game = toWindowsPath(profile.gameDir ?? ctx.config.gmodGameDir);
     const target = toWindowsPath(vmf);
     const timeoutMs = args.timeoutMinutes * 60_000;
 
@@ -144,7 +153,7 @@ export const runCompile = defineTool({
     for (const stage of args.stages) {
       const plan = plans[stage]!;
       ctx.audit.record({ kind: "compile_start", data: { stage, vmf, toolchain: chain } });
-      const run = await runCompiler(ctx.config, plan.exe, plan.argv, timeoutMs, chain);
+      const run = await runCompiler(ctx.config, plan.exe, plan.argv, timeoutMs, chain, profile);
       const report = parseCompileLog(`${run.stdout}\n${run.stderr}`);
       ctx.audit.record({
         kind: "compile_end",
@@ -179,6 +188,7 @@ export const runCompile = defineTool({
     return {
       vmf,
       toolchain: chain,
+      game: gameBlock(profile, from),
       bsp,
       bspExists,
       bspBytes: bspExists ? statSync(bsp).size : null,
@@ -350,11 +360,13 @@ export const runPack = defineTool({
       )
       .min(1),
     toolchain: TOOLCHAIN,
+    game: GAME,
     confirm: z.boolean().default(false),
   },
   outputSchema: {
     bsp: z.string(),
     toolchain: z.string(),
+    game: GAME_BLOCK,
     requested: z.number(),
     filesBefore: z.number(),
     filesAfter: z.number(),
@@ -367,6 +379,7 @@ export const runPack = defineTool({
     stdoutTail: z.string(),
   },
   handler: async (args, ctx) => {
+    const { game: packProfile, from: packFrom } = gameFor(ctx.config, args.game);
     const bsp = assertWritable(resolveInput(args.bsp, ctx.config), ctx.config);
     if (!existsSync(bsp)) throw new Error(`${bsp} does not exist`);
 
@@ -408,7 +421,7 @@ export const runPack = defineTool({
       compilerExe("bspzip", args.toolchain),
       [
         "-game",
-        toWindowsPath(ctx.config.gmodGameDir),
+        toWindowsPath(packProfile.gameDir ?? ctx.config.gmodGameDir),
         "-addlist",
         toWindowsPath(bsp),
         toWindowsPath(listPath),
@@ -416,6 +429,7 @@ export const runPack = defineTool({
       ],
       600_000,
       args.toolchain,
+      packProfile,
     );
 
     const filesAfter = await countPak();
@@ -424,6 +438,7 @@ export const runPack = defineTool({
     return {
       bsp,
       toolchain: args.toolchain,
+      game: gameBlock(packProfile, packFrom),
       requested: args.files.length,
       filesBefore,
       filesAfter,

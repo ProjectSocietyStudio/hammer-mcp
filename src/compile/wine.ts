@@ -3,6 +3,7 @@ import { isAbsolute, join } from "node:path";
 import { run } from "@projectsociety/mcp-core";
 import type { RunResult } from "@projectsociety/mcp-core";
 import type { Config } from "../config.js";
+import type { ResolvedGame } from "../games/profile.js";
 
 export class ToolchainError extends Error {}
 
@@ -52,9 +53,10 @@ export type CompileStage = "vbsp" | "vvis" | "vrad" | "bspzip";
  * `gmodBin` therefore cannot mean both "the compilers" and "the .fgd files" any more: the
  * .fgd files stay in `bin/`.
  */
-export function toolchainDir(config: Config, chain: Toolchain): string {
-  if (chain === "stock") return config.gmodBin;
-  return config.gmodBinPlusPlus ?? join(config.gmodBin, "win64");
+export function toolchainDir(config: Config, chain: Toolchain, game?: ResolvedGame): string {
+  const bin = game?.binDir ?? config.gmodBin;
+  if (chain === "stock") return bin;
+  return game?.plusPlusBinDir ?? config.gmodBinPlusPlus ?? join(bin, "win64");
 }
 
 /** `vbsp.exe` or `vbspplusplus.exe`. One place knows the naming convention. */
@@ -76,8 +78,9 @@ export async function runCompiler(
   args: readonly string[],
   timeoutMs: number,
   chain: Toolchain = "stock",
+  game?: ResolvedGame,
 ): Promise<CompilerRun> {
-  const dir = toolchainDir(config, chain);
+  const dir = toolchainDir(config, chain, game);
   const binary = join(dir, exe);
   if (!existsSync(binary)) {
     throw new ToolchainError(

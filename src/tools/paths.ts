@@ -18,3 +18,33 @@ export const CONFIRM = z
   .boolean()
   .optional()
   .describe("Required (true) to run this tool: it writes or executes.");
+
+/**
+ * The game profile a call works against. Absent means the configured default.
+ *
+ * An unknown id is refused, naming the ids that exist -- never resolved to the default.
+ * A Garry's Mod answer returned to someone who asked about Team Fortress 2 would be
+ * indistinguishable from a correct one.
+ */
+export const GAME = z
+  .string()
+  .optional()
+  .describe(
+    "Game profile id (gmod, css, tf2, ...). Defaults to the configured one. " +
+      "read_source_games lists what is installed here.",
+  );
+
+/**
+ * What every game-aware tool reports back.
+ *
+ * `from` distinguishes "you asked for this game" from "the configuration chose it", so a
+ * caller never has to infer which game an answer describes by reading its paths.
+ */
+export const GAME_BLOCK = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  branch: z.string(),
+  gameDir: z.string().nullable(),
+  binDir: z.string().nullable(),
+  from: z.enum(["argument", "config"]),
+});

@@ -2,6 +2,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig as coreLoadConfig } from "@projectsociety/mcp-core";
 import { z } from "zod";
+import { GameProfileOverride } from "./games/profile.js";
+import type { ResolvedGame } from "./games/profile.js";
+import { gameFor } from "./games/resolve.js";
 
 const STEAM_GMOD = join(
   homedir(),
@@ -28,7 +31,7 @@ export const ConfigFile = z.object({
    * with the GMod *client*, not with the dedicated server -- `srcds/bin/` has none of
    * them.
    */
-  gmodBin: z.string().default(join(STEAM_GMOD, "bin")),
+  gmodBin: z.string().optional(),
   /**
    * Directory holding the Hammer++ compilers, when they are installed. Defaults to
    * `<gmodBin>/win64`, which is where they must go: they are x86-64 where the stock ones
@@ -36,8 +39,23 @@ export const ConfigFile = z.object({
    * `gmodBin`. Nothing needs this set unless the install is unusual.
    */
   gmodBinPlusPlus: z.string().optional(),
+  /**
+   * Which game profile tools work against when a call does not name one. `gmod` unless
+   * set; `read_source_games` lists what this machine actually has.
+   */
+  game: z.string().default("gmod"),
+  /**
+   * Per-profile overrides, keyed by profile id. Anything discovery gets wrong or cannot
+   * see goes here -- a game installed outside Steam, compilers in a separate app, an
+   * engine branch we do not classify.
+   *
+   * `gmodBin`, `gmodGameDir` and `gmodBinPlusPlus` above are the older spelling of
+   * `gameProfiles.gmod.{binDir,gameDir,plusPlusBinDir}`. They still work. Setting both to
+   * different values is refused at load rather than silently resolved.
+   */
+  gameProfiles: z.record(GameProfileOverride).default({}),
   /** The `-game` directory the compilers resolve content against. */
-  gmodGameDir: z.string().default(join(STEAM_GMOD, "garrysmod")),
+  gmodGameDir: z.string().optional(),
   /**
    * How the Windows compilers are executed. Decided by measurement, not preference:
    * plain wine was verified to run vbsp/vvis/vrad here on 02/08/2026 (see README).
@@ -63,17 +81,85 @@ export interface Config extends ConfigFile {
   repoRoot: string;
   /** Runtime state directory: `<repoRoot>/.hammer-mcp`. */
   stateDir: string;
+  /**
+   * What the config file actually said, before any profile filled anything in.
+   *
+   * `gmodBin` and `gmodGameDir` below are computed: absent from the file, they come from
+   * whatever discovery found for the active profile. Profile resolution must therefore
+   * read *this* rather than the computed values, or it would resolve itself in a circle.
+   */
+  explicit: {
+    gmodBin?: string;
+    gmodGameDir?: string;
+    gmodBinPlusPlus?: string;
+  };
+  /** Compilers and .fgd files of the active profile. Always a string, never asserted to exist. */
+  gmodBin: string;
+  /** The `-game` argument for the active profile. */
+  gmodGameDir: string;
+}
+
+/** Defines a property computed on first read and remembered afterwards. */
+function lazy<T>(target: object, key: string, compute: () => T): void {
+  let done = false;
+  let value: T;
+  Object.defineProperty(target, key, {
+    enumerable: true,
+    configurable: true,
+    get(): T {
+      if (!done) {
+        value = compute();
+        done = true;
+      }
+      return value;
+    },
+  });
 }
 
 /**
  * Loads the effective configuration. The root is resolved in this order:
  * 1. `HAMMER_MCP_REPO` (env)  2. the file's `repoRoot` field  3. walking up from cwd.
+ *
+ * `gmodBin` and `gmodGameDir` are resolved **lazily**: reading them scans the Steam
+ * libraries, and loading a configuration must stay a file read. The last fallback is the
+ * historical hard-coded Steam path, so a machine where discovery finds nothing behaves
+ * exactly as it did before profiles existed.
  */
 export function loadConfig(cwd: string = process.cwd()): Config {
-  return coreLoadConfig(
+  const config = coreLoadConfig(
     { envVar: "HAMMER_MCP_REPO", stateDirName: ".hammer-mcp", schema: ConfigFile },
     cwd,
+  ) as Config;
+
+  config.explicit = {
+    ...(config.gmodBin !== undefined ? { gmodBin: config.gmodBin } : {}),
+    ...(config.gmodGameDir !== undefined ? { gmodGameDir: config.gmodGameDir } : {}),
+    ...(config.gmodBinPlusPlus !== undefined ? { gmodBinPlusPlus: config.gmodBinPlusPlus } : {}),
+  };
+
+  const active = (): ResolvedGame | null => {
+    try {
+      return gameFor(config).game;
+    } catch {
+      // An unknown default profile is reported by the tools that use it, not by throwing
+      // out of the config loader -- health has to stay callable to say what is wrong.
+      return null;
+    }
+  };
+
+  lazy(config, "gmodBin", () => config.explicit.gmodBin ?? active()?.binDir ?? join(STEAM_GMOD, "bin"));
+  lazy(
+    config,
+    "gmodGameDir",
+    () => config.explicit.gmodGameDir ?? active()?.gameDir ?? join(STEAM_GMOD, "garrysmod"),
   );
+  lazy(
+    config,
+    "gmodBinPlusPlus",
+    () => config.explicit.gmodBinPlusPlus ?? active()?.plusPlusBinDir ?? undefined,
+  );
+
+  return config;
 }
 
 export { findRepoRoot } from "@projectsociety/mcp-core";
