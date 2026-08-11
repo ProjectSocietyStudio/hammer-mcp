@@ -13,12 +13,25 @@ import { FIXTURES, ctx, has } from "./support/env.js";
 const scratch = mkdtempSync(join(tmpdir(), "hammer-profile-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-/** A repo root carrying nothing but the config file under test. */
+/**
+ * A repo root carrying nothing but the config file under test.
+ *
+ * `HAMMER_MCP_REPO` is cleared for the call: it outranks the argument by design, so with
+ * it set every test below silently loaded some other tree's configuration and asserted
+ * against it. That is exactly how these tests failed on a bare machine while passing here.
+ */
 function rootWith(name: string, config: Record<string, unknown>): Config {
   const root = join(scratch, name);
   mkdirSync(join(root, ".hammer-mcp"), { recursive: true });
   writeFileSync(join(root, ".hammer-mcp", "config.json"), JSON.stringify(config));
-  return loadConfig(root);
+
+  const saved = process.env["HAMMER_MCP_REPO"];
+  delete process.env["HAMMER_MCP_REPO"];
+  try {
+    return loadConfig(root);
+  } finally {
+    if (saved !== undefined) process.env["HAMMER_MCP_REPO"] = saved;
+  }
 }
 
 describe("the built-in table says only what it can back", () => {
