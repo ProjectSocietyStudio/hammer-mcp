@@ -9,6 +9,7 @@ import { gmaTools } from "./gma.js";
 import { faceTools } from "./face.js";
 import { gameTools } from "./games.js";
 import { healthTools } from "./health.js";
+import { hollowTools } from "./hollow.js";
 import { lightmapTools } from "./lightmap.js";
 import { lmpTools } from "./lmp.js";
 import { materialsTools } from "./materials.js";
@@ -38,6 +39,7 @@ export const allTools: AnyToolDef[] = [
   ...modifyTools,
   ...clipTools,
   ...vertexTools,
+  ...hollowTools,
   ...faceTools,
   ...optimiseTools,
   ...depsTools,
