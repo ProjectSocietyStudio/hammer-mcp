@@ -106,11 +106,12 @@ construction rather than by care:
 
 - **Winding.** Every face is wound against the solid's own centroid, so a normal that points
   inward is turned around before it is written. A new shape cannot introduce a winding bug.
-- **Texture axes.** Not invented: vbsp's own base-axis table. Four of its six branches are
-  reproduced exactly by `gen_probe.py`, which was written by hand and has been through a
-  real compile and a real boot. The other two are only reachable from slopes, which no
-  hand-written fixture covers — so the answer there is that this is the compiler's own
-  algorithm, not an extrapolation from the box case.
+- **Texture axes.** Not invented: vbsp's own base-axis table. **All six** of its branches are
+  reproduced exactly by `gen_probe.py`, which was written by hand and has been through a real
+  compile and a real boot. So a ramp does not reach a seventh entry — there is no seventh. What
+  it exercises is the *selection*: picking the closest base for a normal that matches none of
+  them exactly. That step is Valve's algorithm rather than an extrapolation, and it is the part
+  still owed a compile.
 
 Nothing is written until the result has been read back by `read_vmf_solids` and passed. The
 writer goes volume → planes and the checker goes planes → volume, so neither hides the
@@ -188,6 +189,36 @@ Measured 11/08/2026 on `ttt_traps.vmf`, the only Hammer-written map shipped with
 uniform grid. Read that carefully, though: this metric is the *coarsest* grid every corner
 fits, so a single odd coordinate anywhere on a brush drops the whole brush to 1. It measures
 how uniform the geometry ended up, not what grid someone worked at.
+
+## The craft, alongside the tool
+
+`.claude/skills/` carries two skills, and they live here rather than in the workshop that uses
+this server, because this is where map work belongs:
+
+| Skill | What it holds |
+|---|---|
+| [`source-map`](.claude/skills/source-map/SKILL.md) | **driving the tooling** — which tool answers which question, in what order, and what each one cannot tell you |
+| [`source-mapping`](.claude/skills/source-mapping/SKILL.md) | **the craft** — brushwork and grid, visibility, lighting, displacements, entities, performance, scale and composition, materials, atmosphere, and the myths |
+
+They reference each other and neither copies the other. Every rule in `source-mapping` carries
+**how to check it**, and marks itself:
+
+| Mark | Meaning |
+|---|---|
+| `[moteur]` | read in Valve's own source, with the file and the date |
+| `[consensus]` | widely agreed among mappers, not verified here |
+| `[contesté]` | mappers disagree, and the disagreement is stated |
+| `[mesuré]` | measured in this workshop, with the sample size |
+
+[`couverture-outillage.md`](.claude/skills/source-mapping/references/couverture-outillage.md) is
+the honest half: it maps each family of rules to the tool that verifies it, and names the ones
+**nothing** verifies. That column is not a gap in the tooling — it is the nature of the work, and
+an agent that dresses a judgement up as a metric produces a wrong number and false confidence.
+
+The `[mesuré]` markers come from an audit of shipped city maps whose raw files stay in a private
+repository. What is here is what survived a contradiction pass, together with what did not —
+[`corpus-mesure.md`](.claude/skills/source-mapping/references/corpus-mesure.md) keeps both, and
+the refutations are the more useful half.
 
 ## Proven, and not proven
 
