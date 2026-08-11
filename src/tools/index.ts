@@ -17,6 +17,7 @@ import { modifyTools } from "./modify.js";
 import { optimiseTools } from "./optimise.js";
 import { reportTools } from "./report.js";
 import { solidTools } from "./solids.js";
+import { vertexTools } from "./vertex.js";
 import { visleafTools } from "./visleaf.js";
 import { vmfTools } from "./vmf.js";
 import { vmfEditTools } from "./vmfedit.js";
@@ -36,6 +37,7 @@ export const allTools: AnyToolDef[] = [
   ...buildTools,
   ...modifyTools,
   ...clipTools,
+  ...vertexTools,
   ...faceTools,
   ...optimiseTools,
   ...depsTools,

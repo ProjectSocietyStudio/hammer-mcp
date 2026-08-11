@@ -380,6 +380,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Game discovery | **proven for Garry's Mod only** — the readers are generic Source, but one game has been run here |
 | Moving and deleting brushes | **proven** — a room turned 45 degrees compiles sealed, and leaks when one of its walls is deleted |
 | Reading the game's content | **proven** — searches and model bounds checked against Garry's Mod's own install |
+| Vertex editing | **proven** — a slab tilted into a wedge stays a valid brush; every move that would break a face is refused |
 | Clipping | **proven** — a room whose every wall was cut diagonally compiles sealed; the two halves sum to the original volume |
 | Texture alignment | **proven** — aligning to world reproduces, on all 36 faces, the six axis pairs `gen_probe.py` states by hand |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
@@ -448,6 +449,7 @@ from and whether a file was read; `health` reports it. See
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
 | `clip_solids` | `map` | ● | Cuts brushes with a plane — front, back, or both. Hammer's most-used tool |
+| `move_vertices` | `map` | ● | Moves a brush's corners — Hammer's VM tool, with its refusals |
 | `set_face_material` | `map` | ● | Sets the material on selected faces. Nothing could change one before |
 | `align_faces` | `map` | ● | Realigns a texture: to the world, to the face's own plane, or fitted to it |
 | `set_smoothing_groups` | `map` | ● | Hammer's 1-to-32 groups, written as the bitmask the file stores |
