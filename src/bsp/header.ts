@@ -16,7 +16,23 @@ export const LUMP_MODELS = 14;
 /** The embedded pakfile: a plain ZIP, and on `rp_nycity_day` 1004 MB of the 1.13 GB. */
 export const LUMP_PAKFILE = 40;
 
-/** Names for the lumps we actually reason about; the rest report as undefined. */
+/**
+ * Lump names, from `LUMP_*` in `src/public/bspfile.h` of source-sdk-2013, read 11/08/2026.
+ *
+ * Read from the header rather than remembered, because the HDR family is easy to get wrong
+ * and wrong in a way that reads as right. Index 56 is **not** `LIGHTING_HDR` -- it is
+ * `LEAF_AMBIENT_LIGHTING`, which is present in LDR maps too. Labelling it as HDR makes
+ * every LDR map look HDR-compiled, and an audit of a map's lighting then concludes the
+ * opposite of the truth with nothing to flag it. That mislabel shipped here and was caught
+ * on three real maps.
+ *
+ * The five HDR-family lumps and their two indexes are all named, so that a caller reading
+ * a lump directory can tell "this map has no HDR data" from "this tool does not know that
+ * lump".
+ *
+ * `geometry.ts` derives its own names from this table. Two hand-maintained lists is what
+ * let the two disagree in the first place, one of them silently.
+ */
 export const LUMP_NAMES: Readonly<Record<number, string>> = {
   0: "ENTITIES",
   1: "PLANES",
@@ -29,6 +45,7 @@ export const LUMP_NAMES: Readonly<Record<number, string>> = {
   8: "LIGHTING",
   9: "OCCLUSION",
   10: "LEAFS",
+  11: "FACEIDS",
   12: "EDGES",
   13: "SURFEDGES",
   14: "MODELS",
@@ -37,16 +54,37 @@ export const LUMP_NAMES: Readonly<Record<number, string>> = {
   17: "LEAFBRUSHES",
   18: "BRUSHES",
   19: "BRUSHSIDES",
+  20: "AREAS",
+  21: "AREAPORTALS",
   22: "DISPINFO",
   23: "ORIGINALFACES",
   26: "DISP_VERTS",
   35: "GAME_LUMP",
   40: "PAKFILE",
+  42: "CUBEMAPS",
   43: "TEXDATA_STRING_DATA",
   44: "TEXDATA_STRING_TABLE",
-  56: "LIGHTING_HDR",
+  45: "OVERLAYS",
+  51: "LEAF_AMBIENT_INDEX_HDR",
+  52: "LEAF_AMBIENT_INDEX",
+  53: "LIGHTING_HDR",
+  54: "WORLDLIGHTS_HDR",
+  55: "LEAF_AMBIENT_LIGHTING_HDR",
+  56: "LEAF_AMBIENT_LIGHTING",
+  57: "XZIPPAKFILE",
   58: "FACES_HDR",
+  59: "MAP_FLAGS",
+  60: "OVERLAY_FADES",
 };
+
+/**
+ * The lumps vrad writes only when it produced HDR lighting.
+ *
+ * All three empty means the map is LDR-only. Deliberately not index 56: it carries
+ * per-visleaf ambient lighting and is present either way, which is exactly the trap this
+ * constant exists to keep callers out of.
+ */
+export const HDR_LUMPS = [53, 54, 58] as const;
 
 export interface BspLump {
   index: number;

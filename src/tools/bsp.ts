@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { readEntityLump } from "../bsp/entities.js";
-import { readHeader } from "../bsp/header.js";
+import { HDR_LUMPS, readHeader } from "../bsp/header.js";
 import { histogram, matchesFilter } from "../entity/model.js";
 import type { EntityFilter, Vec3 } from "../entity/model.js";
 import { defineTool } from "../mcp/registry.js";
@@ -54,6 +54,13 @@ export const readBspInfo = defineTool({
       .describe("Copy this into a .lmp patch for this map, or the engine ignores it."),
     fileSize: z.number(),
     lumpCount: z.number(),
+    hdrLighting: z
+      .boolean()
+      .describe(
+        "Whether vrad produced HDR lighting, from lumps 53/54/58 being present. NOT from " +
+          "lump 56: LEAF_AMBIENT_LIGHTING is per-visleaf ambient and exists in LDR maps too, " +
+          "so reading it as HDR reports every LDR map as HDR-compiled.",
+      ),
     lumps: z.array(
       z.object({
         index: z.number(),
@@ -75,6 +82,7 @@ export const readBspInfo = defineTool({
       mapRevision: header.mapRevision,
       fileSize: header.fileSize,
       lumpCount: lumps.length,
+      hdrLighting: HDR_LUMPS.some((i) => (header.lumps[i]?.length ?? 0) > 0),
       lumps: [...lumps]
         .sort((a, b) => b.length - a.length)
         .map((l) => ({

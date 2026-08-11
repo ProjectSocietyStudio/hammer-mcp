@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { LUMP_SPECS } from "../bsp/geometry.js";
+import { LUMP_NAMES } from "../bsp/header.js";
 import type { Config } from "../config.js";
 import type { ResolvedGame } from "../games/profile.js";
 import { fgdNamesFor, gameBlock, gameFor } from "../games/resolve.js";
@@ -221,7 +222,7 @@ interface LintReply {
 
 /** VMF counts, mapped onto the compiler ceilings `read_map_geometry` already sources. */
 const LIMIT_FOR = new Map(
-  LUMP_SPECS.filter((s) => s.limit !== undefined).map((s) => [s.name, s]),
+  LUMP_SPECS.filter((s) => s.limit !== undefined).map((s) => [LUMP_NAMES[s.index] as string, s]),
 );
 
 export const readVmfLint = defineTool({
