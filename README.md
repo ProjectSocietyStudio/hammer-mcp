@@ -54,7 +54,7 @@ flowchart LR
 | **Read and lint** | entities, outputs and brush counts of a `.vmf`; every finding checked against the FGD the game itself declares |
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
-| **Optimise** | hint brushes, including diagonal ones — the visibility decisions a compiled map no longer contains |
+| **Optimise** | `func_detail`, hint brushes, including diagonal ones — the visibility decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
 | **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
@@ -121,6 +121,36 @@ And because two programs written on the same afternoon agreeing proves less than
 **a six-brush room built entirely by this tool is compiled by vbsp for real, and seals.**
 Remove one wall and it leaks. Without that second half, a writer that emitted nothing at all
 would pass the first test just as happily.
+
+## `func_detail`, measured
+
+The largest single lever on a Source map's performance, and a `.bsp` cannot tell you it was
+ever pulled: vbsp folds `func_detail` into the world as detail brushes, so nothing in a
+shipped map records which brushes were structural. `set_solid_class` moves them, either way.
+
+A structural brush splits the BSP tree and spawns visleaves around itself. A pillar standing
+in a room, compiled three ways — 11/08/2026, stock compilers:
+
+| | leaves | clusters | VISIBILITY |
+|---|---|---|---|
+| empty room | 29 | 4 | 44 B |
+| pillar, structural | 33 | 7 | 74 B |
+| pillar, `func_detail` | 29 | 4 | 44 B |
+
+The detail pillar returns the tree to the empty room's numbers **exactly**. It is still there,
+still solid, still drawn — vvis simply no longer knows about it.
+
+⚠️ **And the trap, which is why the tool warns instead of congratulating you: a `func_detail`
+brush does not seal the map.** Move a wall into one and the next compile leaks. No static check
+here can rule that out — sealing is a property of the whole hull, not of one brush — so the
+tool returns what to compile next rather than implying the move was safe. The test suite
+proves both halves: detailing an interior pillar is clean, detailing a wall of the same room
+leaks.
+
+It refuses two things outright. A brush inside a `hidden` block — Hammer's storage for a
+visgroup-hidden brush — because moving it out would unhide it as a side effect of an edit that
+said nothing about visibility. And an entity whose classname is not the one asked for, rather
+than putting brushes somewhere the caller did not name.
 
 ## Hints, and what a compiled map has already forgotten
 
@@ -296,6 +326,7 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
 | `write_hint_brush` | `map` | ● | Places a hint brush, straight or diagonal, to shape where vvis splits the map |
+| `set_solid_class` | `map` | ● | Moves brushes between the world and a brush entity — `func_detail` and back |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
