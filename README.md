@@ -20,7 +20,7 @@ dans `gmod-mcp`, pas ici.
 | BSP (`read_bsp_info`, `read_bsp_entities`) | **prouvé** — jalon 1 ci-dessous |
 | Patch de lump (`read_lump_patch`, `write_lump_patch`, `read_lump_patch_status`) | codec prouvé ; **effet en jeu non prouvé** (porte B) |
 | VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée |
-| Compile | porte A passée ; outils à écrire |
+| Compile (`run_compile`, `read_compile_log`, `read_leak`, `run_pack`) | **prouvé** — fuite provoquée puis localisée |
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
 | Sidecar Python (srctools) | **installé et prouvé** — voir ci-dessous |
@@ -224,6 +224,10 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_fgd_class` | `map` | | Le schéma d'une classe selon la FGD du jeu : keyvalues, entrées, sorties |
 | `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement |
 | `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler |
+| `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape |
+| `read_compile_log` | `map` | | Traduit la sortie d'un compilateur en findings expliqués |
+| `read_leak` | `map` | | Transforme « leaked! » en un lieu et une entité nommée |
+| `run_pack` | `local` | ● | Empaquette des fichiers dans un `.bsp` via bspzip, et vérifie |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
@@ -393,6 +397,53 @@ nomme — et qu'elle reste muette sur l'original.
 pas par sous-chaîne : `prop_dynamik` ne contient aucune classe et n'est contenu par aucune, alors
 qu'il est à une lettre de `prop_dynamic`. Et il restitue la casse déclarée (`SetAnimation`), que
 srctools normalise en minuscules dans ses index.
+
+## La compilation, et ce que les compilateurs ne disent pas
+
+Trois réglages sont porteurs, tous mesurés et non devinés : le répertoire courant doit être `bin/`
+ou `tier0.dll` ne se résout pas ; `WINEDEBUG=-all` est indispensable, sinon stderr est un mur de
+`fixme:` ; et **le chemin doit être en forme Windows absolue** (`Z:\...`). Ce dernier est le plus
+vicieux : un chemin relatif se résout contre le répertoire de travail de wine, et vbsp compile
+alors **un autre fichier, sans erreur**. `toWindowsPath` refuse donc un chemin relatif plutôt que
+de le convertir.
+
+`run_compile` **s'arrête à la première étape qui échoue**. Enchaîner vvis après une fuite, c'est
+dépenser une heure à calculer une visibilité qui ne veut rien dire.
+
+### Le pointfile disait le contraire de ce que je croyais
+
+`read_leak` lit le `.lin` que vbsp écrit à côté de la carte. J'avais supposé que son premier point
+était l'entité fautive — c'est ce que raconte la tradition Quake. **Faux, mesuré le 11/08/2026** :
+sur la carte sonde dont on avait sorti l'`info_player_start`, le pointfile fait deux points et
+l'entité est sur le **second**. Ne corréler que le départ nommait une `light` à 232 unités et
+manquait complètement la cause.
+
+Les deux extrémités sont donc corrélées, et l'outil ne désigne un coupable que si une entité se
+tient à moins de 16 unités d'un bout. Résultat sur la carte cassée : `info_player_start`, **à 0
+unité**. Le contrôle négatif existe aussi — sans entité près d'un bout, l'outil ne désigne
+personne, là où une corrélation naïve nommerait toujours sa plus proche voisine.
+
+### Ce qu'un message de compilateur mérite comme traduction
+
+Les compilateurs parlent à qui les a écrits en 2004, et plusieurs de leurs messages **désignent la
+mauvaise chose**. Chaque règle porte donc la correction plutôt que de répéter la ligne :
+
+| Message | Ce que la règle ajoute |
+|---|---|
+| `**** leaked ****` | aucune position — d'où le renvoi vers `read_leak` et le pointfile |
+| `Displacement found on a(n) X entity` | l'identifiant de brush imprimé est **toujours 0** ; `read_vmf_lint` donne le vrai |
+| `Bad surface extents` | nomme une face par un index introuvable dans Hammer |
+| `Can't load skybox file … default cubemap` | **rien ne manque** — vbsp n'a pas pu construire un cubemap par défaut |
+
+Ce dernier a coûté une correction : il déclenchait aussi la règle générique « matériau manquant »,
+dont le conseil — empaqueter l'asset — était faux. Le classement est passé en **première règle qui
+matche**, spécifiques avant génériques.
+
+### run_pack ne croit pas son propre code de retour
+
+`bspzip` sort en 0 qu'il ait ajouté quelque chose ou non. `run_pack` compte donc le contenu du
+pakfile avant et après, et ne rend `ok: true` que si le nombre de fichiers a crû **exactement** de
+ce qui était demandé. Vérifié : 1 → 2 fichiers, 34 876 → 36 876 octets.
 
 ## Architecture
 
