@@ -73,6 +73,26 @@ helpers, so merging it would change the accepted keyvalues of entities the game 
   binary. `-repack -compress` was never tried: nothing says Garry's Mod reads an LZMA-compressed
   lump.
 
+## Only world brushes seal
+
+A leaked map is one where something inside can see the void. The consequences compound: the PVS
+cannot be computed, the map loads fullbright, and vvis and vrad stop meaning anything — which is
+why `run_compile` stops at the stage that leaked instead of spending an hour on the next one.
+
+**`func_detail` does not seal. Nor do displacements, nor brush entities.** A room sealed with
+`func_detail` leaks, and the reason is the whole point of the optimisation: vbsp removes detail
+brushes from the BSP tree, so as far as visibility is concerned they are not there. Everything that
+makes `func_detail` worth using is the same thing that makes it unable to hold the void out.
+
+This rule was written down in an earlier French-only note and did not survive the move into these
+docs — restored 11/08/2026 after a second session shipped a tool that flips brushes to
+`func_detail` and had to prove the trap beside the benefit.
+
+No static check can rule it out. Sealing is a property of the whole hull, not of any one brush, so
+the only honest answer after such an edit is to compile. Measured on the probe map, which is a
+sealed box: **all six of its brushes are load-bearing, the floor included** — the void is directly
+underneath it. A bare closed room has no brush that is safe to detail.
+
 ## The pointfile said the opposite of what I believed
 
 `read_leak` reads the `.lin` vbsp writes beside the map. I had assumed its first point was the
