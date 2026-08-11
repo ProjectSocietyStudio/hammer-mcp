@@ -6,6 +6,7 @@ import { parseCompileLog } from "../compile/log.js";
 import { locateLeak, readPointfile } from "../compile/leak.js";
 import { runCompiler, toWindowsPath } from "../compile/wine.js";
 import { readEntityLump } from "../bsp/entities.js";
+import { checkNavFreshness } from "../bsp/nav.js";
 import { parseEntityText } from "../bsp/entities.js";
 import { assertWritable } from "../fs/guard.js";
 import { defineTool } from "../mcp/registry.js";
@@ -383,4 +384,42 @@ export const runPack = defineTool({
   },
 });
 
-export const compileTools = [runCompile, readCompileLog, readLeak, runPack];
+export const readNav = defineTool({
+  name: "read_nav",
+  description:
+    "Reads a .nav mesh header and says whether it still matches its map. The engine " +
+    "compares the BSP size recorded in the mesh against the map it is loading, and a " +
+    "mismatch means the mesh is silently unusable -- in game that looks like Nextbots " +
+    "that will not path, with nothing in the console explaining why. Recompiling a map " +
+    "always invalidates its nav, so check this after any compile. Generating a new one " +
+    "needs the engine (nav_generate); there is no offline generator, in this project or " +
+    "anywhere public.",
+  realm: "map",
+  inputSchema: {
+    path: z.string().describe("The .nav, or the .bsp beside it."),
+  },
+  outputSchema: {
+    path: z.string(),
+    fileBytes: z.number(),
+    version: z.number(),
+    subVersion: z.number().nullable(),
+    savedBspSize: z.number(),
+    actualBspSize: z.number().nullable(),
+    matchesBsp: z.boolean().nullable(),
+    verdict: z.string(),
+    isAnalyzed: z.boolean().nullable(),
+    placeCount: z.number().nullable(),
+    areaCount: z.number().nullable(),
+    bsp: z.string().nullable(),
+  },
+  handler: (args, ctx) => {
+    const given = resolveInput(args.path, ctx.config);
+    const stem = join(dirname(given), basename(given, extname(given)));
+    const nav = extname(given).toLowerCase() === ".nav" ? given : `${stem}.nav`;
+    const bsp = `${stem}.bsp`;
+    return { ...checkNavFreshness(nav, existsSync(bsp) ? bsp : null) };
+  },
+});
+
+export const compileTools = [runCompile, readCompileLog, readLeak, runPack, readNav];
+

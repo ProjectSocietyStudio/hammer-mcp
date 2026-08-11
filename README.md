@@ -228,6 +228,7 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_compile_log` | `map` | | Traduit la sortie d'un compilateur en findings expliqués |
 | `read_leak` | `map` | | Transforme « leaked! » en un lieu et une entité nommée |
 | `run_pack` | `local` | ● | Empaquette des fichiers dans un `.bsp` via bspzip, et vérifie |
+| `read_nav` | `map` | | Dit si un nav mesh correspond encore à sa carte |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
@@ -444,6 +445,34 @@ matche**, spécifiques avant génériques.
 `bspzip` sort en 0 qu'il ait ajouté quelque chose ou non. `run_pack` compte donc le contenu du
 pakfile avant et après, et ne rend `ok: true` que si le nombre de fichiers a crû **exactement** de
 ce qui était demandé. Vérifié : 1 → 2 fichiers, 34 876 → 36 876 octets.
+
+## Le nav mesh, ou la panne qui ne dit rien
+
+Recompiler une carte invalide toujours son nav mesh. Le moteur compare la taille de BSP inscrite
+dans le `.nav` à celle de la carte qu'il charge, et **ne dit rien** quand elles diffèrent : en jeu,
+cela se voit comme des Nextbots qui refusent de se déplacer, console muette.
+
+`read_nav` lit cet en-tête. Vérifié contre la vérité terrain, au même octet, sur les deux cartes
+livrées :
+
+| Carte | Taille inscrite | Taille réelle du `.bsp` | Verdict |
+|---|---|---|---|
+| `gm_construct` | 36 735 656 | 36 735 656 | frais |
+| `gm_flatgrass` | 47 430 424 | 47 430 424 | frais |
+
+Le contrôle négatif accompagne : le même mesh posé à côté d'une carte d'une autre taille est
+déclaré **périmé**. Sans lui, un vérificateur qui répondrait toujours « frais » serait
+indiscernable sur toutes les cartes saines.
+
+**Ce qui est prouvé et ce qui ne l'est pas** : magie, version, taille inscrite et drapeau
+« analysé » sont lus au format documenté et recoupés sur deux fichiers. Le nombre de zones, lui,
+est au **mieux indicatif** — `gm_construct` en annonce 2271 dans 7,2 Mo, soit 3189 octets chacune,
+là où `gm_flatgrass` en annonce 853 à 325 octets. L'écart peut être réel — les points de cachette
+et les chemins de rencontre croissent plus vite que le nombre de zones — mais rien ici ne le
+démontre, et le champ est documenté comme tel plutôt que présenté comme une mesure.
+
+**Générer un nav mesh reste hors de portée** : seul `nav_generate` en jeu le fait, et la veille n'a
+trouvé aucun générateur hors moteur, ni ici ni ailleurs dans le domaine public.
 
 ## Architecture
 
