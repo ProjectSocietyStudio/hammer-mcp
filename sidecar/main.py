@@ -137,6 +137,14 @@ def _load_vmf(path: str, req: dict[str, Any] | None = None) -> tuple[Any, dict[s
     return vmf, info
 
 
+@verb("map_dependencies")
+def _map_dependencies(req: dict[str, Any]) -> dict[str, Any]:
+    """Every asset a compiled map references, and where each one will come from."""
+    from dependencies import map_dependencies
+
+    return map_dependencies(req)
+
+
 @verb("fgd_class")
 def _fgd_class(req: dict[str, Any]) -> dict[str, Any]:
     """Describes one class as the game's own FGD declares it, or lists the classes."""
