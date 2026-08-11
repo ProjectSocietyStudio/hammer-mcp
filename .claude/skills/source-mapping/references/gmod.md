@@ -76,9 +76,17 @@ No nav mesh generator exists outside the engine, here or anywhere public; regene
 
 ## Workshop
 
-`gmad` packs a folder into a `.gma`, `gmpublish` uploads it — two binaries shipped in
-`garrysmod/bin/`, neither tooled by this project: that step stays manual. Two hard constraints
-before going there:
+**Reading a `.gma` is tooled; writing and publishing one is not.** `read_gma` returns the author,
+the title, the required content and the full index of an archive — header and index only, so it is
+instant whatever the size — and `run_gma_extract` pulls named entries out by offset without
+unpacking the rest. That is how a Workshop map becomes readable by every other tool here.
+⚠️ **The required-content list only exists from format version 2 onwards**: a reader that always
+consumes it desynchronises on any older archive and returns a plausible, wrong addon name
+`[measured]`.
+
+Packing and uploading stay manual: `gmad` packs a folder into a `.gma`, `gmpublish` uploads it — two
+binaries shipped in `garrysmod/bin/`, neither driven by this project. Two hard constraints before
+going there:
 
 - **The icon must be a baseline JPEG, 512×512, chroma 4:2:0.** A progressive JPEG, a PNG, or a
   4:2:2/4:4:4 export is silently rejected by the compressor. `[engine]`

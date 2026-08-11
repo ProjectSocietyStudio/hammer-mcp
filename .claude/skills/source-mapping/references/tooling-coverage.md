@@ -34,6 +34,7 @@ Three statuses, and only one is comfortable:
 | Materials used and how often ([assets](assets.md)) | `read_materials` | offline |
 | Assets referenced but not packed ([assets](assets.md)) | `read_map_dependencies` | offline |
 | Nav mesh still valid after a compile ([gmod](gmod.md)) | `read_nav` | offline |
+| What a Workshop archive holds, and getting one file out ([gmod](gmod.md)) | `read_gma`, `run_gma_extract` | offline |
 | Toolchain, FGD, game profile available ([compiling](compiling.md)) | `health`, `read_source_games` | offline |
 | The real visleaf split ([visibility](visibility.md)) | `mat_leafvis`, `r_lockpvs`, **client console** | in game |
 | What is actually drawn ([performance](performance.md)) | `mat_wireframe`, `+showbudget`, **client console** | in game |
@@ -76,16 +77,16 @@ Faced with one of those questions on a compiled map, the answer is **"not determ
 Position at the end of 11/08/2026, from the `hammer-mcp` catalogue. This is not a work plan: it is
 what you need to know before promising a check that does not exist.
 
-Four gaps from the morning version were closed during the day and are removed from this table
+Five gaps from the morning version were closed during the day and are removed from this table
 rather than struck through: the **material table** (`read_materials`), **brush geometry** (no
-longer a refusal — see below), the **lightmap budget** (`read_lightmap_budget`), and **referenced
-asset detection** (`read_map_dependencies`).
+longer a refusal — see below), the **lightmap budget** (`read_lightmap_budget`), **referenced
+asset detection** (`read_map_dependencies`, which also drives `run_pack --auto`), and the
+**`.gma` reader** (`read_gma`, `run_gma_extract`).
 
 | Gap | What it prevents |
 |---|---|
 | `read_prop_survey` does not read the `GAME_LUMP` | it returns zero `prop_static` on any compiled map **without saying so**, and on an urban map that is most of the scenery |
 | no reading of a `.nav`'s geometry | `read_nav` only reports freshness, not coverage |
-| no `.gma` reader | a Workshop map must be extracted outside the tooling before it can be measured |
 | displacements, visgroups, cordon, occluders | read or counted at best, never created or edited |
 | areaportals | counted by `read_map_geometry`, never functionally validated |
 | cubemap and nav mesh generation | out of scope by construction — the engine is required, therefore `gmod-mcp` |
