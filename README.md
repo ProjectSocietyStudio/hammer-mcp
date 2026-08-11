@@ -54,6 +54,7 @@ flowchart LR
 | **Read and lint** | entities, outputs and brush counts of a `.vmf`; every finding checked against the FGD the game itself declares |
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
+| **Optimise** | hint brushes, including diagonal ones — the visibility decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
 | **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
@@ -119,6 +120,35 @@ And because two programs written on the same afternoon agreeing proves less than
 **a six-brush room built entirely by this tool is compiled by vbsp for real, and seals.**
 Remove one wall and it leaks. Without that second half, a writer that emitted nothing at all
 would pass the first test just as happily.
+
+## Hints, and what a compiled map has already forgotten
+
+`func_detail`, hints, per-face lightmap scale: the decisions that most affect how a map
+performs exist **only in the `.vmf`**. vvis consumes hints and they are gone from the `.bsp`,
+vbsp folds detail into the world. So a tool that can audit a compiled map in detail is still
+unable to act on anything it finds there — the acting has to happen on the source.
+
+`write_hint_brush` places a slab carrying `TOOLS/TOOLSHINT` on the plane vvis should cut
+along and `TOOLS/TOOLSSKIP` everywhere else, and `rotateZ` turns it, which is how a cut is
+made diagonal.
+
+Compiled three ways on the probe room, 11/08/2026, stock compilers:
+
+| | leaves | clusters | VISIBILITY |
+|---|---|---|---|
+| no hint | 29 | 4 | 44 B |
+| hint, axial | 33 | 8 | 84 B |
+| hint, 45° | 35 | 10 | 124 B |
+
+The diagonal is not the axial cut turned round: in the same room it subdivides further. That
+is the lever behind an audit finding on three shipped city maps, whose BSP trees choose
+diagonal split planes at roughly **80×** the rate of a same-genre control by another author —
+an author building a city whose streets do not run along the axes reaches for exactly this.
+
+Finer is not automatically better: those clusters cost VIS data and compile time, and one
+small room is one sample. What the table settles is that the lever works and that the two
+cuts are not equivalent. The tool says so itself — it returns the measurement to take next,
+because **a hint that changes no leaf count did nothing and still costs a plane in the tree.**
 
 ## Reading brushes backwards
 
@@ -234,6 +264,7 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
+| `write_hint_brush` | `map` | ● | Places a hint brush, straight or diagonal, to shape where vvis splits the map |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |

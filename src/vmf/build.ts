@@ -86,6 +86,16 @@ export type SolidSpec =
       shape: "box";
       mins: Vec3;
       maxs: Vec3;
+      /**
+       * Degrees to rotate about Z, around the box's own centre.
+       *
+       * This is how a diagonal brush is made, and a diagonal brush is how a mapper forces
+       * vbsp to split the tree along something other than an axis. Corners are rounded to
+       * whole units per column -- the four (x, y) pairs are rotated once and reused at both
+       * heights -- so the vertical faces stay exactly planar instead of being rounded into
+       * a twist that vbsp would then refuse.
+       */
+      rotateZ?: number;
     }
   | {
       /**
@@ -113,11 +123,27 @@ export type SolidSpec =
       faces: Vec3[][];
     };
 
+export interface FaceInfo {
+  normal: Vec3;
+  area: number;
+  /** Position among this solid's faces, 0-based. */
+  index: number;
+  /** Rank by area, 0 being the largest face of the solid. */
+  areaRank: number;
+}
+
 export interface BuildOptions {
   material?: string;
   lightmapScale?: number;
   /** Texture scale on both axes. Hammer's default is 0.25. */
   textureScale?: number;
+  /**
+   * Material per face, overriding `material` when it returns a string.
+   *
+   * Exists for tool brushes, where the whole point is that one face differs from the rest:
+   * a hint brush is SKIP everywhere except the plane vvis should cut along.
+   */
+  materialForFace?: (face: FaceInfo) => string | undefined;
 }
 
 interface Mesh {
@@ -126,13 +152,29 @@ interface Mesh {
   faces: number[][];
 }
 
-function boxMesh(mins: Vec3, maxs: Vec3): Mesh {
+function boxMesh(mins: Vec3, maxs: Vec3, rotateZ = 0): Mesh {
   const [x0, y0, z0] = mins;
   const [x1, y1, z1] = maxs;
+
+  // The four ground-plan corners, rotated once and reused at both heights. Rotating all
+  // eight independently and rounding each would leave the vertical faces very slightly
+  // non-planar, which vbsp reports as a brush it cannot use.
+  let plan: Array<[number, number]> = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  if (rotateZ % 360 !== 0) {
+    const t = (rotateZ * Math.PI) / 180;
+    const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+    plan = plan.map(([x, y]) => [
+      Math.round(cx + (x - cx) * Math.cos(t) - (y - cy) * Math.sin(t)),
+      Math.round(cy + (x - cx) * Math.sin(t) + (y - cy) * Math.cos(t)),
+    ]);
+  }
+
   return {
     vertices: [
-      [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
-      [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
+      [plan[0]![0], plan[0]![1], z0], [plan[1]![0], plan[1]![1], z0],
+      [plan[2]![0], plan[2]![1], z0], [plan[3]![0], plan[3]![1], z0],
+      [plan[0]![0], plan[0]![1], z1], [plan[1]![0], plan[1]![1], z1],
+      [plan[2]![0], plan[2]![1], z1], [plan[3]![0], plan[3]![1], z1],
     ],
     faces: [
       [4, 5, 6, 7], // +z
@@ -237,7 +279,7 @@ function convexMesh(faces: Vec3[][]): Mesh {
 function meshFor(spec: SolidSpec): Mesh {
   switch (spec.shape) {
     case "box":
-      return boxMesh(spec.mins, spec.maxs);
+      return boxMesh(spec.mins, spec.maxs, spec.rotateZ ?? 0);
     case "wedge":
       return wedgeMesh(spec.mins, spec.maxs, spec.slopeAxis, spec.high);
     case "cylinder":
@@ -265,6 +307,22 @@ function validateExtent(spec: SolidSpec): void {
       }
     }
   }
+}
+
+/** Area of a face given as an ordered loop. Shoelace, projected onto the face normal. */
+function loopArea(loop: readonly Vec3[], normal: Vec3): number {
+  let sum = 0;
+  for (let i = 0; i < loop.length; i++) {
+    const p = loop[i]!;
+    const q = loop[(i + 1) % loop.length]!;
+    const c: Vec3 = [
+      p[1] * q[2] - p[2] * q[1],
+      p[2] * q[0] - p[0] * q[2],
+      p[0] * q[1] - p[1] * q[0],
+    ];
+    sum += dot(normal, c);
+  }
+  return Math.abs(sum) / 2;
 }
 
 const fmt = (n: number): string => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(4))));
@@ -299,11 +357,10 @@ export function buildSolidText(spec: SolidSpec, nextId: number, options: BuildOp
     mesh.vertices.reduce((s, v) => s + v[2], 0) / mesh.vertices.length,
   ];
 
-  let id = nextId;
-  const solidId = id++;
-  const sides: string[] = [];
-
-  for (const face of mesh.faces) {
+  // Two passes: every face is wound and measured first, so `materialForFace` can be told
+  // how this face ranks by area. A tool brush is defined by one face differing from the
+  // rest, and "the largest one" is how a mapper names it.
+  const faces = mesh.faces.map((face, index) => {
     let loop = face.map((i) => {
       const v = mesh.vertices[i];
       if (!v) throw new VmfBuildError(`face refers to vertex ${i}, which does not exist`);
@@ -321,13 +378,31 @@ export function buildSolidText(spec: SolidSpec, nextId: number, options: BuildOp
       loop = [...loop].reverse();
       plane = planeFromPoints(loop[0]!, loop[1]!, loop[2]!)!;
     }
+    return { loop, plane, index, area: loopArea(loop, plane.normal) };
+  });
+
+  const byArea = [...faces].sort((a, b) => b.area - a.area);
+  const rankOf = new Map(byArea.map((f, rank) => [f.index, rank]));
+
+  let id = nextId;
+  const solidId = id++;
+  const sides: string[] = [];
+
+  for (const { loop, plane, index, area } of faces) {
+    const chosen =
+      options.materialForFace?.({
+        normal: plane.normal,
+        area,
+        index,
+        areaRank: rankOf.get(index)!,
+      }) ?? material;
 
     const { u, v } = textureAxesFor(plane.normal);
     sides.push(
       `\t\tside\n\t\t{\n` +
         `\t\t\t"id" "${id++}"\n` +
         `\t\t\t"plane" "(${vec(loop[0]!)}) (${vec(loop[1]!)}) (${vec(loop[2]!)})"\n` +
-        `\t\t\t"material" "${material}"\n` +
+        `\t\t\t"material" "${chosen}"\n` +
         `\t\t\t"uaxis" "[${vec(u)} 0] ${scale}"\n` +
         `\t\t\t"vaxis" "[${vec(v)} 0] ${scale}"\n` +
         `\t\t\t"rotation" "0"\n` +
