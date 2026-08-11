@@ -9,6 +9,7 @@ export type AuditKind =
   | "tool_call"
   | "tool_result"
   | "file_write"
+  | "vmf_edit"
   | "compile_start"
   | "compile_end"
   | "error";
