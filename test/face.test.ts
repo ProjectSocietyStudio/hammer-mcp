@@ -9,6 +9,7 @@ import {
   setSmoothingGroups,
   VmfFaceError,
 } from "../src/vmf/face.js";
+import { insertSolids } from "../src/vmf/build.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
 import type { SolidCheck, Vec3 } from "../src/vmf/solid.js";
 import { FIXTURES } from "./support/env.js";
@@ -194,6 +195,59 @@ describe("alignFaces: the other modes", () => {
     expect(Math.max(...coords)).toBeCloseTo(512 * 4);
   });
 
+  it("keeps the axis pair perpendicular on an oblique face", () => {
+    // The distortion this mode exists to remove. Projecting u and v independently onto a
+    // sloped plane does not keep them at right angles: on a normal of (0.5, 0.5, 0.707)
+    // the projected pair has a dot product of 0.333, which shears the texture visibly.
+    // Every test here used axis-aligned faces, where the projection is a no-op, so the
+    // fault could not show.
+    // A tetrahedron with a corner at the origin: its fourth face has a normal of
+    // (1,1,1)/sqrt(3), which has a component along every base axis.
+    const sloped = insertSolids(probe(), [
+      {
+        shape: "convex",
+        faces: [
+          [[0, 0, 0], [0, 256, 0], [256, 0, 0]],
+          [[0, 0, 0], [256, 0, 0], [0, 0, 256]],
+          [[0, 0, 0], [0, 0, 256], [0, 256, 0]],
+          [[256, 0, 0], [0, 256, 0], [0, 0, 256]],
+        ],
+      },
+    ]);
+    const r = alignFaces(sloped.text, { solidIds: sloped.solidIds }, { mode: "face" });
+    expect(r.changed.length).toBeGreaterThan(0);
+
+    let oblique = 0;
+    for (const solid of read(r.text).filter((x) => sloped.solidIds.includes(x.id ?? -1))) {
+      for (const side of solid.sides) {
+        const u = side.uaxis!.axis;
+        const v = side.vaxis!.axis;
+        const n = side.plane!.normal;
+        expect(
+          Math.abs(u[0] * v[0] + u[1] * v[1] + u[2] * v[2]),
+          `solid ${solid.id}: axes are not perpendicular`,
+        ).toBeLessThan(1e-6);
+        // And both still lie in the face, or the texture is projected onto it rather than
+        // running along it.
+        expect(Math.abs(u[0] * n[0] + u[1] * n[1] + u[2] * n[2])).toBeLessThan(1e-6);
+        expect(Math.abs(v[0] * n[0] + v[1] * n[1] + v[2] * n[2])).toBeLessThan(1e-6);
+        if (Math.abs(n[0]) > 0.01 && Math.abs(n[2]) > 0.01) oblique++;
+      }
+    }
+    expect(oblique, "the fixture must actually have an oblique face").toBeGreaterThan(0);
+  });
+
+  it("refuses a repeat of zero rather than writing an infinite scale", () => {
+    // Divides through to Infinity, which lands in the .vmf as the literal text and makes
+    // parseTextureAxis call the axis unreadable -- a warning the tool's own check ignored.
+    expect(() =>
+      alignFaces(probe(), { solidIds: [FLOOR] }, { mode: "fit", repeat: [0, 1] }),
+    ).toThrow(/positive number of repeats/);
+    expect(() =>
+      alignFaces(probe(), { solidIds: [FLOOR] }, { mode: "fit", repeat: [1, -2] }),
+    ).toThrow(/positive number of repeats/);
+  });
+
   it("says out loud that fit assumed a texture size it could not read", () => {
     const r = alignFaces(probe(), { solidIds: [FLOOR] }, { mode: "fit" });
     expect(r.warnings.join(" ")).toMatch(/assumes a 512-texel texture/);
@@ -237,6 +291,31 @@ describe("alignFaces: the other modes", () => {
     const r = alignFaces(withDisp, {}, { mode: "world" });
     expect(r.warnings.join(" ")).toMatch(/displacement/);
     expect(r.changed.length).toBe(ALL_FACES - 1);
+  });
+});
+
+describe("resolveFaces on a map with no side ids", () => {
+  it("tells four walls apart when they are all the same distance from the origin", () => {
+    // A box centred on the origin has every wall at the same plane distance. Matching a
+    // side block to what the reader measured by distance alone therefore resolved all four
+    // to the first, and a material or facing selector edited the wrong faces.
+    const centred = insertSolids(probe(), [
+      { shape: "box", mins: [-64, -64, -64], maxs: [64, 64, 64] },
+    ]);
+    const noIds = centred.text
+      .split("\n")
+      .filter((l, i, all) => {
+        // Drop the id of every side block, keeping the solids' own.
+        const prev = all[i - 1]?.trim();
+        return !(l.trim().startsWith('"id"') && prev === "{" && all[i - 2]?.trim() === "side");
+      })
+      .join("\n");
+    expect(noIds).not.toBe(centred.text);
+
+    const faces = resolveFaces(noIds, { solidIds: centred.solidIds });
+    const normals = faces.map((f) => f.side.plane!.normal.map((n) => Math.round(n)).join(" "));
+    // Six faces, six different normals. Before the fix the four walls all reported one.
+    expect(new Set(normals).size).toBe(6);
   });
 });
 

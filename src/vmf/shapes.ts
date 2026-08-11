@@ -239,9 +239,39 @@ function arch(spec: ArchSpec): Expansion {
   if (spec.innerRadius >= spec.outerRadius) {
     throw new VmfBuildError("an arch's inner radius must be smaller than its outer radius");
   }
+  // These three are refused here rather than downstream. buildSolidText already catches
+  // them -- a degenerate shape has collinear points and it says so -- but "a face of this
+  // shape has three collinear points" does not tell a caller that their arch spans zero
+  // degrees. A refusal is worth as much as the input it names.
+  if (spec.arcDegrees === 0) {
+    throw new VmfBuildError("an arch of zero degrees spans nothing");
+  }
+  if (spec.height <= 0) {
+    throw new VmfBuildError(`an arch needs a positive height, not ${spec.height}`);
+  }
   const start = ((spec.startDegrees ?? 0) * Math.PI) / 180;
   const sweep = (spec.arcDegrees * Math.PI) / 180;
   const step = sweep / spec.segments;
+  // A segment is a quadrilateral through four corners, so past a quarter turn it stops
+  // describing the sector it was asked for and starts describing the complement: a
+  // 270-degree arch in one segment came out as the 90-degree wedge between its ends, and
+  // the independent checker accepted it because that wedge is a perfectly valid brush.
+  //
+  // This used to be a note claiming the shape "was refused" while the specs were returned
+  // anyway. A tool that says it refused something and did not is worse than one that
+  // simply got the geometry wrong, because the output cannot be trusted to report itself.
+  //
+  // Compared in absolute value: a negative arcDegrees is how a clockwise arch is written,
+  // and the first version of this check tested the signed step, so `arcDegrees: -270` with
+  // one segment sailed past it and built the very wedge the check exists to prevent.
+  if (Math.abs(step) > Math.PI / 2 + 1e-9) {
+    throw new VmfBuildError(
+      `each segment would span ${Math.round(Math.abs((step * 180) / Math.PI))} degrees, and ` +
+        `past a quarter turn a four-cornered segment describes the complement of the sector ` +
+        `rather than the sector. Use at least ` +
+        `${Math.ceil(Math.abs(spec.arcDegrees) / 90)} segments.`,
+    );
+  }
   const [cx, cy, cz] = spec.centre;
 
   const at = (angle: number, r: number, z: number): Vec3 =>
@@ -262,17 +292,14 @@ function arch(spec: ArchSpec): Expansion {
     specs.push({ shape: "convex", faces: band(bottom, top) });
   }
 
-  const notes = [
-    `${spec.segments} brushes. An arch is a ring of wedges, and every joint between two of ` +
-      `them is a plane in the tree -- make them func_detail unless the arch is part of the hull.`,
-  ];
-  if (step > Math.PI / 2) {
-    notes.push(
-      "a segment spanning more than a quarter turn is not convex, so this was refused " +
-        "before it could be written. Use more segments.",
-    );
-  }
-  return { specs, notes };
+  return {
+    specs,
+    notes: [
+      `${spec.segments} brushes. An arch is a ring of wedges, and every joint between two ` +
+        `of them is a plane in the tree -- make them func_detail unless the arch is part ` +
+        `of the hull.`,
+    ],
+  };
 }
 
 function sphere(spec: SphereSpec): Expansion {
@@ -281,6 +308,9 @@ function sphere(spec: SphereSpec): Expansion {
   }
   if (!Number.isInteger(spec.stacks) || spec.stacks < 2 || spec.stacks > 32) {
     throw new VmfBuildError(`a sphere needs between 2 and 32 stacks, not ${spec.stacks}`);
+  }
+  if (spec.radius <= 0) {
+    throw new VmfBuildError(`a sphere needs a positive radius, not ${spec.radius}`);
   }
   const [cx, cy, cz] = spec.centre;
   const specs: SolidSpec[] = [];
@@ -333,6 +363,9 @@ function torus(spec: TorusSpec): Expansion {
   }
   if (!Number.isInteger(spec.minorSides) || spec.minorSides < 3 || spec.minorSides > 32) {
     throw new VmfBuildError(`a torus tube needs between 3 and 32 sides, not ${spec.minorSides}`);
+  }
+  if (spec.minorRadius <= 0) {
+    throw new VmfBuildError(`a torus needs a tube with a radius, not ${spec.minorRadius}`);
   }
   if (spec.minorRadius >= spec.majorRadius) {
     throw new VmfBuildError(

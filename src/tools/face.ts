@@ -35,6 +35,15 @@ const selectorFrom = (args: {
   minArea?: number;
   all?: boolean;
 }): FaceSelector => {
+  // An empty material is not a criterion: matchesFace treats "" as falsy and matches
+  // every face, while the presence of the key was enough to satisfy the all:true guard.
+  // A default empty form value could therefore turn a scoped edit into a map-wide one.
+  if (args.material !== undefined && args.material.trim().length === 0) {
+    throw new Error(
+      "material is empty, which matches every face rather than none. Give a name, or pass " +
+        "all:true if a map-wide edit is what was meant.",
+    );
+  }
   const sel: FaceSelector = {
     ...(args.solidIds !== undefined ? { solidIds: args.solidIds } : {}),
     ...(args.material !== undefined ? { material: args.material } : {}),
@@ -192,6 +201,11 @@ export const alignFacesTool = defineTool({
   handler: (args, ctx) => {
     const path = resolveInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
+    if (args.repeat && (args.repeat[0] <= 0 || args.repeat[1] <= 0)) {
+      throw new Error(
+        `fit needs a positive number of repeats on both axes, not ${args.repeat.join(" and ")}`,
+      );
+    }
     const result = alignFaces(before, selectorFrom(args), {
       mode: args.mode as AlignMode,
       ...(args.scale !== undefined ? { scale: args.scale } : {}),

@@ -28,6 +28,9 @@ from typing import Any
 # A search that returns everything is not a search, and serialising 40 000 names through
 # the transport would cost more than the caller could use.
 DEFAULT_LIMIT = 100
+# Animation labels returned per model. A prop has one; a character can have hundreds, and
+# a caller asking about a prop should not pay for those.
+SEQUENCE_LIMIT = 64
 MAX_LIMIT = 1000
 
 
@@ -128,7 +131,20 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
     want_details = bool(req.get("details", False))
 
     if not pattern:
-        return {"error": "a search needs a pattern; an empty one would return the whole game"}
+        # Not a top-level `error`: callSidecar reads any truthy top-level `error` as the
+        # fault envelope and looks for `error.message`, so a string there reaches the caller
+        # as "unknown error" and this diagnostic is lost. The verb reports the problem in
+        # its own result instead.
+        return {
+            "gameDir": game_dir,
+            "mounted": False,
+            "mountError": None,
+            "pattern": pattern,
+            "kind": kind,
+            "total": 0,
+            "results": [],
+            "refused": "a search needs a pattern; an empty one would return the whole game",
+        }
 
     fsys, mount_error = _mount(game_dir)
     if fsys is None:
@@ -195,7 +211,7 @@ def model_info(req: dict[str, Any]) -> dict[str, Any]:
     game_dir = req.get("gameDir")
     rel = str(req.get("model", "")).replace("\\", "/").strip()
     if not rel:
-        return {"error": "no model given"}
+        return {"model": "", "mounted": False, "found": False, "refused": "no model given"}
     if not rel.lower().startswith("models/"):
         rel = f"models/{rel}"
     if not rel.lower().endswith(".mdl"):
@@ -218,12 +234,15 @@ def model_info(req: dict[str, Any]) -> dict[str, Any]:
             "note": "not in this game's content. Check the name, or the addon that ships it",
         }
     except Exception as exc:  # noqa: BLE001
+        # `readError` rather than `error`, for the same reason as above: a malformed model
+        # would otherwise reach the caller as "sidecar model_info: unknown error" with the
+        # diagnostic thrown away.
         return {
             "model": rel,
             "mounted": True,
             "mountError": None,
             "found": False,
-            "error": f"{type(exc).__name__}: {exc}",
+            "readError": f"{type(exc).__name__}: {exc}",
         }
 
     def _vec(v: Any) -> list[float] | None:
@@ -246,9 +265,14 @@ def model_info(req: dict[str, Any]) -> dict[str, Any]:
 
     # Labels only. srctools' Sequence reprs its bounding box and its event list, which
     # runs to a few hundred characters each and answers a question nobody asked.
+    # Counted before slicing. Reporting the length of the truncated list told a caller a
+    # model with 300 animations has exactly 64, with nothing to say the rest exist.
     sequences: list[str] = []
+    sequence_total = 0
     try:
-        sequences = [str(getattr(s, "label", s)) for s in getattr(mdl, "sequences", [])][:64]
+        labels = [str(getattr(s, "label", s)) for s in getattr(mdl, "sequences", [])]
+        sequence_total = len(labels)
+        sequences = labels[:SEQUENCE_LIMIT]
     except Exception:  # noqa: BLE001
         sequences = []
 
@@ -269,8 +293,9 @@ def model_info(req: dict[str, Any]) -> dict[str, Any]:
         "maxs": maxs,
         "size": size,
         "skinCount": len(skins),
-        "sequenceCount": len(sequences),
+        "sequenceCount": sequence_total,
         "sequences": sequences,
+        "sequencesTruncated": sequence_total > len(sequences),
         "materials": textures,
         "note": (
             "bounds are the model's own hull, around its origin. A prop placed at a floor's "

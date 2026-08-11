@@ -70,7 +70,17 @@ export function applySplices(source: string, splices: readonly Splice[]): string
 
   // Push order decides ties, so remember it before sorting.
   const ordered = splices.map((splice, index) => ({ splice, index }));
-  ordered.sort((a, b) => b.splice.start - a.splice.start || b.index - a.index);
+  const isRange = (s: Splice): boolean => s.end > s.start;
+  ordered.sort(
+    (a, b) =>
+      b.splice.start - a.splice.start ||
+      // At one offset, a replacement is applied before an insertion sitting on its start
+      // boundary. The other way round the insertion lands inside the range that is about
+      // to be removed and disappears with it: deleting [3,6) of "abcdefghij" while
+      // inserting "!" at 3 gave "abcfghij" instead of "abc!ghij".
+      (isRange(b.splice) ? 1 : 0) - (isRange(a.splice) ? 1 : 0) ||
+      b.index - a.index,
+  );
 
   // Only ranges that actually replace bytes can collide; an insertion occupies none.
   const spans = ordered.filter((o) => o.splice.end > o.splice.start).map((o) => o.splice);

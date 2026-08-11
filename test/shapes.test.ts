@@ -165,6 +165,65 @@ describe("arch", () => {
     }
   });
 
+  it("refuses a segment past a quarter turn, instead of building its complement", () => {
+    // A segment is a quadrilateral through four corners, so beyond 90 degrees it describes
+    // the sector between its ends rather than the sector asked for. Measured: a 270-degree
+    // arch in one segment came out with corners at 0 and -90 degrees -- the complementary
+    // wedge -- and everyBrushIsValid accepted it, because that wedge is a valid brush.
+    expect(() =>
+      expandShape({
+        shape: "arch",
+        centre: [0, 0, 0],
+        innerRadius: 64,
+        outerRadius: 128,
+        height: 32,
+        arcDegrees: 270,
+        segments: 1,
+      }),
+    ).toThrow(/quarter turn/);
+
+    // And the same arch written the other way round. A negative arcDegrees is how a
+    // clockwise arch is spelled, and testing the signed step let it straight through.
+    expect(() =>
+      expandShape({
+        shape: "arch",
+        centre: [0, 0, 0],
+        innerRadius: 64,
+        outerRadius: 128,
+        height: 32,
+        arcDegrees: -270,
+        segments: 1,
+      }),
+    ).toThrow(/quarter turn/);
+
+    // A clockwise arch with enough segments is fine.
+    everyBrushIsValid(
+      build({
+        shape: "arch",
+        centre: [0, 0, 0],
+        innerRadius: 64,
+        outerRadius: 128,
+        height: 32,
+        arcDegrees: -180,
+        segments: 4,
+      }).solids,
+    );
+
+    // Exactly a quarter turn is the common case -- a full ring in four segments -- and
+    // must still work.
+    const ring = build({
+      shape: "arch",
+      centre: [0, 0, 0],
+      innerRadius: 64,
+      outerRadius: 128,
+      height: 32,
+      arcDegrees: 360,
+      segments: 4,
+    });
+    expect(ring.solids).toHaveLength(4);
+    everyBrushIsValid(ring.solids);
+  });
+
   it("refuses an inner radius that is not inside the outer one", () => {
     expect(() =>
       expandShape({
@@ -178,6 +237,54 @@ describe("arch", () => {
       }),
     ).toThrow(/inner radius/);
   });
+});
+
+describe("shapes that name the input they refuse", () => {
+  /**
+   * These are all caught downstream anyway -- a degenerate shape has collinear points and
+   * buildSolidText says so -- so nothing bad was ever written. What was missing is the
+   * diagnosis: "a face of this shape has three collinear points" does not tell a caller
+   * that their arch spans zero degrees. Found by auditing this file for the class of fault
+   * Codex kept finding: a refusal written in one direction only.
+   */
+  const refusals: Array<[string, CompoundSpec, RegExp]> = [
+    [
+      "an arch of no width",
+      { shape: "arch", centre: [0, 0, 0], innerRadius: 64, outerRadius: 128, height: 32, arcDegrees: 0, segments: 1 },
+      /zero degrees/,
+    ],
+    [
+      "an arch of no height",
+      { shape: "arch", centre: [0, 0, 0], innerRadius: 64, outerRadius: 128, height: 0, arcDegrees: 90, segments: 1 },
+      /positive height/,
+    ],
+    [
+      "an arch below the ground",
+      { shape: "arch", centre: [0, 0, 0], innerRadius: 64, outerRadius: 128, height: -32, arcDegrees: 90, segments: 1 },
+      /positive height/,
+    ],
+    [
+      "a torus with no tube",
+      { shape: "torus", centre: [0, 0, 0], majorRadius: 128, minorRadius: 0, majorSegments: 8, minorSides: 8 },
+      /a radius/,
+    ],
+    [
+      "a sphere of no size",
+      { shape: "sphere", centre: [0, 0, 0], radius: 0, sides: 8, stacks: 4 },
+      /positive radius/,
+    ],
+    [
+      "a sphere of negative size",
+      { shape: "sphere", centre: [0, 0, 0], radius: -64, sides: 8, stacks: 4 },
+      /positive radius/,
+    ],
+  ];
+
+  for (const [name, spec, message] of refusals) {
+    it(`refuses ${name}, and says which number is wrong`, () => {
+      expect(() => expandShape(spec)).toThrow(message);
+    });
+  }
 });
 
 describe("sphere", () => {
