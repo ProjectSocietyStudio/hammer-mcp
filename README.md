@@ -218,6 +218,7 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_map_extents` | `map` | | Étendue réelle du monde (lump 14), en unités et en mètres |
 | `read_map_geometry` | `map` | | Contenu de chaque lump et marge restante avant le plafond de vbsp |
 | `read_prop_survey` | `map` | | Inventaire des props, et ceux qui sont `prop_dynamic` pour rien |
+| `read_pakfile` | `map` | | Contenu du pakfile embarqué (lump 40), et les preuves de compilation qu'il porte |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
@@ -232,9 +233,22 @@ distingue une mesure d'une valeur affichée avec aplomb.
 | Étendue du monde (lump 14) | mins `(-15424, -15936, -6208)`, **802,6 m** de portée, 639 338 m² | `rvehicles` §624 avait lu le même lump à la main : « la map fait 802 mètres », mêmes mins |
 | `prop_dynamic` | **59** | `r-estate` les avait comptés par `Entity:isDoor()` en jeu |
 | `mapRevision` | **10863** | notre lecteur TS, et srctools, séparément |
+| Pakfile embarqué | **15 258 fichiers**, 1001,7 Mo | le lump 40 fait 1004 Mo au jalon 1 |
 
 L'unité : **1 unité Hammer = 1 pouce = 0,0254 m**. Ce n'est pas une convention choisie, c'est le
 rapport qui fait tomber la carte sur les 802 m relevés à la main.
+
+### Le pakfile dit comment la carte a été compilée
+
+`read_pakfile` ouvre le lump 40 — un ZIP ordinaire — et deux de ses comptes sont des **preuves
+récupérables du fichier seul**, là où il faudrait sinon croire la mémoire de quelqu'un sur les
+réglages de compilation :
+
+- **345 `c-*.vtf`** → `buildcubemaps` a bien été exécuté ;
+- **3983 `.vhv`** → l'éclairage par sommet des props statiques a été cuit (`-StaticPropLighting`).
+
+Le reste de l'inventaire : 2840 `.vmt`, 2616 `.vtf`, 939 `.mdl`, 187 `.wav` et 63 `.mp3` — dont
+trois pistes de club de plus de 10 Mo chacune — et un `.ain`, le nodegraph des NPC.
 
 ### Ce que la carte de production révèle sur sa propre chaîne de compilation
 

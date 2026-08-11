@@ -7,7 +7,13 @@ import { readGeometry } from "../src/bsp/geometry.js";
 import { METRES_PER_UNIT, readModels, worldExtents } from "../src/bsp/models.js";
 import type { Config } from "../src/config.js";
 import type { ToolContext } from "../src/mcp/registry.js";
-import { readMapExtents, readMapGeometry, readPropSurvey } from "../src/tools/measure.js";
+import { pythonPath } from "../src/sidecar/client.js";
+import {
+  readMapExtents,
+  readMapGeometry,
+  readPakfile,
+  readPropSurvey,
+} from "../src/tools/measure.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const PROBE = join(FIXTURES, "hmcp_probe.bsp");
@@ -17,9 +23,18 @@ const NYCITY = join(
   "srcds/garrysmod/addons/rp_nycity_day/maps/rp_nycity_day.bsp",
 );
 const hasProd = existsSync(NYCITY);
+const hasSidecar = existsSync(
+  pythonPath({ stateDir: join(REPO, ".hammer-mcp") } as unknown as Config),
+);
 
+// stateDir must be the real one: it is where the sidecar venv lives, and a context
+// pointing elsewhere makes sidecar-backed tools fail while `hasSidecar` still says yes.
 const ctx = {
-  config: { repoRoot: FIXTURES, stateDir: FIXTURES, toolAllowlist: [] } as unknown as Config,
+  config: {
+    repoRoot: REPO,
+    stateDir: join(REPO, ".hammer-mcp"),
+    toolAllowlist: [],
+  } as unknown as Config,
   audit: { record: () => undefined },
 } as unknown as ToolContext;
 
@@ -124,4 +139,35 @@ describe("declared output schemas match the measure handlers", () => {
     const out = await readPropSurvey.handler({ path: NYCITY, limit: 5 }, ctx);
     expect(() => z.object(readPropSurvey.outputSchema!).parse(out)).not.toThrow();
   });
+});
+
+describe("pakfile audit", () => {
+  it.skipIf(!hasSidecar)("reads the probe's pakfile through the sidecar", async () => {
+    const out = (await readPakfile.handler({ path: PROBE, limit: 10 }, ctx)) as {
+      fileCount: number;
+      cubemapTextures: number;
+    };
+    expect(out.fileCount).toBeGreaterThan(0);
+    // The probe has only vbsp's default cubemap placeholder: the compile log said so
+    // ("Skybox vtf files ... weren't compiled with the same size texture"), and no
+    // buildcubemaps was ever run on it.
+    expect(out.cubemapTextures).toBe(0);
+    expect(() => z.object(readPakfile.outputSchema!).parse(out)).not.toThrow();
+  });
+
+  it.skipIf(!hasSidecar || !hasProd)("finds the shipped map's baked lighting proof", async () => {
+    // Both counts are evidence about how the map was compiled, recoverable from the
+    // file alone rather than from anyone's memory of the compile settings.
+    const out = (await readPakfile.handler({ path: NYCITY, limit: 3 }, ctx)) as {
+      fileCount: number;
+      cubemapTextures: number;
+      staticPropLighting: number;
+    };
+    expect(out.fileCount).toBe(15258);
+    expect(out.cubemapTextures).toBeGreaterThan(0);
+    expect(out.staticPropLighting).toBeGreaterThan(0);
+    // Explicit: opening a 1 GB pakfile takes ~1.3 s alone and more under a parallel
+    // run. On the 5 s default this passed in isolation and failed in the full suite,
+    // which is the worst kind of flake -- it accuses the code rather than the clock.
+  }, 60_000);
 });

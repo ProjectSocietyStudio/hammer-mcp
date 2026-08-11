@@ -3,6 +3,7 @@ import { readEntityLump } from "../bsp/entities.js";
 import { readGeometry } from "../bsp/geometry.js";
 import { METRES_PER_UNIT, readModels, worldExtents } from "../bsp/models.js";
 import { defineTool } from "../mcp/registry.js";
+import { callSidecar } from "../sidecar/client.js";
 import { resolveInput } from "./paths.js";
 
 const VEC3 = z.array(z.number()).length(3);
@@ -212,4 +213,72 @@ export const readPropSurvey = defineTool({
   },
 });
 
-export const measureTools = [readMapExtents, readMapGeometry, readPropSurvey];
+interface PakfileReply {
+  path: string;
+  fileCount: number;
+  totalBytes: number;
+  byExtension: Record<string, number>;
+  cubemapTextures: number;
+  returned: number;
+  largest: Array<{ name: string; bytes: number; compressed: number }>;
+}
+
+export const readPakfile = defineTool({
+  name: "read_pakfile",
+  description:
+    "What a compiled map actually ships inside it: lump 40 is a plain ZIP, and this lists " +
+    "its contents by extension and by size. Use it to audit packing before release. Two " +
+    "counts answer questions you would otherwise have to trust the compile settings for: " +
+    "c-*.vtf files prove buildcubemaps was run, and .vhv files prove static prop lighting " +
+    "was baked. Needs the Python sidecar; see health.",
+  realm: "map",
+  inputSchema: {
+    path: z.string().describe("Path to the .bsp, absolute or relative to the repo root."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .default(50)
+      .describe("How many of the largest entries to list."),
+  },
+  outputSchema: {
+    path: z.string(),
+    fileCount: z.number(),
+    totalBytes: z.number(),
+    megabytes: z.number(),
+    byExtension: z.record(z.number()),
+    cubemapTextures: z
+      .number()
+      .describe("c-*.vtf entries: machine-checkable proof buildcubemaps ran."),
+    staticPropLighting: z
+      .number()
+      .describe(".vhv entries: per-vertex prop lighting, baked by vrad -StaticPropLighting."),
+    returned: z.number(),
+    largest: z.array(
+      z.object({ name: z.string(), bytes: z.number(), compressed: z.number() }),
+    ),
+  },
+  handler: async (args, ctx) => {
+    const path = resolveInput(args.path, ctx.config);
+    const r = await callSidecar<PakfileReply>(
+      "pakfile",
+      { path, limit: args.limit },
+      ctx.config,
+      300_000,
+    );
+    return {
+      path: r.path,
+      fileCount: r.fileCount,
+      totalBytes: r.totalBytes,
+      megabytes: Math.round((r.totalBytes / 1048576) * 10) / 10,
+      byExtension: r.byExtension,
+      cubemapTextures: r.cubemapTextures,
+      staticPropLighting: r.byExtension["vhv"] ?? 0,
+      returned: r.returned,
+      largest: r.largest,
+    };
+  },
+});
+
+export const measureTools = [readMapExtents, readMapGeometry, readPropSurvey, readPakfile];
