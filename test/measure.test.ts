@@ -55,11 +55,26 @@ describe("lump geometry", () => {
     const g = readGeometry(PROBE);
     const models = g.lumps.find((l) => l.name === "MODELS");
     expect(models?.count).toBe(1);
+    // A missing count must always be explained, and by one of the reasons this reader
+    // actually has. Enumerated rather than loosened: the earlier version accepted "no note
+    // at all", which is how a fifth reason would slip in unnoticed.
+    const REASONS = [
+      /not a multiple of the expected/, // record size does not divide the lump
+      /compressed/, //                     LZMA, so the length is not the data
+      /is not one this reader knows/, //   a lump version with no known record size
+      /cannot derive from lump length/, // a ceiling counting something we do not count
+    ];
     for (const l of g.lumps) {
-      if (l.count === null && l.bytes > 0) {
-        // Either we never claimed a record size, or we said why the count is missing.
-        expect(l.note === undefined || l.note.includes("multiple")).toBe(true);
-      }
+      if (l.count !== null || l.bytes === 0) continue;
+      const explained = l.note !== undefined && REASONS.some((r) => r.test(l.note as string));
+      // No record size was ever claimed for this lump: nothing to explain.
+      const neverClaimed = l.note === undefined && l.limit === undefined;
+      // Or the ceiling is measured in bytes and was evaluated, so no record count is owed.
+      const answeredInBytes = l.usedFraction !== undefined;
+      expect(
+        explained || neverClaimed || answeredInBytes,
+        `lump ${l.name}: unexplained missing count`,
+      ).toBe(true);
     }
   });
 

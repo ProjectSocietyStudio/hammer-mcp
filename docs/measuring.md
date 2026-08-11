@@ -68,6 +68,35 @@ every day. So it is not a broken map — **it is evidence that the compilers whi
 that ceiling.** The tool reports it in those terms rather than crying error, because "this file
 violates a constant I read in a header" is what it knows, and "this map is broken" is not.
 
+## A second ceiling, and a limit that was never once applied
+
+Found on 11/08/2026 by a second reader running **every** criterion instead of the interesting
+ones.
+
+`LIGHTING` on the production map is **44,343,028 bytes against `MAX_MAP_LIGHTING` = 0x1000000
+(16 MiB): 264%.** This reader had that number all afternoon and never compared it.
+
+Verified LDR-only first — lumps 53, 54 and 58 are all empty — because "HDR stores two sets of
+lighting" would have been a tidy explanation and a wrong one.
+
+It matters beyond one more number. `MODELS` and `LIGHTING` share **no code path in vbsp/vrad and
+no struct**, so a single raised constant cannot account for both. The evidence that this map's
+compilers lift the stock ceilings goes from one exceeded limit to two independent ones.
+
+For calibration, the same ceiling on a map Valve shipped: `gm_construct` sits at **73.2%**. Tight
+even for an official map, which is what makes 264% legible.
+
+**The cause was a category error in this reader.** Ceilings were only ever applied to record
+counts, and not every `MAX_MAP_*` counts records: `MAX_MAP_LIGHTING` and `MAX_MAP_VISIBILITY` are
+byte sizes, and so is `MAX_MAP_TEXDATA_STRING_DATA` — which had carried `limit: 256000` since the
+beginning with no record size beside it, so its ceiling was **declared and never once evaluated**.
+A limit this tool claimed to watch and did not.
+
+Specs now say what their ceiling counts. And where a ceiling genuinely cannot be reached from a
+lump's length — `MAX_MAP_ENTITIES` counts entities, this reader measures bytes — the report says
+so and names the tool that can answer, rather than carrying a limit with no fraction and no
+explanation. That silence is exactly how the first one hid.
+
 ## Sightlines, and the three ways of being wrong before getting there
 
 `read_sightlines` walks the BSP tree exactly as the engine does for a trace — the recursion is
