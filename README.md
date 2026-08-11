@@ -119,6 +119,18 @@ que les deux flags ne servent à rien.
 `cull` sur la chaîne stock est **refusé**, pas ignoré : vbsp accepte les options inconnues en
 silence, et une compile qui annonce un succès sans avoir rien élagué est pire qu'une erreur.
 
+**La FGD des compilateurs `++` rejoint le lint.** `toolsplusplus.fgd` déclare cinq classes que
+`garrysmod.fgd` ignore : `func_detail_illusionary`, `func_detail_blocker`, `func_nobevel`,
+`light_directional`, `light_projected`. Sans elle, une carte qui les utilise récolte un
+`unknown-classname` par occurrence — exactement le faux positif qu'avaient produit les entités Lua
+du dépôt, depuis une autre source manquante.
+
+Elle n'est chargée **que si le fichier est là**, et `read_vmf_lint` renvoie `fgdsLoaded` : un
+schéma qui s'élargit en silence est un lint qui cesse d'attraper en silence. `hammerplusplus_fgd.fgd`,
+livré avec l'éditeur, est délibérément écarté — il redéclare surtout des classes existantes pour
+leur ajouter des helpers d'affichage, donc le fusionner changerait les keyvalues acceptées
+d'entités que le jeu définit déjà.
+
 **Deux flags que la veille annonçait et qui ne tiennent pas ici** :
 
 - **`-allowdynamicpropsasstatic` ne convertit rien.** Il lève le refus de vbsp sur un

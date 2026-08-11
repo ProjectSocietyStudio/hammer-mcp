@@ -61,9 +61,23 @@ def _make_helpers_lenient() -> collections.Counter[str]:
     return tolerated
 
 
-def load_fgd(bin_dir: str, name: str = "garrysmod.fgd") -> tuple[Any, dict[str, int]]:
-    """Parses the game FGD once per process and caches it."""
-    key = f"{bin_dir}::{name}"
+def load_fgds(
+    bin_dir: str, names: list[str] | tuple[str, ...] = ("garrysmod.fgd",)
+) -> tuple[Any, dict[str, int]]:
+    """Parses the FGDs into one schema, once per process, and caches the result.
+
+    More than one because the game's FGD is not the only source of truth about what a
+    class is. The Hammer++ compilers add their own entities -- `func_detail_illusionary`,
+    `func_nobevel`, `light_projected` -- and a lint that does not know them calls a map
+    using them wrong. Merging is what srctools does naturally: parsing several files into
+    the same FGD object unions their classes, and `apply_bases` runs once at the end so
+    inheritance resolves across all of them.
+
+    `names` are paths relative to `bin_dir`, so `win64/toolsplusplus.fgd` reaches the ++
+    FGD without anything having to be moved next to the game's own.
+    """
+    names = tuple(names)
+    key = f"{bin_dir}::{'|'.join(names)}"
     if key in _CACHE:
         return _CACHE[key]
 
@@ -73,7 +87,8 @@ def load_fgd(bin_dir: str, name: str = "garrysmod.fgd") -> tuple[Any, dict[str, 
     tolerated = _make_helpers_lenient()
     fs = RawFileSystem(bin_dir)
     fgd = FGD()
-    fgd.parse_file(fs, fs[name], eval_bases=True)
+    for name in names:
+        fgd.parse_file(fs, fs[name], eval_bases=True)
     fgd.apply_bases()
 
     result = (fgd, dict(tolerated))
