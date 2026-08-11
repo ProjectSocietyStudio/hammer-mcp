@@ -1,4 +1,4 @@
-import { readHeader } from "./header.js";
+import { LUMP_NAMES, readHeader } from "./header.js";
 import type { BspHeader } from "./header.js";
 
 /**
@@ -15,46 +15,45 @@ import type { BspHeader } from "./header.js";
  */
 export interface LumpSpec {
   index: number;
-  name: string;
   bytes?: number;
   limit?: number;
   limitName?: string;
 }
 
 export const LUMP_SPECS: readonly LumpSpec[] = [
-  { index: 0, name: "ENTITIES", limit: 8192, limitName: "MAX_MAP_ENTITIES" },
-  { index: 1, name: "PLANES", bytes: 20, limit: 65536, limitName: "MAX_MAP_PLANES" },
-  { index: 2, name: "TEXDATA", bytes: 32, limit: 2048, limitName: "MAX_MAP_TEXDATA" },
-  { index: 3, name: "VERTEXES", bytes: 12, limit: 65536, limitName: "MAX_MAP_VERTS" },
-  { index: 4, name: "VISIBILITY" },
-  { index: 5, name: "NODES", bytes: 32, limit: 65536, limitName: "MAX_MAP_NODES" },
-  { index: 6, name: "TEXINFO", bytes: 72, limit: 12288, limitName: "MAX_MAP_TEXINFO" },
-  { index: 7, name: "FACES", bytes: 56, limit: 65536, limitName: "MAX_MAP_FACES" },
-  { index: 8, name: "LIGHTING" },
-  { index: 9, name: "OCCLUSION" },
-  { index: 10, name: "LEAFS", limit: 65536, limitName: "MAX_MAP_LEAFS" },
-  { index: 11, name: "FACEIDS" },
-  { index: 12, name: "EDGES", bytes: 4, limit: 256000, limitName: "MAX_MAP_EDGES" },
-  { index: 13, name: "SURFEDGES", bytes: 4, limit: 512000, limitName: "MAX_MAP_SURFEDGES" },
-  { index: 14, name: "MODELS", bytes: 48, limit: 1024, limitName: "MAX_MAP_MODELS" },
-  { index: 15, name: "WORLDLIGHTS", bytes: 88, limit: 8192, limitName: "MAX_MAP_WORLDLIGHTS" },
-  { index: 16, name: "LEAFFACES", bytes: 2, limit: 65536, limitName: "MAX_MAP_LEAFFACES" },
-  { index: 17, name: "LEAFBRUSHES", bytes: 2, limit: 65536, limitName: "MAX_MAP_LEAFBRUSHES" },
-  { index: 18, name: "BRUSHES", bytes: 12, limit: 8192, limitName: "MAX_MAP_BRUSHES" },
-  { index: 19, name: "BRUSHSIDES", bytes: 8, limit: 65536, limitName: "MAX_MAP_BRUSHSIDES" },
-  { index: 20, name: "AREAS", bytes: 8, limit: 256, limitName: "MAX_MAP_AREAS" },
-  { index: 21, name: "AREAPORTALS", bytes: 12, limit: 1024, limitName: "MAX_MAP_AREAPORTALS" },
-  { index: 22, name: "DISPINFO", bytes: 176, limit: 2048, limitName: "MAX_MAP_DISPINFO" },
-  { index: 23, name: "ORIGINALFACES", bytes: 56 },
-  { index: 26, name: "DISP_VERTS", bytes: 20 },
-  { index: 35, name: "GAME_LUMP" },
-  { index: 40, name: "PAKFILE" },
-  { index: 42, name: "CUBEMAPS", bytes: 16, limit: 1024, limitName: "MAX_MAP_CUBEMAPSAMPLES" },
-  { index: 43, name: "TEXDATA_STRING_DATA", limit: 256000, limitName: "MAX_MAP_TEXDATA_STRING_DATA" },
-  { index: 44, name: "TEXDATA_STRING_TABLE", bytes: 4, limit: 65536 },
-  { index: 45, name: "OVERLAYS", bytes: 352, limit: 512, limitName: "MAX_MAP_OVERLAYS" },
-  { index: 53, name: "LIGHTING_HDR" },
-  { index: 58, name: "FACES_HDR", bytes: 56 },
+  { index: 0, limit: 8192, limitName: "MAX_MAP_ENTITIES" },
+  { index: 1, bytes: 20, limit: 65536, limitName: "MAX_MAP_PLANES" },
+  { index: 2, bytes: 32, limit: 2048, limitName: "MAX_MAP_TEXDATA" },
+  { index: 3, bytes: 12, limit: 65536, limitName: "MAX_MAP_VERTS" },
+  { index: 4 },
+  { index: 5, bytes: 32, limit: 65536, limitName: "MAX_MAP_NODES" },
+  { index: 6, bytes: 72, limit: 12288, limitName: "MAX_MAP_TEXINFO" },
+  { index: 7, bytes: 56, limit: 65536, limitName: "MAX_MAP_FACES" },
+  { index: 8 },
+  { index: 9 },
+  { index: 10, limit: 65536, limitName: "MAX_MAP_LEAFS" },
+  { index: 11 },
+  { index: 12, bytes: 4, limit: 256000, limitName: "MAX_MAP_EDGES" },
+  { index: 13, bytes: 4, limit: 512000, limitName: "MAX_MAP_SURFEDGES" },
+  { index: 14, bytes: 48, limit: 1024, limitName: "MAX_MAP_MODELS" },
+  { index: 15, bytes: 88, limit: 8192, limitName: "MAX_MAP_WORLDLIGHTS" },
+  { index: 16, bytes: 2, limit: 65536, limitName: "MAX_MAP_LEAFFACES" },
+  { index: 17, bytes: 2, limit: 65536, limitName: "MAX_MAP_LEAFBRUSHES" },
+  { index: 18, bytes: 12, limit: 8192, limitName: "MAX_MAP_BRUSHES" },
+  { index: 19, bytes: 8, limit: 65536, limitName: "MAX_MAP_BRUSHSIDES" },
+  { index: 20, bytes: 8, limit: 256, limitName: "MAX_MAP_AREAS" },
+  { index: 21, bytes: 12, limit: 1024, limitName: "MAX_MAP_AREAPORTALS" },
+  { index: 22, bytes: 176, limit: 2048, limitName: "MAX_MAP_DISPINFO" },
+  { index: 23, bytes: 56 },
+  { index: 26, bytes: 20 },
+  { index: 35 },
+  { index: 40 },
+  { index: 42, bytes: 16, limit: 1024, limitName: "MAX_MAP_CUBEMAPSAMPLES" },
+  { index: 43, limit: 256000, limitName: "MAX_MAP_TEXDATA_STRING_DATA" },
+  { index: 44, bytes: 4, limit: 65536 },
+  { index: 45, bytes: 352, limit: 512, limitName: "MAX_MAP_OVERLAYS" },
+  { index: 53 },
+  { index: 58, bytes: 56 },
 ];
 
 export interface LumpReport {
@@ -109,7 +108,8 @@ export function readGeometry(path: string): GeometryReport {
 
     const report: LumpReport = {
       index: spec.index,
-      name: spec.name,
+      // Never a second hand-written list: one table, in header.ts, read from bspfile.h.
+      name: LUMP_NAMES[spec.index] ?? `LUMP_${spec.index}`,
       bytes: lump.length,
       megabytes: Math.round((lump.length / 1048576) * 100) / 100,
       count,

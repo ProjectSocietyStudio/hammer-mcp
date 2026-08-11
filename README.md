@@ -114,7 +114,7 @@ from and whether a file was read; `health` reports it. See
 |---|---|---|---|
 | `health` | `local` | | State of the toolchain: game profile, binaries, FGDs, Wine, sidecar |
 | `read_source_games` | `local` | | Source games installed here, read from Steam and from `gameinfo.txt` |
-| `read_bsp_info` | `map` | | Header of a `.bsp`: ident, version, mapRevision, all 64 lumps |
+| `read_bsp_info` | `map` | | Header of a `.bsp`: ident, version, mapRevision, all 64 lumps, and whether vrad produced HDR |
 | `read_bsp_entities` | `map` | | Entities of lump 0, filtered and paginated, with a classname histogram |
 | `read_map_extents` | `map` | | Real world extents (lump 14), in Hammer units and in metres |
 | `read_map_geometry` | `map` | | How full each lump is, and how much room is left before vbsp's ceiling |

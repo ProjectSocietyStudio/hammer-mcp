@@ -121,6 +121,40 @@ The door counts land back on milestone 1's histogram, and the magnitudes hold up
 slab, a soundscape covers a room. **These are bounding boxes, not real volumes** — an L-shaped room
 measures as its enclosing rectangle, and the tool says so.
 
+## A lump named wrong is worse than a lump unnamed
+
+Found by a second reader on 11/08/2026, on three maps this repository had never seen.
+
+`read_bsp_info` labelled lump 56 `LIGHTING_HDR`. In `src/public/bspfile.h`, 56 is
+`LUMP_LEAF_AMBIENT_LIGHTING` and `LUMP_LIGHTING_HDR` is **53**. The two are not
+interchangeable: 56 carries per-visleaf ambient lighting and is present in LDR maps as well,
+so anyone auditing whether a map was compiled with HDR read the answer backwards, on every
+LDR map, with nothing to flag it.
+
+The production map is the discriminating case, and it was here all along:
+
+| Lump | | Bytes |
+|---|---|---|
+| 56 | `LEAF_AMBIENT_LIGHTING` | 3,548,076 |
+| 55 | `LEAF_AMBIENT_LIGHTING_HDR` | 663,908 |
+| 53 | `LIGHTING_HDR` | **0** |
+| 54 | `WORLDLIGHTS_HDR` | **0** |
+| 58 | `FACES_HDR` | **0** |
+
+`rp_nycity_day` has no HDR lighting at all. Under the old label it reported
+"LIGHTING_HDR: 3.5 MB". And note lump 55, whose name ends in `HDR` and which is **non-empty
+on this LDR map** — so neither ambient lump can answer the question. Only 53, 54 and 58 can,
+which is what `hdrLighting` now reads.
+
+**The cause was not the typo.** Two hand-maintained lump-name tables existed, one in
+`bsp/header.ts` and one in `bsp/geometry.ts`, and they disagreed: geometry had 53 right while
+header had 56 wrong. Nothing compared them, so the two tools built on them answered
+differently and neither was checked against the other. There is one table now, and
+`LUMP_SPECS` carries no name at all.
+
+The test asserts the names against a list written out from `bspfile.h` rather than derived
+from the table, because a table checked against itself checks nothing.
+
 ## The guard that stops a number being invented
 
 A wrong structure size would produce a plausible, wrong count. So `read_map_geometry` only reports
