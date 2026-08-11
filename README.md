@@ -347,6 +347,36 @@ chiffres sans le savoir.
 machine est en **1.8**, trop ancien — mais **17 et 21 sont installés** (`/usr/lib/jvm/`). Tout appel
 devra donc pointer une JVM explicitement plutôt que se fier au `java` du PATH.
 
+## Une installation Source se décrit elle-même
+
+Mesuré le 11/08/2026. Généraliser au-delà de GMod semblait demander une table de jeux écrite à la
+main : nom de la FGD, dossier du mod, dossier des binaires, appid. **Quatre affirmations par jeu que
+personne n'aurait vérifiées** — et une FGD fausse produit un lint qui accuse à tort, sans que rien
+ne le signale.
+
+Les quatre sont sur le disque :
+
+| Fichier | Ce qu'il déclare |
+|---|---|
+| `steamapps/libraryfolders.vdf` | où sont les bibliothèques |
+| `steamapps/appmanifest_<id>.acf` | `appid`, `name`, `installdir`, et la branche bêta (`UserConfig.BetaKey`) |
+| `<jeu>/<mod>/gameinfo.txt` | `game`, `FileSystem.SteamAppId`, **`GameData`** — la FGD — et `InstancePath` |
+
+Et **aucun parseur n'a été nécessaire** : les trois sont du KeyValues, la grammaire que `src/kv/`
+lexe déjà pour les `.vmf` et le lump d'entités — mots nus, chaînes entre guillemets, commentaires
+`//`. Vérifié en lisant les vrais fichiers. Le commentaire `// Just to shut up vbsp.exe` que Valve
+laisse juste avant `GameData` dans le `gameinfo.txt` de GMod est d'ailleurs le contrôle négatif du
+lexer : sans gestion des `//`, la FGD est avalée.
+
+`read_source_games` rend tout cela. Ce qu'il **ne dit pas** est aussi net : jamais qu'un binaire
+s'exécutera sous Wine (seule la porte A l'a prouvé, pour un jeu), jamais une branche de moteur
+devinée, et jamais de repli sur le `bin/` d'un autre jeu — plusieurs jeux Source récents livrent
+leurs outils dans une application séparée, et `dir: null` est la réponse honnête.
+
+Le piège qui coûte une heure si on ne le connaît pas : sur Debian et Ubuntu, `~/.steam/steam` est
+un **lien symbolique** vers `~/.steam/debian-installation`. Sans déduplication par `realpath`,
+chaque jeu est découvert deux fois.
+
 ## Outils
 
 Convention `gmod-mcp` : `read_*` observe, `run_*` exécute, verbe_nom mute, snake_case. Les outils
@@ -356,6 +386,7 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | Outil | Realm | Gardé | Ce qu'il fait |
 |---|---|---|---|
 | `health` | `local` | | État de la chaîne d'outils : `gmodBin`, binaires présents, FGD, version de wine |
+| `read_source_games` | `local` | | Les jeux Source installés, lus dans les fichiers de Steam et des jeux eux-mêmes |
 | `read_bsp_info` | `map` | | En-tête d'un `.bsp` : version, `mapRevision`, les 64 lumps |
 | `read_bsp_entities` | `map` | | Entités du lump 0, filtrées et paginées, avec histogramme |
 | `read_lump_patch` | `map` | | Décode un `.lmp` et ses entités |
