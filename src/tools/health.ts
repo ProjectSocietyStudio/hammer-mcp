@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { defineTool } from "../mcp/registry.js";
 import { run } from "../proc/run.js";
+import { probeSidecar } from "../sidecar/client.js";
 import { VERSION } from "../version.js";
 
 /** The Source tools this server drives, all of them Windows binaries. */
@@ -13,8 +14,8 @@ export const health = defineTool({
   description:
     "State of the toolchain this server depends on: repo root, the GMod bin directory " +
     "(which ships with the client, not with srcds), which compilers and .fgd files are " +
-    "present, and whether the Wine or Proton backend can be executed. Start here when a " +
-    "tool reports something missing.",
+    "present, whether the Wine or Proton backend can be executed, and whether the Python " +
+    "sidecar (srctools) is installed. Start here when a tool reports something missing.",
   realm: "local",
   inputSchema: {},
   handler: async (_args, ctx) => {
@@ -23,6 +24,7 @@ export const health = defineTool({
     const binDirExists = existsSync(binDir);
 
     const wine = await run("wine", ["--version"], { timeoutMs: 10_000 }).catch(() => null);
+    const sidecar = await probeSidecar(config);
 
     return {
       version: VERSION,
@@ -47,6 +49,7 @@ export const health = defineTool({
         wineVersion: wine?.code === 0 ? wine.stdout.trim() : null,
         protonPath: config.protonPath ?? null,
       },
+      sidecar,
       guardedToolsAllowlisted: config.toolAllowlist,
       note:
         "This server never talks to a running srcds and never touches " +

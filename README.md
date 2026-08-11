@@ -23,6 +23,7 @@ dans `gmod-mcp`, pas ici.
 | Compile | porte A passée ; outils à écrire |
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
+| Sidecar Python (srctools) | **installé et prouvé** — voir ci-dessous |
 
 ## Les portes de faisabilité
 
@@ -152,6 +153,53 @@ liens symboliques avant de juger (`srcds/garrysmod/addons/*` sont des liens vers
 chemin lexicalement innocent peut atterrir dans l'arbre SteamCMD), et un test de contrat qui
 l'assert sur les chemins résolus.
 
+## Le sidecar Python
+
+Les formats Source sont déjà écrits, en Python. [`srctools`](https://github.com/TeamSpen210/srctools)
+lit et écrit VMF, BSP, VPK, VTF, VMT et FGD, il est maintenu, et **aucune bibliothèque JS/TS ni
+Rust mature n'existe pour le BSP**. Le réécrire aurait été des mois de travail sur des problèmes
+déjà résolus.
+
+`sidecar/` est donc un venv épinglé (`srctools==2.7.0`) et un point d'entrée unique : un verbe en
+`argv[1]`, du JSON sur stdin, du JSON sur stdout, les diagnostics sur stderr. `./sidecar/setup.sh`
+le construit ; le venv vit sous `<stateDir>/sidecar-venv`, hors du dépôt, parce que c'est de la
+sortie de build propre à la machine.
+
+**Un sous-processus par appel, pas de daemon, pas de verrou.** C'est ce qui garde hammer-mcp sans
+état et hors du mode de panne qui a rendu `daemon.lock` nécessaire côté gmod-mcp. Le coût mesuré
+d'un aller-retour est de **87 ms**, import de srctools compris — assez bas pour ne pas justifier un
+processus résident.
+
+**La frontière suit la fréquence d'appel, pas le format.** Ce qui est chaud et déjà prouvé reste en
+TypeScript — lecture BSP par offsets, KeyValues à offsets préservés, codec `.lmp`. Ce qui est froid
+et coûteux à réécrire passe ici — FGD, VTF, VPK, décompilation. La mesure tranche : notre lecteur
+d'en-tête ouvre `rp_nycity_day.bsp` en **79 ms**, `BSP()` de srctools en **1,48 s**. Sur le chemin
+chaud, on garde le nôtre.
+
+### Ce que srctools lit chez nous, mesuré le 11/08/2026
+
+| Fichier | Résultat |
+|---|---|
+| `ttt_traps.vmf` (7082 lignes, écrit par Hammer) | 65 entités, 24 brushes, 0,02 s |
+| `rp_nycity_day.bsp` (1,13 Go) | VBSP 20, `mapRevision` **10863**, ouvert en 1,48 s |
+| son lump 0 | **3554** entités en 0,27 s, `prop_dynamic` **59**, `light_spot` **1262** |
+
+`mapRevision`, `prop_dynamic` et `light_spot` retombent **exactement** sur ce que notre lecteur
+TypeScript et `r-estate` avaient mesuré séparément. Deux implémentations indépendantes qui
+concordent sur trois nombres : c'est l'oracle qui fait qu'on peut se fier aux deux.
+
+**Le quatrième nombre, lui, diffère de 1** — et il faut le savoir avant de crier au bug.
+`read_bsp_entities` compte **3555**, srctools **3554** : srctools range le `worldspawn` à part
+(`vmf.spawn`) et l'exclut de `vmf.entities`, là où notre lecteur le compte comme une entité du
+lump. Les deux conventions sont défendables ; ce qui ne l'est pas, c'est de comparer les deux
+chiffres sans le savoir.
+
+### Décompilation
+
+`bspsrc` est le seul décompilateur BSP→VMF mature, et il est en Java. Le `java` par défaut de cette
+machine est en **1.8**, trop ancien — mais **17 et 21 sont installés** (`/usr/lib/jvm/`). Tout appel
+devra donc pointer une JVM explicitement plutôt que se fier au `java` du PATH.
+
 ## Outils
 
 Convention `gmod-mcp` : `read_*` observe, `run_*` exécute, verbe_nom mute, snake_case. Les outils
@@ -257,6 +305,7 @@ en dépendent se sautent proprement quand ils sont absents ; les deux ont bien t
 | `gmodGameDir` | `~/.steam/steam/steamapps/common/GarrysMod/garrysmod` |
 | `backend` | `wine` |
 | `winePrefix` | `~/.wine` |
+| `sidecarPython` | `<stateDir>/sidecar-venv/bin/python` |
 | `toolAllowlist` | `[]` |
 
 La chaîne d'outils Source vit **hors du dépôt**, dans la bibliothèque Steam, et livrée avec le

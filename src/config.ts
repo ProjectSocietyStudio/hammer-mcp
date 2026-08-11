@@ -40,6 +40,11 @@ export const ConfigFile = z.object({
   winePrefix: z.string().default(join(homedir(), ".wine")),
   /** Proton entry script, for the `proton` backend. */
   protonPath: z.string().optional(),
+  /**
+   * Interpreter for the Python sidecar. Defaults to the venv `sidecar/setup.sh` builds
+   * under the state directory. Set it only to point at an interpreter you manage.
+   */
+  sidecarPython: z.string().optional(),
   /** Tools allowed without confirmation. Empty means the default policy. */
   toolAllowlist: z.array(z.string()).default([]),
   /** Plugin ESM modules to load, relative to the repo root. Each exports `tools`. */
