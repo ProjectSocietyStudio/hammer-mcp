@@ -24,6 +24,7 @@ dans `gmod-mcp`, pas ici.
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
 | Sidecar Python (srctools) | **installé et prouvé** — voir ci-dessous |
+| Mesure (`read_map_extents`, `read_map_geometry`, `read_prop_survey`) | **prouvé** — recoupe trois mesures indépendantes |
 
 ## Les portes de faisabilité
 
@@ -214,9 +215,53 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_lump_patch` | `map` | | Décode un `.lmp` et ses entités |
 | `write_lump_patch` | `map` | ● | Construit un patch d'entités par ops add/update/remove |
 | `read_lump_patch_status` | `map` | | Compare `server-config/maps/` au déployé et aux révisions |
+| `read_map_extents` | `map` | | Étendue réelle du monde (lump 14), en unités et en mètres |
+| `read_map_geometry` | `map` | | Contenu de chaque lump et marge restante avant le plafond de vbsp |
+| `read_prop_survey` | `map` | | Inventaire des props, et ceux qui sont `prop_dynamic` pour rien |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
 délibérément pas les `sv`/`cl` de gmod-mcp : ce serveur n'a pas de realm GLua.
+
+## Jalon 2 — la mesure, recoupée par trois chemins indépendants
+
+Mesuré le 11/08/2026 sur `rp_nycity_day`. Chaque nombre a un témoin extérieur : c'est ce qui
+distingue une mesure d'une valeur affichée avec aplomb.
+
+| Ce qu'on mesure | Résultat | Le témoin |
+|---|---|---|
+| Étendue du monde (lump 14) | mins `(-15424, -15936, -6208)`, **802,6 m** de portée, 639 338 m² | `rvehicles` §624 avait lu le même lump à la main : « la map fait 802 mètres », mêmes mins |
+| `prop_dynamic` | **59** | `r-estate` les avait comptés par `Entity:isDoor()` en jeu |
+| `mapRevision` | **10863** | notre lecteur TS, et srctools, séparément |
+
+L'unité : **1 unité Hammer = 1 pouce = 0,0254 m**. Ce n'est pas une convention choisie, c'est le
+rapport qui fait tomber la carte sur les 802 m relevés à la main.
+
+### Ce que la carte de production révèle sur sa propre chaîne de compilation
+
+`read_map_geometry` compare chaque lump aux plafonds de `src/public/bspfile.h` du SDK 2013, lus à
+la source. Trois lumps sont serrés — `TEXINFO` **96,4 %**, `VERTEXES` **95,0 %**, `BRUSHES`
+**84,4 %** : cette carte ne peut plus beaucoup grandir.
+
+Et un lump **dépasse** : `MODELS` à **1218 pour un plafond de 1024**, soit 119 %. La carte se
+charge tous les jours. Ce n'est donc pas une carte cassée, **c'est la preuve que les compilateurs
+qui l'ont produite relèvent ce plafond** — l'outil le dit dans ces termes plutôt que de crier à
+l'erreur.
+
+### Le garde-fou qui empêche d'inventer un chiffre
+
+Une taille de structure fausse produirait un compte plausible et faux. `read_map_geometry` ne
+rapporte donc un compte que si la longueur du lump divise **exactement** par la taille de
+l'enregistrement, et dit pourquoi quand ce n'est pas le cas. Il l'a fait dès le premier essai sur
+`DISP_VERTS` : 944 944 octets ne sont pas un multiple des 20 attendus, aucun compte n'a été rendu.
+
+### Pourquoi la liste des conversions `prop_static` n'était pas triviale
+
+Le premier filtre cherchait la **présence** des clés `targetname`, `parentname`, `defaultanim`. Il
+a rendu **0 candidat sur 59**, ce qui ressemblait à un résultat. Hammer écrit en réalité *toutes*
+les clés de la classe avec leur valeur par défaut : les 59 props portent les trois. Seule une
+**valeur non vide** signifie quelque chose — 29 parentés, 14 nommés, 2 animés. Le filtre corrigé
+rend **17 candidats**, et l'outil accompagne la liste d'une réserve : convertir exige une
+recompilation, et un modèle sans support statique ne se convertit pas du tout.
 
 ## Architecture
 

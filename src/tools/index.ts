@@ -2,5 +2,11 @@ import type { AnyToolDef } from "../mcp/registry.js";
 import { bspTools } from "./bsp.js";
 import { healthTools } from "./health.js";
 import { lmpTools } from "./lmp.js";
+import { measureTools } from "./measure.js";
 
-export const allTools: AnyToolDef[] = [...healthTools, ...bspTools, ...lmpTools];
+export const allTools: AnyToolDef[] = [
+  ...healthTools,
+  ...bspTools,
+  ...measureTools,
+  ...lmpTools,
+];
