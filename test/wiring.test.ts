@@ -141,6 +141,52 @@ describe("checkWiring", () => {
     expect(warned[0]!.severity).toBe("warning");
   });
 
+  it("treats an empty output set as a schema, not as a missing one", () => {
+    // A class the FGD defines with no outputs is a class where every output is wrong. The
+    // size > 0 guard suppressed exactly those findings, which are the ones that matter most.
+    const silent = new Map<string, ClassSchema>([
+      ["func_button", { inputs: new Set(["lock"]), outputs: new Set() }],
+      ["func_door", { inputs: new Set(["open"]), outputs: new Set() }],
+    ]);
+    const r = checkWiring(WIRED, silent);
+    expect(r.findings.filter((f) => f.rule === "unknown-output").length).toBeGreaterThan(0);
+
+    // And the same for a class with no inputs at all.
+    const deaf = new Map<string, ClassSchema>([
+      ["func_button", { inputs: new Set(), outputs: new Set(["onpressed"]) }],
+      ["func_door", { inputs: new Set(), outputs: new Set(["onopen"]) }],
+    ]);
+    expect(checkWiring(WIRED, deaf).findings.filter((f) => f.rule === "unknown-input").length)
+      .toBeGreaterThan(0);
+  });
+
+  it("softens an unresolved target to a warning when the map has instances", () => {
+    // An instance's entities are not in this file, and its names are rewritten by fixup, so
+    // an output aimed at one resolves in the compiled map and resolves nowhere here.
+    // Calling that broken would fill the report with the map's best-organised parts.
+    const withInstance = applyVmfOps(WIRED, [
+      {
+        op: "add",
+        keyvalues: {
+          classname: "func_instance",
+          file: "instances/room.vmf",
+          origin: "0 0 0",
+          targetname: "room",
+        },
+      },
+    ]).text;
+
+    const plain = checkWiring(WIRED, schemas).findings.filter((f) => f.rule === "unknown-target");
+    expect(plain[0]!.severity, "no instance: still an error").toBe("error");
+
+    const r = checkWiring(withInstance, schemas);
+    const soft = r.findings.filter((f) => f.rule === "unknown-target");
+    expect(soft).toHaveLength(1);
+    expect(soft[0]!.severity).toBe("warning");
+    expect(soft[0]!.message).toMatch(/fixup/);
+    expect(r.warnings.join(" ")).toMatch(/func_instance/);
+  });
+
   it("does not judge a class it has no schema for", () => {
     // Absence of a definition is not evidence of a fault, and reporting one would bury
     // every real finding under the custom entities a mod adds.

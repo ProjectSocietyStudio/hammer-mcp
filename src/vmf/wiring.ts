@@ -174,6 +174,15 @@ export function checkWiring(
   const warnings: string[] = [];
 
   const { entities } = readEntities(source);
+
+  // A map with func_instance in it does not contain the entities the instances bring, and
+  // their targetnames are rewritten by fixup on top of that. An output aimed at one of
+  // those resolves in the compiled map and resolves nowhere here, so calling it broken
+  // would fill the report with the map's best-organised parts. read_vmf's
+  // collapseInstances is what would answer properly; until this tool has it, the finding
+  // is a warning that names the reason.
+  const instanceCount = entities.filter((e) => e.classname === "func_instance").length;
+
   const classOf = new Map<string, Set<string>>();
   for (const e of entities) {
     if (!e.targetname) continue;
@@ -203,12 +212,16 @@ export function checkWiring(
     if (c.resolved === 0) {
       unresolved.add(c.target);
       findings.push({
-        severity: "error",
+        severity: instanceCount > 0 ? "warning" : "error",
         rule: "unknown-target",
         message:
           `entity ${c.fromId} (${c.fromClassname}) fires ${c.output} at ${JSON.stringify(c.target)}, ` +
-          `and nothing in this map has that targetname. The output does nothing in game and ` +
-          `no compiler mentions it.`,
+          `and nothing in this map has that targetname. ` +
+          (instanceCount > 0
+            ? `This map has ${instanceCount} func_instance, whose entities are not in this ` +
+              `file and whose names are rewritten by fixup, so the target may well exist ` +
+              `after expansion. Read it back with read_vmf and collapseInstances to be sure.`
+            : `The output does nothing in game and no compiler mentions it.`),
         fromId: c.fromId,
         output: c.output,
         target: c.target,
@@ -218,8 +231,11 @@ export function checkWiring(
 
     // The output itself: a class that does not have it never fires, so the wire is dead at
     // the near end rather than the far one.
+    // An empty set is a schema that says "this class has none", not a schema that is
+    // missing. Treating the two the same suppressed every finding on a class the FGD
+    // defines with no outputs -- which is exactly a class where every output is wrong.
     const fromSchema = schemas.get(c.fromClassname.toLowerCase());
-    if (fromSchema && fromSchema.outputs.size > 0 && !fromSchema.outputs.has(c.output.toLowerCase())) {
+    if (fromSchema && !fromSchema.outputs.has(c.output.toLowerCase())) {
       findings.push({
         severity: "error",
         rule: "unknown-output",
@@ -234,7 +250,7 @@ export function checkWiring(
 
     for (const classname of classOf.get(target) ?? []) {
       const schema = schemas.get(classname.toLowerCase());
-      if (!schema || schema.inputs.size === 0) continue;
+      if (!schema) continue;
       if (schema.inputs.has(c.input.toLowerCase())) continue;
       findings.push({
         severity: "error",
@@ -255,6 +271,14 @@ export function checkWiring(
       `${connections.length - judged} connection(s) are on classes with no FGD schema loaded, ` +
         `so their output names were not checked. A class with no definition is not judged: ` +
         `absence of a definition is not evidence of a fault.`,
+    );
+  }
+
+  if (instanceCount > 0 && unresolved.size > 0) {
+    warnings.push(
+      `${unresolved.size} target(s) resolve to nothing in this file, and it has ` +
+        `${instanceCount} func_instance. Those are reported as warnings rather than errors: ` +
+        `an instance's entities are not in the file and its names are rewritten by fixup.`,
     );
   }
 

@@ -132,14 +132,27 @@ export const validateIoTool = defineTool({
     }
 
     const schemas = new Map<string, ClassSchema>();
+    const unknownClasses: string[] = [];
     for (const classname of wanted) {
-      const reply = (await callSidecar(
-        "fgd_class",
-        { binDir, fgd, classname },
-        ctx.config,
-        120_000,
-      )) as { inputs?: string[]; outputs?: string[] };
-      if (!reply.inputs && !reply.outputs) continue;
+      // A class the FGD does not define makes fgd_class raise, and letting that through
+      // aborted the whole call -- which contradicts the one thing this tool promises about
+      // unknown classes. A mod's custom entity is the normal case, not a failure.
+      let reply: { inputs?: string[]; outputs?: string[] };
+      try {
+        reply = (await callSidecar(
+          "fgd_class",
+          { binDir, fgd, classname },
+          ctx.config,
+          120_000,
+        )) as { inputs?: string[]; outputs?: string[] };
+      } catch {
+        unknownClasses.push(classname);
+        continue;
+      }
+      if (!reply.inputs && !reply.outputs) {
+        unknownClasses.push(classname);
+        continue;
+      }
       schemas.set(classname.toLowerCase(), {
         inputs: new Set((reply.inputs ?? []).map((s) => s.toLowerCase())),
         outputs: new Set((reply.outputs ?? []).map((s) => s.toLowerCase())),
@@ -159,7 +172,16 @@ export const validateIoTool = defineTool({
       warningCount: warns.length,
       findings: [...errors, ...warns].slice(0, args.limit),
       unresolvedTargets: report.unresolvedTargets,
-      warnings: report.warnings,
+      warnings: [
+        ...report.warnings,
+        ...(unknownClasses.length > 0
+          ? [
+              `${unknownClasses.length} class(es) are not in this game's FGD and were not ` +
+                `judged: ${unknownClasses.slice(0, 8).join(", ")}. A mod's own entities are ` +
+                `the normal case for that.`,
+            ]
+          : []),
+      ],
       nextStep:
         errors.length === 0
           ? "Every wire this could judge resolves. What the map does when it runs is still " +
@@ -289,11 +311,14 @@ export const writePortalTool = defineTool({
 export const setMapPropertiesTool = defineTool({
   name: "set_map_properties",
   description:
-    "Sets the keyvalues of worldspawn: the sky, the detail sprites, the fog. Ordinary " +
-    "keyvalues on an ordinary entity, so this is edit_vmf with a shorter name -- except " +
-    "that detailvbsp and detailmaterial come as a pair, and setting one without the other " +
-    "gives a map whose grass either has no sprites or has sprites with no material. vbsp " +
-    "mentions neither, so this says so.",
+    "Sets the keyvalues that really live on worldspawn: the sky, the detail sprites, the " +
+    "prop fade width. Ordinary keyvalues on an ordinary entity, so this is edit_vmf with a " +
+    "shorter name -- except that detailvbsp and detailmaterial come as a pair, and setting " +
+    "one without the other gives a map whose grass either has no sprites or has sprites " +
+    "with no material, which vbsp mentions neither of. Fog is NOT here: Source reads " +
+    "fogenable, fogstart, fogend and fogcolor from an env_fog_controller, and writing them " +
+    "to worldspawn gives a file that parses and no fog in game. Create the controller with " +
+    "edit_vmf.",
   realm: "map",
   guarded: true,
   meta: { "anthropic/requiresUserInteraction": true },
@@ -303,10 +328,6 @@ export const setMapPropertiesTool = defineTool({
     detailvbsp: z.string().optional().describe("Which sprites go on which material."),
     detailmaterial: z.string().optional().describe("The sprite sheet itself."),
     maxpropscreenwidth: z.string().optional(),
-    fogenable: z.string().optional(),
-    fogstart: z.string().optional(),
-    fogend: z.string().optional(),
-    fogcolor: z.string().optional(),
     dryRun: DRY_RUN,
     backup: BACKUP,
     confirm: CONFIRM,
@@ -333,10 +354,6 @@ export const setMapPropertiesTool = defineTool({
       ...(args.maxpropscreenwidth !== undefined
         ? { maxpropscreenwidth: args.maxpropscreenwidth }
         : {}),
-      ...(args.fogenable !== undefined ? { fogenable: args.fogenable } : {}),
-      ...(args.fogstart !== undefined ? { fogstart: args.fogstart } : {}),
-      ...(args.fogend !== undefined ? { fogend: args.fogend } : {}),
-      ...(args.fogcolor !== undefined ? { fogcolor: args.fogcolor } : {}),
     });
 
     const b = checkVmfSolids(path, before);

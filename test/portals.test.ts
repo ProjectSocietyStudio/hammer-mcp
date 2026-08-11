@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { setMapPropertiesTool } from "../src/tools/wiring.js";
 import { setMapProperties, VmfPortalError, writePortal } from "../src/vmf/portals.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
 import { entityReport } from "../src/vmf/wiring.js";
@@ -95,11 +96,13 @@ describe("writePortal", () => {
 
 describe("setMapProperties", () => {
   it("sets a property the map did not have", () => {
-    // The probe already carries a skyname, so this uses one it does not: a test whose
-    // "add" case is really a "replace" case proves the wrong half.
-    const r = setMapProperties(probe(), { fogcolor: "80 90 110" });
-    expect(r.changed["fogcolor"]).toEqual({ from: null, to: "80 90 110" });
-    expect(r.text).toContain('"fogcolor" "80 90 110"');
+    // On the awkward fixture, which carries only a skyname. The probe has all four of the
+    // keys this tool writes, so every "add" case against it is really a "replace" case and
+    // proves the wrong half -- which is what the first version of this test did.
+    const r = setMapProperties(AWKWARD_VMF, { maxpropscreenwidth: "-1" });
+    expect(r.changed["maxpropscreenwidth"]).toEqual({ from: null, to: "-1" });
+    expect(r.text).toContain('"maxpropscreenwidth" "-1"');
+    expect(r.text).toContain('"classname" "worldspawn"');
   });
 
   it("replaces one it did, and reports what it was", () => {
@@ -128,6 +131,18 @@ describe("setMapProperties", () => {
       detailmaterial: "detail/detailsprites",
     });
     expect(both.warnings).toEqual([]);
+  });
+
+  it("has no fog keys at all, because fog does not live on worldspawn", () => {
+    // Source reads fogenable, fogstart, fogend and fogcolor from an env_fog_controller.
+    // An earlier version of this offered all four here: the file parsed, the tool reported
+    // a successful change, and there was no fog in game. This repository's own notes say
+    // where fog lives, which is what made that worse than an omission.
+    const schema = Object.keys(setMapPropertiesTool.inputSchema);
+    for (const key of ["fogenable", "fogstart", "fogend", "fogcolor"]) {
+      expect(schema, `${key} must not be offered here`).not.toContain(key);
+    }
+    expect(setMapPropertiesTool.description).toMatch(/env_fog_controller/);
   });
 
   it("refuses being asked for nothing", () => {

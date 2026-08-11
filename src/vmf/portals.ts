@@ -165,15 +165,25 @@ export function writePortal(
   };
 }
 
+/**
+ * Keyvalues that really live on `worldspawn`.
+ *
+ * Fog is not among them, and an earlier version of this offered `fogenable`, `fogstart`,
+ * `fogend` and `fogcolor` here. Source reads all four from an `env_fog_controller`; writing
+ * them to `worldspawn` produces a file that parses, a tool that reports a successful
+ * change, and no fog in game. This repository's own notes say where fog lives
+ * (`.claude/skills/source-mapping/references/atmosphere.md`), which is what makes that
+ * version worse than an omission: the answer was already written down.
+ *
+ * A tool that says it did something and did nothing is the failure every check here exists
+ * to prevent, so the fog keys are gone rather than approximated. `edit_vmf` creates an
+ * `env_fog_controller` like any other entity.
+ */
 export interface MapProperties {
   skyname?: string;
   detailmaterial?: string;
   detailvbsp?: string;
   maxpropscreenwidth?: string;
-  fogenable?: string;
-  fogstart?: string;
-  fogend?: string;
-  fogcolor?: string;
 }
 
 export interface PropertiesResult {
