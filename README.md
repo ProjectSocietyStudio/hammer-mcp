@@ -143,6 +143,34 @@ d'entités que le jeu définit déjà.
   le binaire `++`. `-repack -compress` n'a pas été essayé : rien ne dit que GMod lise un lump
   compressé en LZMA.
 
+### Un `func_instance` non déplié est un mensonge dans les deux sens
+
+Rien à voir avec Hammer++ — le `vbsp.exe` stock de GMod gère les instances (`InstancePath`,
+`instance_variable`, `func_instance_parms` sont dans le binaire). C'est un manque qui coûtait déjà.
+
+Une instance, c'est **une entité dans le fichier et un bâtiment dans la carte**. Lu tel quel :
+
+| | replié | déplié |
+|---|---|---|
+| `worldBrushes` | 0 | 6 |
+| `brushSides` | 0 | 36 |
+| entités | 2 | 4 |
+
+Mesuré sur une carte racine qui ne contient qu'une instance de `hmcp_probe.vmf`. Une carte très
+au-delà de `MAX_MAP_BRUSHES` paraît donc confortable, et `read_map_geometry` ne peut pas la
+contredire puisqu'il n'y a pas encore de `.bsp`. Dans l'autre sens, toute sortie qui franchit la
+frontière d'une instance vise un nom absent du fichier racine : `output-target-missing` accusait des
+références parfaitement correctes.
+
+`read_vmf` et `read_vmf_lint` prennent `collapseInstances` (défaut `false` — déplier change tous les
+comptages et tous les `targetname`, ça se demande). L'expansion délègue à `srctools.instancing`,
+qui modélise le comportement de vbsp : les trois styles de fixup, la substitution des `$variables`
+et les noms automatiques des instances anonymes sont exactement ce qu'on réimplémente de travers.
+
+Deux échecs sont nommés plutôt que subis : un fichier d'instance introuvable dit **lequel** (le
+chemin vient de l'intérieur de la carte, pas de l'appelant), et une instance qui s'inclut elle-même
+est refusée à 16 niveaux — sinon le symptôme est un sidecar qui expire, ce qui accuse le sidecar.
+
 ### Porte B — GMod honore-t-il `maps/<map>_l_0.lmp` ? : **NON TESTÉE**
 
 Le codec est écrit et prouvé contre un fichier de Valve (`srcds/garrysmod/maps/c1a1_l_0.lmp`), mais
@@ -312,8 +340,8 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_sightlines` | `map` | | Les plus longues lignes de vue dégagées, tracées contre l'arbre du monde |
 | `read_brush_volumes` | `map` | | Emprise au sol et volume de chaque entité-brush, par classe |
 | `read_fgd_class` | `map` | | Le schéma d'une classe selon la FGD du jeu : keyvalues, entrées, sorties |
-| `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement |
-| `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler |
+| `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement. `collapseInstances` déplie les `func_instance` |
+| `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler. `collapseInstances` idem |
 | `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape. `toolchain: "plusplus"` pour la chaîne Hammer++ |
 | `read_compile_log` | `map` | | Traduit la sortie d'un compilateur en findings expliqués |
 | `read_leak` | `map` | | Transforme « leaked! » en un lieu et une entité nommée |
