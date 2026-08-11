@@ -18,12 +18,32 @@ const faceSelectorFrom = (args: {
   material?: string;
   facing?: "up" | "down" | "side" | "any";
   minArea?: number;
-}): FaceSelector => ({
-  ...(args.solidIds !== undefined ? { solidIds: args.solidIds } : {}),
-  ...(args.material !== undefined ? { material: args.material } : {}),
-  ...(args.facing !== undefined ? { facing: args.facing } : {}),
-  ...(args.minArea !== undefined ? { minArea: args.minArea } : {}),
-});
+  all?: boolean;
+}): FaceSelector => {
+  // The same guard the face tools carry, and it was missing here -- on the one tool that
+  // rewrites every eligible face of the map. An empty material is refused for the same
+  // reason: the key being present satisfied the guard while matchesFace treated "" as
+  // falsy and matched everything.
+  if (args.material !== undefined && args.material.trim().length === 0) {
+    throw new Error(
+      "material is empty, which matches every face rather than none. Give a name, or pass " +
+        "all:true if displacing the whole map is what was meant.",
+    );
+  }
+  const sel: FaceSelector = {
+    ...(args.solidIds !== undefined ? { solidIds: args.solidIds } : {}),
+    ...(args.material !== undefined ? { material: args.material } : {}),
+    ...(args.facing !== undefined ? { facing: args.facing } : {}),
+    ...(args.minArea !== undefined ? { minArea: args.minArea } : {}),
+  };
+  if (Object.keys(sel).length === 0 && args.all !== true) {
+    throw new Error(
+      "this would put a displacement on every quadrilateral face in the map. Name solidIds, " +
+        "a material, a facing or a minArea, or pass all:true to say you meant it.",
+    );
+  }
+  return sel;
+};
 
 /** Refuses to write when a displacement edit moved a brush, which it never should. */
 function assertGeometryUntouched(path: string, before: string, after: string): void {
@@ -183,6 +203,10 @@ export const writeDisplacementTool = defineTool({
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
     power: z.number().int().min(2).max(4).describe("2, 3 or 4: a 5x5, 9x9 or 17x17 grid."),
     ...FACE_SELECTOR,
+    all: z
+      .boolean()
+      .optional()
+      .describe("Every quadrilateral face of the map. Required when nothing else narrows it."),
     dryRun: DRY_RUN,
     backup: BACKUP,
     confirm: CONFIRM,
@@ -260,8 +284,12 @@ export const sewDisplacementsTool = defineTool({
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
     tolerance: z
       .number()
+      .positive()
       .optional()
-      .describe("How close two flat points must be to count as the same one. Default 0.1."),
+      .describe(
+        "How close two flat points must be to count as the same one. Default 0.1. Must be " +
+          "positive: zero would group every vertex of the map into one.",
+      ),
     dryRun: DRY_RUN,
     backup: BACKUP,
     confirm: CONFIRM,

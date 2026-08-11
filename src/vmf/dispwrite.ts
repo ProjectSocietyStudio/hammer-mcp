@@ -204,6 +204,16 @@ export interface SewResult {
  * this does and would find any pair this missed.
  */
 export function sewDisplacements(source: string, tolerance = 0.1): SewResult {
+  // The grouping key divides every coordinate by the tolerance, so a zero produces
+  // Infinity and NaN keys: unrelated vertices land in one group and their distances are
+  // averaged together, which reshapes several displacements at once. A caller asking for
+  // exact matching is asking for something this cannot do, and must hear so.
+  if (!Number.isFinite(tolerance) || tolerance <= 0) {
+    throw new VmfDispWriteError(
+      `sew tolerance must be a positive number, not ${tolerance}. Zero would group every ` +
+        `vertex of the map into one and average them together.`,
+    );
+  }
   const before = readDisplacements(source);
   if (before.displacements.length < 2) {
     return {
@@ -551,6 +561,34 @@ export function paintDisplacements(
 
 const clampAlpha = (a: number): number => Math.max(0, Math.min(255, Math.round(a)));
 
+/**
+ * The normal of the terrain itself at one vertex, from where its neighbours ended up.
+ *
+ * Central differences inside the grid and one-sided at the edges, then a cross product.
+ * This is the only thing that can answer "how steep is it here", because the grid's own
+ * normals say where a vertex was pushed and not what shape resulted.
+ */
+function surfaceNormalAt(disp: Displacement, x: number, y: number): Vec3 | null {
+  const at = (px: number, py: number): Vec3 | null => {
+    if (px < 0 || py < 0 || px >= disp.size || py >= disp.size) return null;
+    return disp.vertices[py * disp.size + px]!.position;
+  };
+  const along = (a: Vec3 | null, b: Vec3 | null): Vec3 | null =>
+    a && b ? [a[0] - b[0], a[1] - b[1], a[2] - b[2]] : null;
+
+  const dx = along(at(x + 1, y), at(x - 1, y)) ?? along(at(x + 1, y), at(x, y)) ?? along(at(x, y), at(x - 1, y));
+  const dy = along(at(x, y + 1), at(x, y - 1)) ?? along(at(x, y + 1), at(x, y)) ?? along(at(x, y), at(x, y - 1));
+  if (!dx || !dy) return null;
+
+  const n: Vec3 = [
+    dx[1] * dy[2] - dx[2] * dy[1],
+    dx[2] * dy[0] - dx[0] * dy[2],
+    dx[0] * dy[1] - dx[1] * dy[0],
+  ];
+  const len = Math.hypot(n[0], n[1], n[2]);
+  return len < 1e-9 ? null : [n[0] / len, n[1] / len, n[2] / len];
+}
+
 function alphaFor(rule: AlphaRule, v: DispVertex, disp: Displacement): number {
   switch (rule.kind) {
     case "uniform":
@@ -562,14 +600,16 @@ function alphaFor(rule: AlphaRule, v: DispVertex, disp: Displacement): number {
       return 255 * Math.max(0, Math.min(1, t));
     }
     case "bySlope": {
-      // The vertex's own normal against the face's: a vertex whose normal has been pushed
-      // away from the face is on a steep part of the terrain.
-      const n = v.normal;
-      const len = Math.hypot(n[0], n[1], n[2]);
-      if (len < 1e-9) return 0;
-      const up = Math.abs(n[2] / len);
+      // From the displaced surface, not from `v.normal`. That field is the direction the
+      // vertex is pushed *along*, and every vertex of a displacement this toolkit creates
+      // carries the base face's normal -- sculpting changes distances and never touches
+      // it. So reading the slope from it made a hillside sculpted onto a floor compute as
+      // 0 degrees and never paint, and a wall compute as 90 and always paint. The rule
+      // could not fire, and nothing said so.
+      const n = surfaceNormalAt(disp, v.x, v.y);
+      if (!n) return 0;
+      const up = Math.abs(n[2]);
       const angle = (Math.acos(Math.max(-1, Math.min(1, up))) * 180) / Math.PI;
-      void disp;
       return angle >= rule.degrees ? 255 : 0;
     }
   }

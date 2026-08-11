@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -13,7 +13,11 @@ import {
 } from "../src/vmf/dispwrite.js";
 import { insertSolids } from "../src/vmf/build.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
-import { config, has } from "./support/env.js";
+import type { ToolContext } from "../src/mcp/registry.js";
+import { writeDisplacementTool } from "../src/tools/displacement.js";
+import { config, has, ctx as sharedCtx } from "./support/env.js";
+
+const toolCtx = sharedCtx as unknown as ToolContext;
 import { displacedMap, DISPLACED_VMF, DISP_EAST, DISP_WEST, FLAT, SLOPE } from "./support/displaced.js";
 
 const scratch = mkdtempSync(join(tmpdir(), "hammer-dispw-"));
@@ -86,6 +90,32 @@ describe("writeDisplacements", () => {
     expect(d.maxDistance).toBe(64);
   });
 
+  it("refuses an unscoped call rather than displacing the whole map", () => {
+    // Every other face tool carries this guard and this one did not -- on the tool that
+    // rewrites every eligible face of the map.
+    //
+    // On a scratch copy, never on the committed fixture. The first version of this test
+    // named test/fixtures/hmcp_probe.vmf, and the sabotage run that removes the guard did
+    // exactly what the guard exists to prevent: it displaced all 36 faces of the fixture
+    // and wrote them to disk, 2160 lines of it. A test that points a write tool at a file
+    // the repository owns is a test that edits the repository the moment it goes red.
+    const file = join(scratch, `guard${Math.round(performance.now() * 1000)}.vmf`);
+    writeFileSync(file, PLAIN.text);
+    expect(() =>
+      writeDisplacementTool.handler(
+        { path: file, power: 2, backup: false, confirm: true } as never,
+        toolCtx,
+      ),
+    ).toThrow(/every quadrilateral face/);
+    expect(() =>
+      writeDisplacementTool.handler(
+        { path: file, power: 2, material: "  ", backup: false, confirm: true } as never,
+        toolCtx,
+      ),
+    ).toThrow(/matches every face/);
+    expect(readFileSync(file, "utf8"), "and nothing was written").toBe(PLAIN.text);
+  });
+
   it("refuses a power nobody builds terrain with", () => {
     expect(() => writeDisplacements(PLAIN.text, { facing: "up" }, { power: 1 })).toThrow(
       VmfDispWriteError,
@@ -147,6 +177,14 @@ describe("sewDisplacements", () => {
     const r = sewDisplacements(DISPLACED_VMF);
     expect(r.unchanged).toBe(true);
     expect(r.warnings.join(" ")).toMatch(/already agreed/);
+  });
+
+  it("refuses a tolerance of zero rather than grouping the whole map into one", () => {
+    // The grouping key divides every coordinate by the tolerance, so zero gives Infinity
+    // and NaN keys: unrelated vertices land in one group and are averaged together, which
+    // reshapes several displacements at once.
+    expect(() => sewDisplacements(gapped, 0)).toThrow(/positive number/);
+    expect(() => sewDisplacements(gapped, -1)).toThrow(/positive number/);
   });
 
   it("says so when there is only one displacement", () => {
@@ -243,6 +281,27 @@ describe("paintDisplacements", () => {
   it("clamps to the range the format has", () => {
     const r = paintDisplacements(base, {}, { kind: "uniform", alpha: 9999 });
     expect(readDisplacements(r.text).displacements[0]!.maxAlpha).toBe(255);
+  });
+
+  it("paints a slope that was sculpted onto a flat face", () => {
+    // The fault this exists for. `v.normal` is the direction a vertex is pushed *along*,
+    // and every vertex of a displacement written here carries the base face's normal --
+    // sculpting changes distances and never touches it. So reading the slope from it made
+    // a hillside on a floor compute as 0 degrees and never paint, and a wall compute as 90
+    // and always paint. The rule could not fire, and nothing said so.
+    const steep = sculptDisplacements(base, {}, {
+      kind: "slope",
+      from: 0,
+      to: 512,
+      along: "x",
+    }).text;
+    const r = paintDisplacements(steep, {}, { kind: "bySlope", degrees: 40 });
+    const d = readDisplacements(r.text).displacements[0]!;
+    expect(d.maxAlpha, "a 512-over-256 slope is 63 degrees and must paint").toBe(255);
+
+    // And a flat one is not painted at the same threshold.
+    const flat = paintDisplacements(base, {}, { kind: "bySlope", degrees: 40 });
+    expect(readDisplacements(flat.text).displacements[0]!.maxAlpha).toBe(0);
   });
 
   it("says when the material cannot show a blend at all", () => {
