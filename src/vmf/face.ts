@@ -63,9 +63,20 @@ export function resolveFaces(source: string, selector: FaceSelector): ResolvedFa
     const parsed =
       checked.sides.find((s) => s.id !== null && s.id === sideId) ??
       checked.sides.find((s) => {
+        // Distance alone is not an identity. A box centred on the origin has all four of
+        // its walls at the same distance from it, so every one of them resolved to the
+        // first -- and a material or facing selector then edited the wrong faces while an
+        // alignment gave one wall's axes to the other three. The normal is what tells them
+        // apart, and it costs one dot product.
         const pts = planeText ? parsePlanePoints(planeText) : null;
         const p = pts ? planeFromPoints(...pts) : null;
-        return p && s.plane && Math.abs(p.dist - s.plane.dist) < 0.01;
+        if (!p || !s.plane) return false;
+        if (Math.abs(p.dist - s.plane.dist) >= 0.01) return false;
+        const d =
+          p.normal[0] * s.plane.normal[0] +
+          p.normal[1] * s.plane.normal[1] +
+          p.normal[2] * s.plane.normal[2];
+        return d > 0.9999;
       });
     if (!parsed || !matchesFace(parsed, selector)) continue;
     out.push({ solidId: checked.id ?? -1, owner, block: side, side: parsed, hidden });
@@ -263,17 +274,29 @@ export function alignFaces(
     let v: Vec3 = base.v;
 
     if (options.mode === "face") {
-      // Project each world axis into the plane and renormalise. On an axis-aligned face
-      // this changes nothing, which is why the world-mode oracle still covers it there.
-      const p = (a: Vec3): Vec3 => {
-        const n = side.plane!.normal;
+      // Project u into the plane, then derive v from it. Projecting both independently
+      // does not keep them perpendicular: on a face whose normal is (0.5, 0.5, 0.707) the
+      // projected pair has a dot product of 0.333, which shears the texture -- the exact
+      // distortion this mode exists to remove. Measured 11/08/2026.
+      //
+      // Orthogonalised against u rather than derived by a cross product: vbsp's base table
+      // is not consistently handed -- +x and -x share the same u and v -- so a cross
+      // product flips v on half the axis-aligned faces and this mode would stop agreeing
+      // with world mode where it has nothing to do. Subtracting the component along u
+      // leaves an axis-aligned pair untouched, because it was already perpendicular.
+      const n = side.plane.normal;
+      const project = (a: Vec3): Vec3 => {
         const d = a[0] * n[0] + a[1] * n[1] + a[2] * n[2];
         const out: Vec3 = [a[0] - d * n[0], a[1] - d * n[1], a[2] - d * n[2]];
         const l = Math.hypot(out[0], out[1], out[2]);
         return l < 1e-9 ? a : [out[0] / l, out[1] / l, out[2] / l];
       };
-      u = p(u);
-      v = p(v);
+      u = project(u);
+      const pv = project(v);
+      const along = pv[0] * u[0] + pv[1] * u[1] + pv[2] * u[2];
+      const ortho: Vec3 = [pv[0] - along * u[0], pv[1] - along * u[1], pv[2] - along * u[2]];
+      const ol = Math.hypot(ortho[0], ortho[1], ortho[2]);
+      v = ol < 1e-9 ? pv : [ortho[0] / ol, ortho[1] / ol, ortho[2] / ol];
     }
 
     if (options.rotate) {
@@ -301,6 +324,14 @@ export function alignFaces(
       // expressed in texels per unit and the caller is told so rather than being given a
       // number that silently assumes 512.
       const [ru, rv] = options.repeat ?? [1, 1];
+      if (!Number.isFinite(ru) || !Number.isFinite(rv) || ru <= 0 || rv <= 0) {
+        // A repeat of zero divides through to an infinite scale, which is written into the
+        // .vmf as the literal `Infinity`; parseTextureAxis then calls the axis unreadable
+        // and the tool's own check passed anyway, because a missing axis is a warning.
+        throw new VmfFaceError(
+          `fit needs a positive number of repeats on both axes, not ${ru} and ${rv}`,
+        );
+      }
       uScale = (su.hi - su.lo) / (TEXELS_ASSUMED * ru);
       vScale = (sv.hi - sv.lo) / (TEXELS_ASSUMED * rv);
     }
