@@ -58,8 +58,8 @@ export const editVmf = defineTool({
     "touched stays byte-identical, so a one-entity change is a one-entity diff. Adds, " +
     "updates and removes entities, and adds or removes their outputs. Never reserialises " +
     "the file: comments, blank lines and hand-written indentation would be lost silently. " +
-    "Cannot create brush geometry: choosing planes and texture axes without a visual check " +
-    "produces maps that compile and are wrong. Run read_vmf_lint after editing.",
+    "Does not create brush geometry -- that is write_vmf_solid, which has the checks that " +
+    "job needs. Run read_vmf_lint after editing.",
   realm: "map",
   guarded: true,
   /**

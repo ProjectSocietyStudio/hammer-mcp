@@ -50,11 +50,144 @@ flowchart LR
 | | |
 |---|---|
 | **Measure** | how full each lump is, world extents, prop inventory, packed assets, sightlines |
+| **Judge** | the same measurements against a budget profile, as a verdict per criterion — so a caller knows when it is done, not just where it stands |
 | **Read and lint** | entities, outputs and brush counts of a `.vmf`; every finding checked against the FGD the game itself declares |
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
+| **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
+| **Optimise** | hint brushes, including diagonal ones — the visibility decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
 | **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
+
+## Knowing when you are done
+
+Every reader above answers *how much*. None of them answers *is that enough* — so anything
+driving this toolchain can measure a map forever without learning that it is finished.
+`read_map_report` closes that: it runs the readers and judges them against a **budget
+profile**.
+
+```
+> read_map_report rp_nycity_day.bsp --profile source-stock
+
+  FAIL   19 pass · 3 warn · 3 fail · 1 skipped
+
+  fail   MODELS            119%   past MAX_MAP_MODELS
+  fail   LIGHTING          264%   42.29 MiB of a 16 MiB ceiling
+  fail   edicts            174%   3555 entities against MAX_EDICTS (2048)
+  skip   luxel-density      --    nothing calibrates a threshold for this
+```
+
+Measured on 11/08/2026. The `LIGHTING` line is the one that was not already known: this map
+carries **42.29 MiB of lightmap data against `MAX_MAP_LIGHTING`'s 16 MiB**, and it holds no
+HDR at all (lumps 53, 54 and 58 are empty), so that is LDR alone. It is a second stock
+ceiling exceeded, in a lump entirely independent of the first — which corroborates the
+`MODELS` reading rather than repeating it.
+
+Two things this design refuses to do:
+
+- **It never restates a limit.** Ceilings live once, in `src/bsp/geometry.ts` and in
+  `LIMITS`, read from Valve's headers with a date. A profile carries *thresholds* — policy —
+  and every one of them states its own provenance, including "we chose it".
+- **It never invents a threshold to fill a row.** `luxel-density` is measurable and
+  uncalibrated, so it reports `skipped` and says so. A confident verdict about nothing is
+  worse than an admitted gap, and the same goes for the overall verdict: a run that judged
+  nothing comes back `skipped`, never `pass`.
+
+## Building brushes, and why that was refused until now
+
+`edit_vmf` used to say it outright: creating a brush means choosing planes and texture axes,
+and a tool that does that without an oracle produces maps that compile and are wrong. The
+argument was right. What changed is that the oracles exist now, so the conclusion expired
+rather than the reasoning.
+
+`write_vmf_solid` takes a shape — `box`, `wedge` for a ramp, `cylinder` for an n-sided
+prism, or `convex` for a hull given face by face — and two things it gets right by
+construction rather than by care:
+
+- **Winding.** Every face is wound against the solid's own centroid, so a normal that points
+  inward is turned around before it is written. A new shape cannot introduce a winding bug.
+- **Texture axes.** Not invented: vbsp's own base-axis table. Four of its six branches are
+  reproduced exactly by `gen_probe.py`, which was written by hand and has been through a
+  real compile and a real boot. The other two are only reachable from slopes, which no
+  hand-written fixture covers — so the answer there is that this is the compiler's own
+  algorithm, not an extrapolation from the box case.
+
+Nothing is written until the result has been read back by `read_vmf_solids` and passed. The
+writer goes volume → planes and the checker goes planes → volume, so neither hides the
+other's sign error, and a solid that does not close is refused rather than reported.
+
+And because two programs written on the same afternoon agreeing proves less than it looks:
+**a six-brush room built entirely by this tool is compiled by vbsp for real, and seals.**
+Remove one wall and it leaks. Without that second half, a writer that emitted nothing at all
+would pass the first test just as happily.
+
+## Hints, and what a compiled map has already forgotten
+
+`func_detail`, hints, per-face lightmap scale: the decisions that most affect how a map
+performs exist **only in the `.vmf`**. vvis consumes hints and they are gone from the `.bsp`,
+vbsp folds detail into the world. So a tool that can audit a compiled map in detail is still
+unable to act on anything it finds there — the acting has to happen on the source.
+
+`write_hint_brush` places a slab carrying `TOOLS/TOOLSHINT` on the plane vvis should cut
+along and `TOOLS/TOOLSSKIP` everywhere else, and `rotateZ` turns it, which is how a cut is
+made diagonal.
+
+Compiled three ways on the probe room, 11/08/2026, stock compilers:
+
+| | leaves | clusters | VISIBILITY |
+|---|---|---|---|
+| no hint | 29 | 4 | 44 B |
+| hint, axial | 33 | 8 | 84 B |
+| hint, 45° | 35 | 10 | 124 B |
+
+The diagonal is not the axial cut turned round: in the same room it subdivides further. That
+is the lever behind an audit finding on three shipped city maps, whose BSP trees choose
+diagonal split planes at roughly **80×** the rate of a same-genre control by another author —
+an author building a city whose streets do not run along the axes reaches for exactly this.
+
+Finer is not automatically better: those clusters cost VIS data and compile time, and one
+small room is one sample. What the table settles is that the lever works and that the two
+cuts are not equivalent. The tool says so itself — it returns the measurement to take next,
+because **a hint that changes no leaf count did nothing and still costs a plane in the tree.**
+
+## Reading brushes backwards
+
+A VMF stores a brush as planes. `read_vmf_solids` intersects those half-spaces back into a
+volume, and checks what comes out: closed, convex, inside the world, on a grid, with texture
+axes that actually lie across their own faces.
+
+The direction is the point. Anything that *writes* a brush goes volume → planes; this goes
+planes → volume. A sign error or an inverted winding cannot survive both, so the two check
+each other instead of sharing a bug — which is what "no tool without an oracle" has to mean
+before this repository can write geometry at all.
+
+The subtle case, and the reason the closure test is not a corner count: reverse one side's
+winding on a box and its half-space faces outward, so the solid becomes an infinite prism.
+The four corners at the closed end survive and satisfy every half-space, so counting corners
+returns four and looks healthy. What gives it away is that those four are coplanar and the
+volume is zero. Removing the volume half of that test turns exactly one test red, which is
+how it was checked rather than reasoned about.
+
+### On grids
+
+Every solid also reports the coarsest grid all its corners land on, and the report carries
+the distribution. That turns a piece of workshop lore — *build everything on one grid, 8 is
+a good one* — into something a map can be asked about.
+
+Measured 11/08/2026 on `ttt_traps.vmf`, the only Hammer-written map shipped with the game:
+
+| Grid | Solids | |
+|---|---|---|
+| 16 | 3 | 4% |
+| 8 | 24 | 32% |
+| 4 | 1 | 1% |
+| 2 | 18 | 24% |
+| 1 | 29 | 39% |
+
+75 solids, none off-grid, no errors. So a map that shipped and plays is **not** built to one
+uniform grid. Read that carefully, though: this metric is the *coarsest* grid every corner
+fits, so a single odd coordinate anywhere on a brush drops the whole brush to 1. It measures
+how uniform the geometry ended up, not what grid someone worked at.
 
 ## Proven, and not proven
 
@@ -66,7 +199,8 @@ measurement in [`docs/`](docs/), or it says it is not.
 | BSP reading | **proven** — cross-checked against three independent witnesses |
 | Measurement | **proven** — same |
 | VMF reading and lint | **proven** — every rule verified by a fault injected on purpose |
-| VMF writing (`edit_vmf`) | **proven** — comments, blank lines and indentation survive; no brush geometry |
+| VMF writing (`edit_vmf`) | **proven** — comments, blank lines and indentation survive |
+| Brush creation (`write_vmf_solid`) | **proven** — a room built entirely by it compiles sealed, and leaks when one wall is removed |
 | Compiling, both toolchains | **proven** — a leak caused, then located, on stock and Hammer++ |
 | Python sidecar (srctools) | **proven** |
 | Game discovery | **proven for Garry's Mod only** — the readers are generic Source, but one game has been run here |
@@ -125,8 +259,12 @@ from and whether a file was read; `health` reports it. See
 | `read_materials` | `map` | | Material table of a compiled map, and how many `TEXINFO` reference each one |
 | `read_lightmap_budget` | `map` | | Where a compiled map's lightmap resolution went: total luxels, distribution, costliest faces |
 | `read_visleaf_stats` | `map` | | Quality of a compiled map's visibility split: leaf/cluster counts, leaf volume distribution |
+| `read_map_report` | `map` | | Judges a map against a budget profile: a verdict per criterion, not another number |
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
+| `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
+| `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
+| `write_hint_brush` | `map` | ● | Places a hint brush, straight or diagonal, to shape where vvis splits the map |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
