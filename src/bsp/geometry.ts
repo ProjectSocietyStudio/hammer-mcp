@@ -16,6 +16,19 @@ import type { BspHeader } from "./header.js";
 export interface LumpSpec {
   index: number;
   bytes?: number;
+  /**
+   * Record size per lump version, for structs whose shape changed between them.
+   *
+   * `dleaf_t` is the case this exists for: version 0 carries an inline
+   * `CompressedLightCube` and measures 56 bytes, version 1 moved that lighting into its
+   * own lump and measures 32. Hard-coding either counts every map of the other version
+   * wrongly -- and since practically every modern map is version 1, hard-coding 32 passes
+   * every test anyone is likely to run.
+   *
+   * A version absent from this table yields no count and says so, rather than falling
+   * back to whichever size happens to be listed.
+   */
+  bytesByVersion?: Readonly<Record<number, number>>;
   limit?: number;
   limitName?: string;
 }
@@ -31,7 +44,7 @@ export const LUMP_SPECS: readonly LumpSpec[] = [
   { index: 7, bytes: 56, limit: 65536, limitName: "MAX_MAP_FACES" },
   { index: 8 },
   { index: 9 },
-  { index: 10, limit: 65536, limitName: "MAX_MAP_LEAFS" },
+  { index: 10, bytesByVersion: { 0: 56, 1: 32 }, limit: 65536, limitName: "MAX_MAP_LEAFS" },
   { index: 11 },
   { index: 12, bytes: 4, limit: 256000, limitName: "MAX_MAP_EDGES" },
   { index: 13, bytes: 4, limit: 512000, limitName: "MAX_MAP_SURFEDGES" },
@@ -106,15 +119,26 @@ export function readGeometry(path: string): GeometryReport {
         `lump is LZMA-compressed, so no record count can be given without decompressing. ` +
         `It declares ${lump.declaredUncompressedBytes} uncompressed bytes -- declared in ` +
         `its header, not verified here.`;
-    } else if (spec.bytes !== undefined) {
-      if (lump.length % spec.bytes === 0) {
-        count = lump.length / spec.bytes;
-      } else {
-        // The struct changed shape in this BSP version. Reporting length/bytes anyway
-        // would produce a plausible wrong number, which is worse than none.
-        note =
-          `${lump.length} bytes is not a multiple of the expected ${spec.bytes}-byte ` +
-          `record; the layout differs in this BSP version`;
+    } else if (
+      spec.bytesByVersion !== undefined &&
+      spec.bytesByVersion[lump.version] === undefined
+    ) {
+      note =
+        `lump version ${lump.version} is not one this reader knows for lump ${spec.index} ` +
+        `(known: ${Object.keys(spec.bytesByVersion).join(", ")}); no record size applies, ` +
+        `so no count is given`;
+    } else {
+      const recordBytes = spec.bytesByVersion?.[lump.version] ?? spec.bytes;
+      if (recordBytes !== undefined) {
+        if (lump.length % recordBytes === 0) {
+          count = lump.length / recordBytes;
+        } else {
+          // Reporting length/bytes anyway would produce a plausible wrong number, which
+          // is worse than none.
+          note =
+            `${lump.length} bytes is not a multiple of the expected ${recordBytes}-byte ` +
+            `record; the layout differs in this BSP version`;
+        }
       }
     }
 
