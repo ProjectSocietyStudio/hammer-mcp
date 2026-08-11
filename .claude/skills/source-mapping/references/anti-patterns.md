@@ -9,15 +9,15 @@ rather than guessing at it.
 
 | Myth | What is actually true | Where it holds anyway |
 |---|---|---|
-| "Too many brushes = lag" | The raw count of world brushes is not the metric that matters — their effect on the VIS split is (`references/visibility.md`) `[consensus]` | `MAX_MAP_BRUSHSIDES` = 65536 faces is a hard compile limit `[engine]`: past it, this is no longer about FPS, the compile simply fails |
-| "Props are always cheaper than brushes" | False in both absolute directions — Source does not batch the rendering of several `.mdl`, each isolated prop is a separate draw call; one cited comparison has a `func_detail` beating an equivalent displacement `[disputed, quantified once]` | A **combined static prop** (propcombine) almost always beats the equivalent in detailed brushes — draw call count decides, not the category (`references/performance.md`) |
+| "Too many brushes = lag" | The raw count of world brushes is not the metric that matters — their effect on the VIS split is (`visibility.md`) `[consensus]` | `MAX_MAP_BRUSHSIDES` = 65536 faces is a hard compile limit `[engine]`: past it, this is no longer about FPS, the compile simply fails |
+| "Props are always cheaper than brushes" | False in both absolute directions — Source does not batch the rendering of several `.mdl`, each isolated prop is a separate draw call; one cited comparison has a `func_detail` beating an equivalent displacement `[disputed, quantified once]` | A **combined static prop** (propcombine) almost always beats the equivalent in detailed brushes — draw call count decides, not the category (`performance.md`) |
 | "Nodraw every hidden face, the gain is huge" | Documented good practice, but **no solid quantified benchmark** compares a fully nodrawed map to an untreated one at equal geometry `[disputed]` | Apparently free, so worth doing anyway — but not the first optimisation priority next to hint/areaportal/`func_detail` |
-| "`func_detail` everything that is not a load-bearing wall" | A sound starting heuristic, false taken literally: a `func_detail` **never seals anything** and cannot form an areaportal (`references/visibility.md`) `[engine]` | On anything that takes part in neither the map's envelope nor an areaportal, the heuristic holds without reservation |
-| "A giant skybox around the map fixes leaks" | Catastrophic: the map becomes one or two visleaves, VIS can no longer cut anything, everything is rendered permanently — the exact anti-solution to the problem it claims to solve `[engine]` | Nowhere — always fix the leak at its source through the pointfile (`references/compiling.md`) |
+| "`func_detail` everything that is not a load-bearing wall" | A sound starting heuristic, false taken literally: a `func_detail` **never seals anything** and cannot form an areaportal (`visibility.md`) `[engine]` | On anything that takes part in neither the map's envelope nor an areaportal, the heuristic holds without reservation |
+| "A giant skybox around the map fixes leaks" | Catastrophic: the map becomes one or two visleaves, VIS can no longer cut anything, everything is rendered permanently — the exact anti-solution to the problem it claims to solve `[engine]` | Nowhere — always fix the leak at its source through the pointfile (`compiling.md`) |
 | "The 32768-unit limit" | That is an **extent**, not a bound: the world runs from −16384 to +16384 on each axis (`MAX_COORD_INTEGER`), and 32768 is the edge-to-edge distance `[engine, worldsize.h]` | Nowhere — building "up to 32768" from the origin leaves the world by a factor of two, in both directions |
-| "`-fast` is enough for testing" | True for routine gameplay iteration; false as final validation — vvis does not test visibility and vrad ignores bounces, which produces visible noise on dark edges and displacements `[engine]` | Never sufficient as the last compile before an in-game test or a release (`references/compiling.md`) |
+| "`-fast` is enough for testing" | True for routine gameplay iteration; false as final validation — vvis does not test visibility and vrad ignores bounces, which produces visible noise on dark edges and displacements `[engine]` | Never sufficient as the last compile before an in-game test or a release (`compiling.md`) |
 | "A leak still works" | False: a leaking map has no `.prt`, therefore no VVIS; VRAD then computes badly or direct-only — the map compiles, but it is unplayable in the affected areas `[engine]` | Nowhere — a leak invalidates everything after it in the chain, and `run_compile` stops at the offending stage on its own |
-| "1 Hammer unit = 1 inch, the scientific basis for scaling" | The VDC documents the inconsistency itself: architecture is calibrated on 1 foot = 16 units, characters on 1 foot = 12 — applying 16 to the player would put their eyes 4 feet up, which corresponds to nothing `[disputed, VDC says so itself]` | A good rough estimate for pure architectural brushwork (doors, ceilings), never for player-relative placement (`references/level-design.md`) |
+| "1 Hammer unit = 1 inch, the scientific basis for scaling" | The VDC documents the inconsistency itself: architecture is calibrated on 1 foot = 16 units, characters on 1 foot = 12 — applying 16 to the player would put their eyes 4 feet up, which corresponds to nothing `[disputed, VDC says so itself]` | A good rough estimate for pure architectural brushwork (doors, ceilings), never for player-relative placement (`level-design.md`) |
 
 What these nine myths share: each confuses a gesture that **looks** safe (covering it up, nodrawing
 everything, detailing everything, testing with `-fast`) with a gesture that **is** safe. The engine
@@ -37,11 +37,11 @@ Where claiming to know would be dishonest:
   faster than an equivalent displacement) predates propcombine becoming standard in modern
   toolchains. Missing: a rerun of that same comparison with current tools.
 - **The "ideal" lightmap scale** — 16 is the historical default, but no universal recommended value
-  exists beyond "adapt it face by face" (`references/lighting.md` already carries that table).
+  exists beyond "adapt it face by face" (`lighting.md` already carries that table).
   Missing: a consensus on where lowering it is worth the compile cost.
 - **`WARNING: node without a volume`, `Cluster portals saw into cluster`, `FindPortalSide error`** —
   behaviours observed at compile time, with no dedicated VDC page explaining the exact mechanism
-  (full catalogue: `references/compiling.md`). Missing: a primary source, not just community
+  (full catalogue: `compiling.md`). Missing: a primary source, not just community
   treatment.
 - **The Hammer GUI versus a command line / compile wrapper** — no source documents any difference
   in engine output between the two; both call the same `vbsp`/`vvis`/`vrad` executables. The real
@@ -62,7 +62,7 @@ judgement to pass.
 | Visleaf count abnormally low for the map size | giant skybox, or a map with too little structural geometry | `read_visleaf_stats`, `read_map_extents` (hammer-mcp) |
 | `LEAK` / `leaked!` in the log, non-empty `.lin` | sealing broken — a wall marked detail, an undoubled displacement, a badly sealed areaportal | `read_compile_log`, `read_leak` (hammer-mcp) |
 | Structural/detail ratio extreme in either direction | everything world brush (VIS not optimised) or everything detail (enormous visleaves) | `read_map_geometry` (hammer-mcp) |
-| Brush face count close to 65536 | high-resolution geometry (cylinders, arches) left as world brushes | `read_brush_volumes` (hammer-mcp) against the table in `references/brushwork.md` |
+| Brush face count close to 65536 | high-resolution geometry (cylinders, arches) left as world brushes | `read_brush_volumes` (hammer-mcp) against the table in `brushwork.md` |
 | A referenced `.vmt` missing from the pakfile, purple-black chequerboard in game | incomplete packing — a file referenced by the material was not embedded | `read_pakfile` (hammer-mcp), `read_console` (gmod-mcp) |
 | A `-fast` compile flag on what is presented as the final build | final validation done on a degraded compile | `read_compile_log` (hammer-mcp) — look for the logged flags |
 | Flat `lightmapscale` histogram (everything at 16, or everything at 4) | no face-by-face discrimination, wasted budget or banding | `read_lightmap_budget` (hammer-mcp) |

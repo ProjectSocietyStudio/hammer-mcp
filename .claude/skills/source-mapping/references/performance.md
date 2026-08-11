@@ -130,8 +130,9 @@ Measuring server-side: `net_graph 4` (the `sv` line), `vprof_generate_report` (a
 subsystem, useful post-mortem outside a live session), and the map's entity count
 (`read_bsp_entities`, hammer-mcp) set against the edict limit. Per-Lua-hook detail — the real CPU
 cost of a `Think` or a `PlayerTick` — is not this page's subject: see
-`.claude/skills/glua/references/perf.md`, which documents `r_harness_hookcost` and `vprof`
-(HolyLib) for that, and warns about `fprofiler` not doing what it is credited with.
+the `glua` skill's `references/perf.md` — in the server workshop, not in this repository — which
+documents `r_harness_hookcost` and `vprof` (HolyLib) for that, and warns about `fprofiler` not doing
+what it is credited with.
 
 ## Measuring, in one table
 
@@ -146,7 +147,7 @@ cost of a `Think` or a `PlayerTick` — is not this page's subject: see
 | `prop_dynamic` → `prop_static` candidates | `read_prop_survey` (hammer-mcp, offline) |
 | Structural/detail ratio, raw counts | `read_map_geometry` (hammer-mcp, offline) |
 | Entity count against the edict limit | `read_bsp_entities` (hammer-mcp, offline) |
-| Cost per Lua hook (`Think`, `PlayerTick`…) | out of scope here — `glua/references/perf.md` |
+| Cost per Lua hook (`Think`, `PlayerTick`…) | out of scope here — the `glua` skill, elsewhere |
 | Where to cut: which model to make a `prop_static`, which fade level to pick | human judgement, not tooled |
 
 No `read_vprof` tool exists in this repository: `vprof` is driven from the console

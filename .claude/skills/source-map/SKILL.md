@@ -58,7 +58,7 @@ can do. It cannot: relight the map (the LIGHTING lump is baked), create geometry
 survives a recompile, hot-reloads.
 
 ⚠️ **Gate B has not been passed.** Nothing yet proves the current Garry's Mod branch reads `.lmp`
-files at all. The verification protocol, negative control included, is in `hammer-mcp/docs/gates.md`.
+files at all. The verification protocol, negative control included, is in `docs/gates.md`, in this repository.
 Do not present a lump patch as working before then.
 
 ## Writing or changing a VMF
