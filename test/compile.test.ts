@@ -117,6 +117,31 @@ describe("pointfile correlation", () => {
   });
 });
 
+describe("the Hammer++ compilers say the same things", () => {
+  // Captured from vbspplusplus/vvisplusplus/vradplusplus on 11/08/2026, gate C. The rules
+  // in log.ts were written against the stock compilers of 2013; nothing guaranteed the
+  // ++ builds phrase their failures the same way, and a parser that silently found
+  // nothing in a ++ log would look exactly like a clean compile.
+  const log = (name: string): string =>
+    readFileSync(join(FIXTURES, "logs", `plusplus-${name}.txt`), "utf8");
+
+  it.each(["vbsp", "vvis", "vrad"])("stays quiet on a clean %s run", (stage) => {
+    const r = parseCompileLog(log(stage));
+    expect(r.clean).toBe(true);
+    expect(r.leaked).toBe(false);
+    expect(r.findings).toEqual([]);
+  });
+
+  it("still recognises a leak, banner and entity line alike", () => {
+    // The half that gives the three above their meaning: silence on a clean log only
+    // counts once the same parser has been shown to speak up on a broken one.
+    const r = parseCompileLog(log("leak"));
+    expect(r.leaked).toBe(true);
+    expect(r.clean).toBe(false);
+    expect(r.byRule["leak"]).toBe(2);
+  });
+});
+
 describe("compiling for real, under wine", () => {
   const sealed = join(scratch, "sealed.vmf");
   const leaky = join(scratch, "leaky.vmf");

@@ -53,6 +53,49 @@ géométrie.
 cwd de wine et compile silencieusement le mauvais fichier. `WINEDEBUG=-all` est indispensable :
 sinon stderr est un mur de `fixme:`.
 
+### Porte C — la chaîne Hammer++ sous Wine : **passée le 11/08/2026**
+
+`vbspplusplus.exe`, `vvisplusplus.exe`, `vradplusplus.exe` et `bspzipplusplus.exe` (builds de
+juin 2026) s'exécutent sous le même wine 9.0 que la chaîne stock, sans DLL supplémentaire.
+
+**Ce que la porte a corrigé, et c'est l'essentiel : ils ne vivent pas là où on les attendait.**
+
+| | stock | Hammer++ |
+|---|---|---|
+| Répertoire | `GarrysMod/bin/` | `GarrysMod/bin/win64/` |
+| Architecture | PE32 i386 | PE32+ x86-64 |
+| Les `.fgd` | `bin/` | — (`toolsplusplus.fgd` livré avec, à part) |
+
+`bin/win64/` a **aussi** ses propres `vbsp.exe`/`vvis.exe`/`vrad.exe` 64-bit stock, et exige la
+branche bêta **x86-64** de GMod (`BetaKey "x86-64"` dans `appmanifest_4000.acf`). Conséquence pour
+la configuration : `gmodBin` désigne à la fois le dossier des compilateurs **et** celui des `.fgd`
+— les deux rôles se séparent ici, et un seul chemin ne suffit plus.
+
+Deux archives distinctes, contrairement à ce que la page de téléchargement laisse croire :
+
+- `hammerplusplus_gmod_build8871.zip` — l'**éditeur seul**, aucun compilateur dedans ;
+- `tools_plusplus.zip` (dépôt `ficool2/misc_tools`) — les quatre compilateurs, `studiomdlplusplus`
+  et `toolsplusplus.fgd`. Son dossier `compatibility/` **n'a pas été installé** : il contient
+  `tier0.dll`, `vstdlib.dll`, `filesystem_stdio.dll` et consorts, qui écraseraient ceux de
+  l'install Steam. Rien n'en a eu besoin.
+
+Compile complet de `test/fixtures/hmcp_probe.vmf`, les trois étapes à 0 :
+
+| | PLANES | VERTEXES | TEXINFO | FACES | BRUSHES |
+|---|---|---|---|---|---|
+| stock | 40 | 35 | 3 | 16 | 6 |
+| Hammer++ | 40 | 35 | 3 | 16 | 6 |
+
+**Contrôle négatif** — sans lui la porte ne prouverait qu'une carte qui marche. `info_player_start`
+déplacé en `0 0 2000`, hors du volume scellé : VBSP++ imprime le même `**** leaked ****`, la même
+ligne `Entity info_player_start (0.00 0.00 2000.00) leaked!`, et écrit un `.lin` de deux points **au
+même format, l'entité au second** — exactement la convention sur laquelle `read_leak` est calibré.
+
+Les quatre sorties brutes sont versionnées dans `test/fixtures/logs/` et rejouées par
+`test/compile.test.ts` : `parseCompileLog` reste muet sur les trois compiles propres et voit la
+fuite. Cela prouve ces deux cas, **pas** que toutes les erreurs des builds `++` sont couvertes —
+leurs messages propres n'ont pas encore d'échantillon.
+
 ### Porte B — GMod honore-t-il `maps/<map>_l_0.lmp` ? : **NON TESTÉE**
 
 Le codec est écrit et prouvé contre un fichier de Valve (`srcds/garrysmod/maps/c1a1_l_0.lmp`), mais

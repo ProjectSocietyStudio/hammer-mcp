@@ -1,0 +1,182 @@
+ficool2 - vradplusplus.exe (Jun 22 2026)
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\female_whi'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_ara'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_bla'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_chi'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_lat'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_pak'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_whi'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\ps_modeltest'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\society_shaders'
+---------------
+gamedir: Z:\games\GarrysMod\garrysmod\
+---------------
+16 threads
+Compiling in LDR mode
+Reading texlights from 'lights.rad'...
+51 texlights parsed
+Loading Z:\scratch\hmcp_probe.bsp
+0 props added to raytrace
+Setting up ray-trace acceleration structure (72 triangles)... Done (0.00 seconds)
+16 faces
+0 fake patch planes
+7281 square feet [1048576.00 square inches]
+0 Displacements
+0 Square Feet [0.00 Square Inches]
+FindNeighbors:       0...1...2...3...4...5...6...7...8...9...10 (0)
+16 patches before subdivision
+496 patches after subdivision
+CreateDirectLights...
+BuildLightVisibility: 0...1...2...3...4...5...6...7...8...9...10 (0)
+1 lights, 0 styled (0.00 seconds)
+BuildFacelights:     0...1...2...3...4...5...6...7...8...9...10 (0)
+BuildVisLeafs:       0...1...2...3...4...5...6...7...8...9...10 (0)
+transfers 35216, max 170
+transfer lists:   0.3 megs
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #1 added RGB(53986, 15176, 150)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #2 added RGB(41471, 3277, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #3 added RGB(31860, 708, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #4 added RGB(24475, 153, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #5 added RGB(18802, 33, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #6 added RGB(14444, 7, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #7 added RGB(11096, 2, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #8 added RGB(8524, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #9 added RGB(6548, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #10 added RGB(5030, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #11 added RGB(3864, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #12 added RGB(2968, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #13 added RGB(2280, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #14 added RGB(1752, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #15 added RGB(1346, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #16 added RGB(1034, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #17 added RGB(794, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #18 added RGB(610, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #19 added RGB(469, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #20 added RGB(360, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #21 added RGB(277, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #22 added RGB(212, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #23 added RGB(163, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #24 added RGB(125, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #25 added RGB(96, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #26 added RGB(74, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #27 added RGB(57, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #28 added RGB(44, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #29 added RGB(34, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #30 added RGB(26, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #31 added RGB(20, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #32 added RGB(15, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #33 added RGB(12, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #34 added RGB(9, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #35 added RGB(7, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #36 added RGB(5, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #37 added RGB(4, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #38 added RGB(3, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #39 added RGB(2, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #40 added RGB(2, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #41 added RGB(1, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #42 added RGB(1, 0, 0)
+GatherLight:         0...1...2...3...4...5...6...7...8...9...10 (0)
+	Bounce #43 added RGB(1, 0, 0)
+Build Patch/Sample Hash Table(s).....Done<0.0001 sec>
+FinalLightFace:      0...1...2...3...4...5...6...7...8...9...10 (0)
+FinalLightFace Done
+Setting up leaf ambient computation...
+0 of 0 (0% of) surface lights went in leaf ambient cubes.
+ComputeLeafAmbient:  0...1...2...3...4...5...6...7...8...9...10 (0)
+Writing leaf ambient...done
+Ready to Finish
+
+Object names       Objects/Maxobjs  Fullness 
+------------       ---------------  -------- 
+entities                 4/65536    ( 0.0%) 
+models                   1/4096     ( 0.0%) 
+brushes                  6/65536    ( 0.0%) 
+brushsides              36/655350   ( 0.0%) 
+planes                  40/65536    ( 0.1%) 
+vertexes                35/65536    ( 0.1%) 
+nodes                   27/65536    ( 0.0%) 
+texinfos                 3/32768    ( 0.0%) 
+texdata                  1/8192     ( 0.0%) 
+dispinfos                0/16384    ( 0.0%) 
+faces                   16/65536    ( 0.0%) 
+hdr faces                0/65536    ( 0.0%) 
+origfaces                6/65536    ( 0.0%) 
+leaves                  29/65536    ( 0.0%) 
+leaffaces               16/65536    ( 0.0%) 
+leafbrushes             16/65536    ( 0.0%) 
+areas                    2/1024     ( 0.2%) 
+surfedges               65/512000   ( 0.0%) 
+edges                   34/256000   ( 0.0%) 
+leafwaterdata            0/32768    ( 0.0%) 
+primitives               0/32768    ( 0.0%) 
+primverts                0/65536    ( 0.0%) 
+primindices              0/65536    ( 0.0%) 
+cubemapsamples           0/1024     ( 0.0%) 
+overlays                 0/8192     ( 0.0%) 
+vertnormalindices       64/256000   ( 0.0%) 
+visdata                 44/16777216 ( 0.0%) 
+entdata                552/393216   ( 0.1%) 
+LDR ambient table       29/65536    ( 0.0%) 
+HDR ambient table       29/65536    ( 0.0%) 
+LDR worldlights            1       
+HDR worldlights            0       
+LDR lightdata              18560   
+HDR lightdata              0       
+LDR leaf ambient           62      
+HDR leaf ambient           29      
+occluders                  0       
+occluder polygons          0       
+occluder vert ind          0       
+detail props               12      
+static props               12      
+pakfile                    57896   
+physics                    2314    
+physics terrain            2       
+
+Level flags = 0
+
+Total triangle count: 32
+Writing Z:\scratch\hmcp_probe.bsp
+0 seconds elapsed

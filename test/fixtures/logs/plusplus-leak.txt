@@ -1,0 +1,27 @@
+ficool2 - vbspplusplus.exe (Jun 23 2026)
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\female_whi'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_ara'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_bla'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_chi'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_lat'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_pak'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\male_whi'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\ps_modeltest'
+Adding filesystem addon 'Z:\games\garrysmod\garrysmod\addons\society_shaders'
+16 threads
+---------------
+gamedir: Z:\games\GarrysMod\garrysmod\
+---------------
+Loading Z:\scratch\leaky.vmf
+Locating GameData file 'garrysmod.fgd'...
+Parsing GameData file Z:\games\garrysmod\bin\garrysmod.fgd
+Parsing GameData file Z:\games\garrysmod\bin\base.fgd
+Parsing GameData file Z:\games\garrysmod\bin\halflife2.fgd
+Parsing GameData file Z:\games\garrysmod\bin\base.fgd
+fixing up env_cubemap materials on brush sides...
+FloodEntities...
+entity reached from outside -- no filling
+**** leaked ****
+Entity info_player_start (0.00 0.00 2000.00) leaked!
+--- MAP LEAKED ---
+
