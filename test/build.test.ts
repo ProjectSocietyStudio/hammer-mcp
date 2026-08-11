@@ -7,6 +7,7 @@ import type { ToolContext } from "../src/mcp/registry.js";
 import { writeVmfSolidTool } from "../src/tools/build.js";
 import { runCompile } from "../src/tools/compile.js";
 import { buildSolidText, insertSolids, textureAxesFor, VmfBuildError } from "../src/vmf/build.js";
+import type { Vec3 } from "../src/vmf/solid.js";
 import type { SolidSpec } from "../src/vmf/build.js";
 import { checkVmfSolids, parsePlanePoints, planeFromPoints } from "../src/vmf/solid.js";
 import { ctx as sharedCtx, FIXTURES, has } from "./support/env.js";
@@ -30,13 +31,6 @@ describe("texture axes", () => {
    * and a real srcds boot. Four of the base-axis table's six branches are reachable from a
    * box, and all four must come out identical -- if they do not, the table is not vbsp's.
    */
-  it("reproduces the hand-written probe's axes on every branch a box reaches", () => {
-    expect(textureAxesFor([0, 0, 1])).toEqual({ u: [1, 0, 0], v: [0, -1, 0] }); // floor
-    expect(textureAxesFor([0, 0, -1])).toEqual({ u: [1, 0, 0], v: [0, -1, 0] }); // ceiling
-    expect(textureAxesFor([1, 0, 0])).toEqual({ u: [0, 1, 0], v: [0, 0, -1] }); // +x
-    expect(textureAxesFor([0, -1, 0])).toEqual({ u: [1, 0, 0], v: [0, 0, -1] }); // -y
-  });
-
   it("never returns an axis lying along its own face normal, on any slope", () => {
     // The failure that compiles and only the eye catches. Swept rather than spot-checked,
     // because a ramp or a prism reaches branches no box ever does.
@@ -388,4 +382,40 @@ describe("a room built by the writer, compiled for real", () => {
     },
     300_000,
   );
+});
+
+describe("the texture axis table against the fixture that booted", () => {
+  /**
+   * The six faces `test/fixtures/gen_probe.py` writes by hand, transcribed from that file.
+   * It has been through a real compile and a real srcds boot, which is what makes it an
+   * oracle rather than a second opinion.
+   */
+  const HAND_WRITTEN: Array<{ face: string; normal: Vec3; u: Vec3; v: Vec3 }> = [
+    { face: "+z", normal: [0, 0, 1], u: [1, 0, 0], v: [0, -1, 0] },
+    { face: "-z", normal: [0, 0, -1], u: [1, 0, 0], v: [0, -1, 0] },
+    { face: "-y", normal: [0, -1, 0], u: [1, 0, 0], v: [0, 0, -1] },
+    { face: "+y", normal: [0, 1, 0], u: [1, 0, 0], v: [0, 0, -1] },
+    { face: "-x", normal: [-1, 0, 0], u: [0, 1, 0], v: [0, 0, -1] },
+    { face: "+x", normal: [1, 0, 0], u: [0, 1, 0], v: [0, 0, -1] },
+  ];
+
+  it.each(HAND_WRITTEN)("reproduces the $face face's axes exactly", ({ normal, u, v }) => {
+    const got = textureAxesFor(normal);
+    expect(got.u).toEqual(u);
+    expect(got.v).toEqual(v);
+  });
+
+  it("covers every branch of the table, so none is taken on faith", () => {
+    // The comment above BASE_AXES claims all six branches are confirmed. Pinned here so the
+    // claim cannot quietly become false -- a seventh entry, or a changed one, fails above
+    // and this count says why. An earlier version of that comment said "four of six", which
+    // understated what the fixture actually proves; measuring settled it.
+    const reached = new Set(
+      HAND_WRITTEN.map(({ normal }) => {
+        const { u, v } = textureAxesFor(normal);
+        return `${u.join(",")}|${v.join(",")}|${normal.join(",")}`;
+      }),
+    );
+    expect(reached.size).toBe(6);
+  });
 });
