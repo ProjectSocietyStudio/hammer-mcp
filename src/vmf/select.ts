@@ -131,10 +131,36 @@ export function findSolids(roots: readonly KvBlock[]): FoundSolid[] {
   return out;
 }
 
-/** The full source line range of a block, so cutting it leaves no blank indented line. */
+/**
+ * The span to cut when removing a block, so nothing else goes with it.
+ *
+ * A block Hammer wrote sits alone on its lines, and taking the whole line with it is what
+ * keeps a blank indented line out of the result. A `.vmf` is not obliged to be written that
+ * way, though, and the naive version -- from the previous newline to the next one -- was a
+ * data-loss bug: given the legal one-line file
+ *
+ *     world { "id" "1" "classname" "worldspawn" solid { "id" "2" } }
+ *
+ * deleting the solid removed the whole line and left ` }`. The world, its keyvalues and
+ * every entity on that line went with it, and the count check downstream still passed
+ * because every solid really had been deleted.
+ *
+ * So the line is only taken where it belongs to the block: the leading whitespace when
+ * nothing else precedes it on that line, and the trailing newline when nothing else
+ * follows.
+ */
 export function lineRange(text: string, block: KvBlock): { start: number; end: number } {
-  const start = text.lastIndexOf("\n", block.start - 1) + 1;
-  const end = text[block.end] === "\n" ? block.end + 1 : block.end;
+  const lineStart = text.lastIndexOf("\n", block.start - 1) + 1;
+  const alone = /^[\t ]*$/.test(text.slice(lineStart, block.start));
+  const start = alone ? lineStart : block.start;
+
+  let end = block.end;
+  let i = block.end;
+  while (i < text.length && (text[i] === "\t" || text[i] === " ")) i += 1;
+  if (i < text.length && text[i] === "\n") end = i + 1;
+  else if (i >= text.length) end = i;
+  // Anything else after the block on its line stays where it is.
+  if (end !== block.end && !alone) end = block.end;
   return { start, end };
 }
 

@@ -248,6 +248,19 @@ describe("deleteSolids", () => {
     );
   });
 
+  it("takes only the brush when the file puts other things on its line", () => {
+    // A .vmf is not obliged to be one block per line. The naive "cut from the previous
+    // newline to the next" removed the whole line, so deleting the solid from this legal
+    // file left " }" -- the world, its keyvalues and every entity on that line gone. The
+    // solid-count check downstream still passed, because every solid really had gone.
+    const oneLine = 'world { "id" "1" "classname" "worldspawn" solid { "id" "2" } }';
+    const r = deleteSolids(oneLine, { ids: [2] });
+    expect(r.matched).toBe(1);
+    expect(r.text).toContain("worldspawn");
+    expect(r.text).toContain('"id" "1"');
+    expect(r.text).not.toContain('"id" "2"');
+  });
+
   it("warns when the world has nothing left to seal with", () => {
     const r = deleteSolids(probe(), { ids: ALL });
     expect(r.matched).toBe(6);

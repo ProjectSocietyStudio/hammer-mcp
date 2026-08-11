@@ -51,6 +51,25 @@ describe("applySplices", () => {
     expect(out).toBe("abc!ghij");
   });
 
+  it("keeps an insertion sitting on the start of a replaced range", () => {
+    // The other boundary, and the one that was wrong: applying the insertion first put it
+    // inside the range about to be removed, so it vanished with it. reclass.ts moves a
+    // solid to a destination that can be exactly where the cut begins.
+    const out = applySplices(TEXT, [
+      { start: 3, end: 6, text: "" },
+      { start: 3, end: 3, text: "!" },
+    ]);
+    expect(out).toBe("abc!ghij");
+  });
+
+  it("keeps an insertion on a start boundary whichever order it was pushed in", () => {
+    const before = applySplices(TEXT, [
+      { start: 3, end: 3, text: "!" },
+      { start: 3, end: 6, text: "" },
+    ]);
+    expect(before).toBe("abc!ghij");
+  });
+
   it("refuses two ranges that overlap", () => {
     // Reachable today through applyVmfOps: one op removing an entity and another setting
     // a keyvalue on the same entity both match, and the result parses while being neither.
