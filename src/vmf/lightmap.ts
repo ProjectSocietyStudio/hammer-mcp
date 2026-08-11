@@ -25,6 +25,8 @@
  */
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
+import { eachSide, matchesFace } from "./select.js";
+import type { FaceSelector } from "./select.js";
 import { applySplices } from "./splice.js";
 import type { Splice } from "./splice.js";
 import { checkSolid, parsePlanePoints, parseTextureAxis, planeFromPoints } from "./solid.js";
@@ -45,23 +47,6 @@ export class VmfLightmapError extends Error {
  * the real limit for a brush face.
  */
 export const MAX_BRUSH_LUXELS_PER_AXIS = 32;
-
-export interface FaceSelector {
-  /** Only faces of these solids. */
-  solidIds?: number[];
-  /** Only faces whose material contains this, case-insensitively. */
-  material?: string;
-  /**
-   * Only faces pointing this way.
-   *
-   * `up` is a floor, `down` a ceiling, `side` a wall. The threshold is a normal's Z
-   * component past +/-0.7, which is 45 degrees -- a ramp counts as the thing it is closer
-   * to being.
-   */
-  facing?: "up" | "down" | "side" | "any";
-  /** Only faces at least this large, in square Hammer units. */
-  minArea?: number;
-}
 
 export interface FaceChange {
   solidId: number;
@@ -112,43 +97,6 @@ function luxelsFor(side: SolidSide, scale: number): { total: number; worstAxis: 
   const cu = Math.floor(extent(u) / scale) + 1;
   const cv = Math.floor(extent(v) / scale) + 1;
   return { total: cu * cv, worstAxis: Math.max(cu, cv) };
-}
-
-function matches(side: SolidSide, sel: FaceSelector): boolean {
-  if (sel.material && !side.material.toLowerCase().includes(sel.material.toLowerCase())) {
-    return false;
-  }
-  if (sel.minArea !== undefined && side.area < sel.minArea) return false;
-  if (sel.facing && sel.facing !== "any") {
-    const z = side.plane?.normal[2] ?? 0;
-    if (sel.facing === "up" && z <= 0.7) return false;
-    if (sel.facing === "down" && z >= -0.7) return false;
-    if (sel.facing === "side" && Math.abs(z) > 0.7) return false;
-  }
-  return true;
-}
-
-/** Every `side` block of the file, paired with the solid that owns it. */
-function eachSide(
-  roots: readonly KvBlock[],
-): Array<{ solid: KvBlock; side: KvBlock; owner: string }> {
-  const out: Array<{ solid: KvBlock; side: KvBlock; owner: string }> = [];
-  const take = (host: KvBlock, owner: string): void => {
-    for (const solid of children(host, "solid")) {
-      for (const side of children(solid, "side")) out.push({ solid, side, owner });
-    }
-  };
-  for (const root of roots) {
-    if (root.name === "world") {
-      take(root, "world");
-      for (const h of children(root, "hidden")) take(h, "world");
-    } else if (root.name === "entity") {
-      const cls = get(root, "classname") ?? "entity";
-      take(root, cls);
-      for (const h of children(root, "hidden")) take(h, cls);
-    }
-  }
-  return out;
 }
 
 export function setLightmapScale(
@@ -209,7 +157,7 @@ export function setLightmapScale(
         const p = pts ? planeFromPoints(...pts) : null;
         return p && s.plane && Math.abs(p.dist - s.plane.dist) < 0.01;
       });
-    if (!parsed || !matches(parsed, selector)) continue;
+    if (!parsed || !matchesFace(parsed, selector)) continue;
 
     const current = parsed.lightmapScale ?? 16;
     const before = luxelsFor(parsed, current);
