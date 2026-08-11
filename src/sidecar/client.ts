@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { run } from "@rolists/mcp-core";
+import { run } from "@projectsociety/mcp-core";
 import type { Config } from "../config.js";
 
 /** A sidecar call that came back with an error, or could not be made at all. */

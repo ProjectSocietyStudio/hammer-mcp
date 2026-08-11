@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { run } from "@rolists/mcp-core";
-import type { RunResult } from "@rolists/mcp-core";
+import { run } from "@projectsociety/mcp-core";
+import type { RunResult } from "@projectsociety/mcp-core";
 import type { Config } from "../config.js";
 
 export class ToolchainError extends Error {}

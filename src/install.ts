@@ -1,11 +1,11 @@
 import { fileURLToPath } from "node:url";
-import { installProject as coreInstall, installReport } from "@rolists/mcp-core";
+import { installProject as coreInstall, installReport } from "@projectsociety/mcp-core";
 import type { Config } from "./config.js";
 
 /**
  * Absolute path to this server's entry point (dist/index.js), next to this module.
  *
- * Computed here and not in `@rolists/mcp-core`: resolving `./index.js` against the shared
+ * Computed here and not in `@projectsociety/mcp-core`: resolving `./index.js` against the shared
  * package would point at mcp-core's own dist, and the installed entry would launch the
  * wrong thing.
  */
