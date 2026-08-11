@@ -748,13 +748,35 @@ qui en dépendent se sautent quand ils sont absents.
 
 | Champ | Défaut |
 |---|---|
-| `gmodBin` | `~/.steam/steam/steamapps/common/GarrysMod/bin` |
-| `gmodBinPlusPlus` | `<gmodBin>/win64` |
-| `gmodGameDir` | `~/.steam/steam/steamapps/common/GarrysMod/garrysmod` |
+| `game` | `gmod` — le profil actif quand un appel n'en nomme pas |
+| `gameProfiles` | `{}` — surcharges par profil : `binDir`, `gameDir`, `plusPlusBinDir`, `fgd`, `branch` |
 | `backend` | `wine` |
 | `winePrefix` | `~/.wine` |
 | `sidecarPython` | `<stateDir>/sidecar-venv/bin/python` |
 | `toolAllowlist` | `[]` |
+
+**En temps normal, il n'y a rien à configurer** : les chemins viennent de la découverte
+(`read_source_games`). `gameProfiles` sert aux cas qu'elle ne peut pas voir — un jeu installé hors
+Steam, des compilateurs dans une application séparée, une branche de moteur qu'on ne classe pas.
+
+`gmodBin`, `gmodGameDir` et `gmodBinPlusPlus` sont l'ancienne orthographe de
+`gameProfiles.gmod.{binDir,gameDir,plusPlusBinDir}`. Elles marchent toujours. Renseigner les deux
+avec des valeurs différentes est **refusé au chargement** plutôt que tranché en silence : la moitié
+perdante ne laisserait aucune trace dans les sorties.
+
+### Un profil dit d'où vient chacune de ses valeurs
+
+Un seul jeu a jamais été exécuté ici. « Lu dans `gameinfo.txt` » et « écrit dans la table
+intégrée » ne peuvent donc pas se ressembler, et chaque champ résolu porte sa `provenance`
+(`source` + `verified`), rendue par `health`.
+
+La table intégrée est volontairement maigre : appid, dossier d'installation, dossier du mod,
+branche. **Aucun nom de FGD, aucun plafond de lump.** Un `-game` pointé sur un dossier absent se
+voit en une ligne ; une FGD inventée fait accuser des cartes correctes sans que rien ne le dise.
+Un test l'assert : la table ne contient ni `.fgd` ni `MAX_MAP`.
+
+Un jeu déclaré mais absent rend `unusableForCompile` avec sa raison, et **jamais le `bin/` d'un
+autre jeu**.
 
 La chaîne d'outils Source vit **hors du dépôt**, dans la bibliothèque Steam, et livrée avec le
 **client** GMod — `srcds/bin/` n'en contient rien. Ces chemins sont donc propres à la machine, et
