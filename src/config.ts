@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
+import { loadConfig as coreLoadConfig } from "@rolists/mcp-core";
 import { z } from "zod";
 
 const STEAM_GMOD = join(
@@ -53,53 +53,15 @@ export interface Config extends ConfigFile {
   stateDir: string;
 }
 
-/** Markers that identify the root of the GMod repo. */
-const REPO_MARKERS = ["tools/lint.sh", "CLAUDE.md"];
-
-function looksLikeRepoRoot(dir: string): boolean {
-  return REPO_MARKERS.some((m) => existsSync(join(dir, m)));
-}
-
-/** Walks up from `start` until it finds the repo root. */
-export function findRepoRoot(start: string): string | undefined {
-  let dir = resolve(start);
-  for (;;) {
-    if (looksLikeRepoRoot(dir)) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
-  }
-}
-
 /**
  * Loads the effective configuration. The root is resolved in this order:
  * 1. `HAMMER_MCP_REPO` (env)  2. the file's `repoRoot` field  3. walking up from cwd.
  */
 export function loadConfig(cwd: string = process.cwd()): Config {
-  const envRoot = process.env.HAMMER_MCP_REPO;
-
-  const probeRoot = envRoot ?? findRepoRoot(cwd) ?? cwd;
-  const configPath = join(probeRoot, ".hammer-mcp", "config.json");
-
-  let fromFile: ConfigFile = ConfigFile.parse({});
-  if (existsSync(configPath)) {
-    const raw = JSON.parse(readFileSync(configPath, "utf8")) as unknown;
-    fromFile = ConfigFile.parse(raw);
-  }
-
-  const repoRoot = resolveRepoRoot(envRoot, fromFile.repoRoot, probeRoot);
-  return {
-    ...fromFile,
-    repoRoot,
-    stateDir: join(repoRoot, ".hammer-mcp"),
-  };
+  return coreLoadConfig(
+    { envVar: "HAMMER_MCP_REPO", stateDirName: ".hammer-mcp", schema: ConfigFile },
+    cwd,
+  );
 }
 
-function resolveRepoRoot(
-  envRoot: string | undefined,
-  fileRoot: string | undefined,
-  fallback: string,
-): string {
-  const candidate = envRoot ?? fileRoot ?? fallback;
-  return isAbsolute(candidate) ? candidate : resolve(fallback, candidate);
-}
+export { findRepoRoot } from "@rolists/mcp-core";

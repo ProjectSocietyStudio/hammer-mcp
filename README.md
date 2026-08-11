@@ -200,16 +200,22 @@ compte de la totalité de la source — nœuds ordonnés, sans recouvrement, et 
 que de l'espace ou un commentaire. C'est exactement la propriété dont dépend le splice. Il passe
 sur `ttt_traps.vmf` (7082 lignes, écrit par Hammer).
 
-## Plomberie dupliquée depuis gmod-mcp — délibérément
+## Plomberie partagée avec gmod-mcp
 
 `src/mcp/registry.ts`, `src/mcp/server.ts`, `src/config.ts`, `src/logger.ts`, `src/install.ts` et
-`src/proc/run.ts` sont des copies adaptées. Les deux serveurs ont des cycles de vie différents —
-gmod-mcp est un pont vers un moteur vivant, avec un état et un verrou ; hammer-mcp est de
-l'outillage fichier sans état — et fusionner doublerait la surface d'un transport déjà assez
-fragile pour nécessiter `daemon.lock`. Un paquet partagé serait prématuré pour ~350 lignes entre
-deux dépôts.
+`src/proc/run.ts` étaient des copies adaptées de celles de gmod-mcp, dupliquées **délibérément** :
+un paquet partagé paraissait prématuré pour ~350 lignes entre deux dépôts. Le seuil de révision
+inscrit ici était « un troisième serveur MCP, ou le même bug de plomberie corrigé deux fois ».
 
-**Seuil de révision** : un troisième serveur MCP, ou le même bug de plomberie corrigé deux fois.
+**Il a été atteint le 11/08/2026** : la dérive était déjà mesurable (`clip()` recopiée deux fois
+côté gmod-mcp, `stripAnsi()` d'un seul côté, le bloc image de l'autre) et la montée du SDK de
+`^1.12` à `1.30` allait devoir être faite et prouvée deux fois. Ces six fichiers sont désormais des
+adaptateurs de trois lignes au-dessus de [`@rolists/mcp-core`](../mcp-core/README.md), dépôt frère.
+
+Ce qui **ne monte pas** au noyau : `src/fs/guard.ts`, propre à nos arbres d'écriture, et l'enum
+`Realm` — `map`/`local` reste délibérément distinct des `sv`/`cl`/`local` de gmod-mcp. Les cycles
+de vie non plus ne fusionnent pas : gmod-mcp tient un verrou et un transport vers un moteur vivant,
+hammer-mcp est sans état. **Deux serveurs, un noyau.**
 
 ## Développement
 

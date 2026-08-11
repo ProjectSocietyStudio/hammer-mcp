@@ -1,15 +1,25 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { installProject as coreInstall, installReport } from "@rolists/mcp-core";
 import type { Config } from "./config.js";
 
-interface McpConfig {
-  mcpServers?: Record<string, unknown>;
-}
-
-/** Absolute path to this server's entry point (dist/index.js), next to this module. */
+/**
+ * Absolute path to this server's entry point (dist/index.js), next to this module.
+ *
+ * Computed here and not in `@rolists/mcp-core`: resolving `./index.js` against the shared
+ * package would point at mcp-core's own dist, and the installed entry would launch the
+ * wrong thing.
+ */
 function serverEntry(): string {
   return fileURLToPath(new URL("./index.js", import.meta.url));
+}
+
+function spec(config: Config) {
+  return {
+    serverName: "hammer-mcp",
+    envVar: "HAMMER_MCP_REPO",
+    repoRoot: config.repoRoot,
+    entryPath: serverEntry(),
+  };
 }
 
 /**
@@ -17,43 +27,17 @@ function serverEntry(): string {
  * shared). Other declared servers -- gmod-mcp above all -- are preserved.
  */
 export function installProject(config: Config): { path: string; entry: unknown } {
-  const path = join(config.repoRoot, ".mcp.json");
-  let current: McpConfig = {};
-  if (existsSync(path)) {
-    try {
-      current = JSON.parse(readFileSync(path, "utf8")) as McpConfig;
-    } catch {
-      current = {};
-    }
-  }
-  const entry = {
-    command: "node",
-    args: [serverEntry()],
-    env: { HAMMER_MCP_REPO: config.repoRoot },
-  };
-  const next: McpConfig = {
-    ...current,
-    mcpServers: { ...current.mcpServers, "hammer-mcp": entry },
-  };
-  writeFileSync(path, JSON.stringify(next, null, 2) + "\n");
-  return { path, entry };
+  return coreInstall(spec(config));
 }
 
 /** Entry point of the `hammer-mcp install` subcommand. */
 export function runInstall(config: Config): void {
-  const { path, entry } = installProject(config);
-  const e = entry as { args: string[] };
+  const s = spec(config);
+  const { path } = coreInstall(s);
   process.stdout.write(
-    [
-      `hammer-mcp installed (project scope): ${path}`,
-      "",
-      "Claude Code will load the server the next time it starts in this repo.",
-      'Remember to add "hammer-mcp" to enabledMcpjsonServers in .claude/settings.json.',
-      "Command-line equivalent:",
-      `  claude mcp add hammer-mcp -e HAMMER_MCP_REPO=${config.repoRoot} -- node ${e.args[0]}`,
+    installReport(s, path, [
       "",
       "Build first: (cd hammer-mcp && pnpm install && pnpm build)",
-      "",
-    ].join("\n"),
+    ]),
   );
 }
