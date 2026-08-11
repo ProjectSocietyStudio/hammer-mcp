@@ -1,120 +1,136 @@
-# Ambiance : son, brouillard, eau, ciel, météo, couleur
+# Atmosphere: sound, fog, water, sky, weather, colour
 
-## Le modèle général
+## The general model
 
-L'ambiance ne se calcule pas comme la géométrie ou l'éclairage : elle se **déclare**, zone par
-zone, via des entités qui coûtent presque rien à poser et beaucoup à mal régler. Rien ici n'est cuit
-par un compilateur — tout se pilote en jeu, donc tout se vérifie en jeu.
+Atmosphere is not computed like geometry or lighting: it is **declared**, zone by zone, through
+entities that cost almost nothing to place and a great deal to get wrong. Nothing here is baked by a
+compiler — it is all driven in game, so it is all verified in game.
 
 ## Soundscapes
 
-`env_soundscape` définit **seulement** le soundscape actif et l'origine des sons positionnés ; son
-`radius` est le rayon de **déclenchement** (ligne de vue requise), pas la portée audio des sons
-référencés — `-1` = déclenchement infini, pas portée sonore infinie. Un seul soundscape actif à la
-fois : en activer un second **crossfade** l'ancien, il ne s'additionne pas, et le joueur garde le
-dernier déclenché même hors ligne de vue. **`info_player_start` doit être couvert**, sinon le
-joueur spawn sans ambiance. [moteur]
+`env_soundscape` sets **only** the active soundscape and the origin of positioned sounds; its
+`radius` is the **trigger** radius (line of sight required), not the audio range of the referenced
+sounds — `-1` means infinite triggering, not infinite audible range. One soundscape is active at a
+time: activating a second **crossfades** the first, it does not add to it, and the player keeps the
+last one triggered even out of line of sight. **`info_player_start` must be covered**, or the player
+spawns with no ambience. `[engine]`
 
-| Besoin | Entité | Pourquoi |
+| Need | Entity | Why |
 |---|---|---|
-| Zone par proximité + ligne de vue | `env_soundscape` | Cas par défaut |
-| Réglages partagés sur plusieurs entrées | `env_soundscape_proxy` | Référence un `env_soundscape` existant, ne le duplique pas |
-| Déclenchement par volume plutôt que LOS | `env_soundscape_triggerable` + `trigger_soundscape` | Un `env_soundscape` simple ne répond pas à `trigger_soundscape` [moteur] |
+| Zone by proximity + line of sight | `env_soundscape` | The default case |
+| Settings shared across several entrances | `env_soundscape_proxy` | References an existing `env_soundscape` rather than duplicating it |
+| Triggering by volume rather than LOS | `env_soundscape_triggerable` + `trigger_soundscape` | A plain `env_soundscape` does not answer `trigger_soundscape` `[engine]` |
 
-Le fichier doit être listé dans `scripts/soundscapes_manifest.txt`, ou nommé
-`soundscapes_<nomdelacarte>.txt` pour un montage automatique propre à cette carte. ⚠️ **La limite de
-64 sons simultanés est partagée** entre tous les `ambient_generic` et sons de soundscape actifs —
-la dépasser corrompt le moteur audio sur toute la carte. [moteur] **Vérification** :
-`soundscape_debug 1` en jeu (cubes violets : vert déclenché, jaune actif non déclenché, rouge
-inactif), `soundscape_flush` pour repartir à zéro — `run_console_command` (gmod-mcp), état runtime
-qu'aucun outil `hammer-mcp` ne lit depuis le fichier.
+The file must be listed in `scripts/soundscapes_manifest.txt`, or named
+`soundscapes_<mapname>.txt` for clean per-map mounting. ⚠️ **The 64 simultaneous sound limit is
+shared** across every active `ambient_generic` and soundscape sound — exceeding it corrupts the
+audio engine across the whole map. `[engine]`
+
+⚠️ The soundscape **script** is found through a manifest, so nothing in the map names the file. A
+dependency walker that does not know that convention reports it as dead weight — see
+`tooling-coverage.md` on what the engine owns without anything naming it.
+
+**Verifying**: `soundscape_debug 1` in game (purple cubes: green triggered, yellow active but not
+triggered, red inactive), `soundscape_flush` to reset — runtime state no `hammer-mcp` tool reads
+from the file.
 
 ## `ambient_generic`
 
-Un son qui doit suivre une entité mobile passe par `SourceEntityName`, jamais par un parentage
-classique. Deux conditions dures : l'entité cible doit **déjà exister** au spawn de
-l'`ambient_generic`, et être **networkée au client** (`info_target` + flag *Transmit to client*).
-Assigner `SourceEntityName` via `AddOutput` n'est **pas supporté** — violé, le son reste figé à la
-position de spawn, sans erreur. [consensus] `radius` (défaut **1250** unités) n'est qu'un fondu
-approximatif : le son continue de jouer en interne au-delà et alimente la même limite de 64 ;
-préférer un `env_soundscape` dès que l'ambiance dépasse un effet ponctuel. [moteur] **Vérification** :
-`read_fgd_class` pour les keyvalues exactes du jeu, `read_vmf` pour confirmer que `SourceEntityName`
-pointe une entité présente dans le fichier — le résultat sonore reste un jugement humain, non outillé.
+A sound that must follow a moving entity goes through `SourceEntityName`, never through ordinary
+parenting. Two hard conditions: the target entity must **already exist** when the `ambient_generic`
+spawns, and be **networked to the client** (`info_target` + *Transmit to client* flag). Assigning
+`SourceEntityName` via `AddOutput` is **not supported** — break that and the sound stays frozen at
+its spawn position, with no error. `[consensus]`
 
-## Brouillard
+`radius` (default **1250** units) is only an approximate fade: the sound keeps playing internally
+beyond it and still counts against the same limit of 64; prefer an `env_soundscape` as soon as the
+ambience is more than a one-off effect. `[engine]`
 
-⚠️ **Le brouillard ne fait gagner aucune performance en soi.** `fogstart`/`fogend`/`fogcolor`
-produisent un simple fondu de couleur — ce qu'il masque continue d'être dessiné intégralement
-derrière le voile. Seul **`farz`** coupe réellement le rendu au-delà d'une distance ; c'est le seul
-des trois réglages qui pèse sur le GPU. [CONSENSUS/CONTESTÉ — `farz` a un comportement parfois cassé
-en GMod, cf. `Facepunch/garrysmod-issues#6300`]
+**Verifying**: `read_fgd_class` for the game's exact keyvalues, `read_vmf` to confirm
+`SourceEntityName` points at an entity present in the file — the audible result stays human
+judgement, not tooled.
 
-`farz` doit être **supérieur à `fogend`**. Défaut `-1`, résolu en interne à **28377,9204312** unités
-Hammer. `fogmaxdensity` est un float **0,0–1,0** (0.45 = 45 %), pas 0–255 ni 0–100. Plusieurs
-`env_fog_controller` peuvent coexister par zone (`SetFogController` envoyé au joueur, ou un
-`Master`) ; le brouillard du `sky_camera` se règle à part et doit **correspondre à la main** à celui
-du monde principal — il ne reçoit pas d'`Inputs` pour le suivre. [moteur] **Vérification** :
-`read_vmf`/`read_vmf_lint` pour `farz > fogend` et l'unicité du `Master` ; en jeu, `mat_wireframe`
-ou un compteur de draw calls (`run_console_command`) pour confirmer que `farz` coupe bien quelque
-chose au loin.
+## Fog
 
-## Eau
+⚠️ **Fog buys no performance in itself.** `fogstart`/`fogend`/`fogcolor` produce a colour fade —
+what it hides goes on being drawn in full behind the veil. Only **`farz`** actually cuts rendering
+beyond a distance; it is the only one of the three settings that touches the GPU.
+`[consensus/disputed — farz behaves inconsistently in GMod, cf. Facepunch/garrysmod-issues#6300]`
 
-Deux règles structurelles, pas des conseils : **une même PVS ne peut contenir qu'une seule hauteur
-d'eau *expensive*, et ne peut pas mélanger eau cheap et eau expensive** (violé : eau invisible ou
-non rendue — séparer par hint ou areaportal pour forcer des PVS distincts) ; **un seul
-`water_lod_control` par carte** (`cheapwaterstartdistance`/`cheapwaterenddistance` s'appliquent à
-toute la carte, VBSP en ajoute un si absent, en avoir deux casse la compilation). [MOTEUR/CONSENSUS]
+`farz` must be **greater than `fogend`**. Default `-1`, resolved internally to **28377.9204312**
+Hammer units. `fogmaxdensity` is a float **0.0–1.0** (0.45 = 45%), not 0–255 nor 0–100. Several
+`env_fog_controller` can coexist per zone (`SetFogController` sent to the player, or a `Master`);
+the `sky_camera`'s fog is set separately and must be **matched by hand** to the main world's — it
+receives no `Inputs` to follow it. `[engine]`
 
-Eau cheap et eau expensive ne sont **pas le même shader** : cheap = `LightmappedGeneric` +
-`%compilewater` + `$envmap`/cubemap statique ; expensive = réflexion/réfraction temps réel, rendue
-en interne jusqu'à 3× la scène. La face du dessus seule porte le matériau Water ; côtés et dessous
-en `tools/toolsnodraw`, surface rectangulaire sans pente en Z. [MOTEUR/CONSENSUS]
+**Verifying**: `read_vmf`/`read_vmf_lint` for `farz > fogend` and a unique `Master`; in game,
+`mat_wireframe` or a draw-call counter to confirm `farz` really cuts something in the distance —
+and note `mat_wireframe` is a **client** cvar, useless server-side.
 
-⚠️ **De l'eau qui bouge (marée, vagues) ne peut pas porter le shader Water** — il dépend d'un
-découpage de visleaf statique, incompatible avec un brush mobile. Utiliser `func_water_analog` avec
-`nature/water_movingplane` ou `nature/water_dx70`. [moteur] **Vérification** :
-`read_vmf`/`read_vmf_lint` pour compter les `water_lod_control` (≤1), `read_compile_log` pour les
-avertissements VBSP liés à l'eau — une même PVS franchissant deux hauteurs reste un jugement de
-plan, à confronter avec `read_map_geometry`.
+## Water
 
-## Ciel : cohérence, pas visibilité
+Two structural rules, not advice: **one PVS can contain only one *expensive* water height, and
+cannot mix cheap and expensive water** (break it and water goes invisible or unrendered — separate
+with a hint or an areaportal to force distinct PVSs); **one `water_lod_control` per map**
+(`cheapwaterstartdistance`/`cheapwaterenddistance` apply to the whole map, VBSP adds one if absent,
+having two breaks the compile). `[engine/consensus]`
 
-Le découpage `sky_camera`/échelle 1/16 et les contraintes de visibilité sont dans `visibilite.md` —
-ici, seulement ce qui touche l'ambiance. `sky_name` référence 6 faces VTF sans suffixe ; version HDR
-par le suffixe `_hdr` (sauf `sky_borealis01`, `sky_wasteland02`) — sans elle en carte HDR, retour
-silencieux à la version LDR, sans erreur. [moteur]
+Cheap and expensive water are **not the same shader**: cheap = `LightmappedGeneric` +
+`%compilewater` + `$envmap`/static cubemap; expensive = real-time reflection/refraction, rendering
+the scene internally up to three times. Only the top face carries the Water material; sides and
+bottom in `tools/toolsnodraw`, rectangular surface with no slope in Z. `[engine/consensus]`
 
-Le 3D skybox n'est **jamais un remplacement** du ciel 2D, toujours rendu devant lui : sa géométrie
-doit rester cohérente avec ce que la skybox 2D suggère, et son brouillard propre (sur `sky_camera`,
-distinct de celui du monde principal) doit lui **correspondre à la main** — facile à désynchroniser
-après une passe sur l'un des deux. [consensus] **Vérification** : `read_vmf` compare
-`fogcolor`/`fogstart`/`fogend` entre `sky_camera` et l'`env_fog_controller` principal — silhouette et
-teinte qui jurent restent un jugement humain, via `capture_screen`.
+⚠️ **Moving water (tides, waves) cannot carry the Water shader** — it depends on a static visleaf
+split, incompatible with a moving brush. Use `func_water_analog` with `nature/water_movingplane` or
+`nature/water_dx70`. `[engine]`
 
-## Particules et météo
+**Verifying**: `read_vmf`/`read_vmf_lint` to count `water_lod_control` (≤1), `read_compile_log` for
+VBSP's water warnings — one PVS spanning two heights stays a plan-level judgement.
 
-`info_particle_system` prend en `effect_name` le **nom du système**, pas le nom du fichier `.pcf` —
-et ce système doit être précaché dans `particles_manifest.txt` (ou le manifeste par carte), sinon
-rien ne joue, sans erreur. Packing, `.pcf` et manifestes en détail : `assets.md`.
+## Sky: coherence, not visibility
 
-`func_precipitation` (pluie/neige/cendre) **n'est pas accéléré GPU**. Au-delà d'environ **32000
-sommets visibles** simultanément, elle crashe le moteur — pour une météo dense en multijoueur,
-préférer un système de particules à zone limitée. [moteur] **Vérification** : `read_pakfile`
-confirme qu'un `.pcf` custom est embarqué ; `read_vmf`/`read_fgd_class` comparent `effect_name` au
-nom déclaré dans le `.pcf` — le volume de sommets visibles en jeu n'est observable qu'au crash, non
-mesuré ici.
+The `sky_camera` / 1-in-16 scale split and the visibility constraints are in `visibility.md` — here,
+only what touches atmosphere. `sky_name` references six VTF faces with no suffix; the HDR version
+comes from the `_hdr` suffix (except `sky_borealis01`, `sky_wasteland02`) — without it on an HDR
+map, a silent fallback to the LDR version, no error. `[engine]`
 
-## Couleur et exposition
+⚠️ Those six faces are named by **convention**, derived from `skyname` in `worldspawn`, and
+referenced by no path. A dependency walker that does not know the derivation rule reports six to
+twelve files as unreferenced — files that must not be deleted.
 
-`color_correction`/`color_correction_volume` appliquent une table (`.raw`) non destructive,
-activable par zone avec fondu, coût quasi nul. `env_tonemap_controller` lisse la transition
-d'exposition entre deux ambiances de luminosité (`SetAutoExposureMin`/`Max`, défaut max **2.0**)
-plutôt que de la laisser sauter brutalement. [consensus]
+The 3D skybox is **never a replacement** for the 2D sky, always rendered in front of it: its
+geometry must stay coherent with what the 2D skybox suggests, and its own fog (on `sky_camera`,
+distinct from the main world's) must be **matched by hand** — easy to desynchronise after a pass on
+either one. `[consensus]`
 
-⚠️ **`env_sun` n'éclaire rien.** Il ne dessine que le halo visuel du soleil dans le skybox — la
-lumière réelle vient de `light_environment` (déjà traité dans `lighting.md`), les ombres dynamiques
-de `shadow_control`. Le régler en pensant corriger l'éclairage ne change rien à la scène. [moteur] **Vérification** :
-aucune table `.raw` ni exposition ne se juge en outil — `capture_screen`/`read_view`. `read_vmf`
-confirme au moins la couverture d'un `color_correction_volume` et la présence d'un
-`env_tonemap_controller` côté fichier.
+**Verifying**: `read_vmf` compares `fogcolor`/`fogstart`/`fogend` between `sky_camera` and the main
+`env_fog_controller` — a clashing silhouette or tint stays human judgement, via `capture_screen`.
+
+## Particles and weather
+
+`info_particle_system` takes the **system's name** in `effect_name`, not the `.pcf` filename — and
+that system must be precached in `particles_manifest.txt` (or the per-map manifest), otherwise
+nothing plays, with no error. Packing, `.pcf` files and manifests in detail: `assets.md`.
+
+`func_precipitation` (rain/snow/ash) is **not GPU accelerated**. Past roughly **32000 visible
+vertices** at once it crashes the engine — for dense weather in multiplayer, prefer a particle
+system with a bounded zone. `[engine]`
+
+**Verifying**: `read_map_dependencies` confirms a custom `.pcf` is packed and resolves;
+`read_vmf`/`read_fgd_class` compare `effect_name` against the name declared in the `.pcf` — the
+visible vertex volume in game is only observable at the crash, and is not measured here.
+
+## Colour and exposure
+
+`color_correction`/`color_correction_volume` apply a non-destructive lookup table (`.raw`),
+enabled per zone with a fade, at near-zero cost. `env_tonemap_controller` smooths the exposure
+transition between two areas of different brightness (`SetAutoExposureMin`/`Max`, default max
+**2.0**) rather than letting it jump. `[consensus]`
+
+⚠️ **`env_sun` lights nothing.** It only draws the sun's visual halo in the skybox — the real light
+comes from `light_environment` (covered in `lighting.md`), dynamic shadows from `shadow_control`.
+Tuning it while believing you are fixing the lighting changes nothing in the scene. `[engine]`
+
+**Verifying**: no `.raw` table or exposure is judged by a tool — `capture_screen`/`read_view`.
+`read_vmf` at least confirms a `color_correction_volume`'s coverage and the presence of an
+`env_tonemap_controller` in the file.
