@@ -162,6 +162,32 @@ a count when the lump length divides **exactly** by the record size, and says wh
 It did exactly that on the first attempt, on `DISP_VERTS`: 944,944 bytes is not a multiple of the
 expected 20, and no count was returned.
 
+### And the guard that divisibility cannot be
+
+Source lets any lump be compressed on its own: the lump then begins with the ASCII magic `LZMA`
+and its `fourCC` carries the uncompressed size instead of a codec tag. The length in the header
+counts **compressed** bytes, so dividing it by a record size is meaningless.
+
+Divisibility catches most of those by accident — but only most. A compressed length lands on a
+multiple of the record size roughly one time in `bytes`, and in that case the check passes it
+through as a plausible, wrong count with nothing to flag it. So compression is now read from the
+magic, before the divisibility check, and a compressed lump reports no count at all.
+
+Two things follow from the same principle:
+
+- The reason given must name **compression**, not the previous message about a BSP version whose
+  struct layout differs. A wrong explanation sends the reader looking in the wrong place — the
+  same fault as a lump named wrong, one level up.
+- The uncompressed size is reported as **declared**, never used to derive a count. Verifying it
+  would mean decompressing, and nothing here decompresses.
+
+The test builds its fixture by stamping `LZMA` onto the probe's `PLANES` lump, whose 800 bytes
+divide exactly by 20. That is the point: the fixture sails past the divisibility guard, so only
+the magic can catch it, and removing that check turns the test red.
+
+Reported by a second session, on a community map whose lumps are compressed
+(`74205 % 20 = 5` on its `PLANES`).
+
 ## Why the `prop_static` conversion list was not trivial
 
 The first filter looked for the **presence** of the keys `targetname`, `parentname`, `defaultanim`.

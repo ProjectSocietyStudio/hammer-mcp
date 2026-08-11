@@ -86,13 +86,33 @@ export const LUMP_NAMES: Readonly<Record<number, string>> = {
  */
 export const HDR_LUMPS = [53, 54, 58] as const;
 
+/** First four bytes of an individually compressed lump. */
+export const LZMA_MAGIC = "LZMA";
+
 export interface BspLump {
   index: number;
   name: string | undefined;
   offset: number;
+  /** Bytes occupied in the file. For a compressed lump this is the COMPRESSED size. */
   length: number;
   version: number;
   fourCC: number;
+  /**
+   * Whether this lump is individually LZMA-compressed, read from its first four bytes.
+   *
+   * Source allows any lump to be compressed on its own. When it is, `length` counts
+   * compressed bytes, so dividing it by a record size yields a plausible, wrong count --
+   * and only sometimes an obviously wrong one, since a compressed length lands on a
+   * multiple of the record size roughly one time in `bytes`.
+   */
+  compressed: boolean;
+  /**
+   * Uncompressed size a compressed lump DECLARES in its fourCC field. Null otherwise.
+   *
+   * Declared, not verified: checking it would mean decompressing, and nothing here does.
+   * Reported so a caller can size the real data, never used to compute a record count.
+   */
+  declaredUncompressedBytes: number | null;
 }
 
 export interface BspHeader {
@@ -128,7 +148,8 @@ export function readAt(path: string, offset: number, length: number): Buffer {
 /**
  * Reads a BSP header.
  *
- * Only the first 1036 bytes are touched. This matters more than it looks: the project's
+ * Only the first 1036 bytes are touched, plus four bytes at the start of each non-empty
+ * lump to see whether it is compressed. This matters more than it looks: the project's
  * own map is 1.13 GB, and a `readFileSync` inside an MCP server dies with the stdio
  * transport open, which the agent sees as a hang rather than an error.
  */
@@ -155,13 +176,27 @@ export function readHeader(path: string): BspHeader {
   const lumps: BspLump[] = [];
   for (let i = 0; i < LUMP_COUNT; i++) {
     const at = 8 + i * 16;
+    const offset = view.getInt32(at, true);
+    const length = view.getInt32(at + 4, true);
+    const fourCC = view.getInt32(at + 12, true);
+
+    // Four bytes per non-empty lump. A compressed lump starts with the ASCII magic
+    // "LZMA", and its fourCC carries the uncompressed size instead of a codec tag.
+    const compressed =
+      length >= 4 &&
+      offset > 0 &&
+      offset + 4 <= size &&
+      readAt(path, offset, 4).toString("ascii") === LZMA_MAGIC;
+
     lumps.push({
       index: i,
       name: LUMP_NAMES[i],
-      offset: view.getInt32(at, true),
-      length: view.getInt32(at + 4, true),
+      offset,
+      length,
       version: view.getInt32(at + 8, true),
-      fourCC: view.getInt32(at + 12, true),
+      fourCC,
+      compressed,
+      declaredUncompressedBytes: compressed ? fourCC : null,
     });
   }
 
