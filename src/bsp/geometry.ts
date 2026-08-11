@@ -61,6 +61,8 @@ export interface LumpReport {
   name: string;
   bytes: number;
   megabytes: number;
+  /** Individually LZMA-compressed. When true, `bytes` counts compressed bytes. */
+  compressed: boolean;
   /** Records, when the struct size is known and divides the lump exactly. */
   count: number | null;
   limit?: number;
@@ -94,7 +96,17 @@ export function readGeometry(path: string): GeometryReport {
 
     let count: number | null = null;
     let note: string | undefined;
-    if (spec.bytes !== undefined) {
+    if (lump.compressed) {
+      // Checked BEFORE divisibility, and it is not the same guard. `length` here counts
+      // COMPRESSED bytes, so dividing it by a record size is meaningless -- and only
+      // sometimes obviously so, since a compressed length lands on a multiple of the
+      // record size roughly one time in `bytes`. The divisibility check alone would let
+      // those through as a plausible, wrong count.
+      note =
+        `lump is LZMA-compressed, so no record count can be given without decompressing. ` +
+        `It declares ${lump.declaredUncompressedBytes} uncompressed bytes -- declared in ` +
+        `its header, not verified here.`;
+    } else if (spec.bytes !== undefined) {
       if (lump.length % spec.bytes === 0) {
         count = lump.length / spec.bytes;
       } else {
@@ -112,6 +124,7 @@ export function readGeometry(path: string): GeometryReport {
       name: LUMP_NAMES[spec.index] ?? `LUMP_${spec.index}`,
       bytes: lump.length,
       megabytes: Math.round((lump.length / 1048576) * 100) / 100,
+      compressed: lump.compressed,
       count,
       ...(spec.limit !== undefined ? { limit: spec.limit } : {}),
       ...(spec.limitName ? { limitName: spec.limitName } : {}),

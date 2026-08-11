@@ -66,9 +66,14 @@ export const readBspInfo = defineTool({
         index: z.number(),
         name: z.string().nullable(),
         offset: z.number(),
-        length: z.number(),
+        length: z.number().describe("Bytes in the file. For a compressed lump, the COMPRESSED size."),
         megabytes: z.number(),
         version: z.number(),
+        compressed: z.boolean().describe("Individually LZMA-compressed, read from the lump's magic."),
+        declaredUncompressedBytes: z
+          .number()
+          .nullable()
+          .describe("What a compressed lump declares in fourCC. Declared, not verified here."),
       }),
     ),
   },
@@ -92,6 +97,8 @@ export const readBspInfo = defineTool({
           length: l.length,
           megabytes: Math.round((l.length / 1048576) * 100) / 100,
           version: l.version,
+          compressed: l.compressed,
+          declaredUncompressedBytes: l.declaredUncompressedBytes,
         })),
     };
   },
