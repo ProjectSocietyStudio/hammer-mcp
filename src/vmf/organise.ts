@@ -24,7 +24,7 @@
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode, KvPair } from "../kv/parse.js";
 import { maxId } from "./edit.js";
-import { findSolids, isEmptySelector, lineRange, matchesSolid } from "./select.js";
+import { findSolids, isEmptySelector, lineRange, matchesSolid, pairRange } from "./select.js";
 import type { SolidSelector } from "./select.js";
 import { checkVmfSolids } from "./solid.js";
 import type { SolidCheck, Vec3 } from "./solid.js";
@@ -80,6 +80,8 @@ export interface VisgroupInfo {
 export interface GroupInfo {
   id: number;
   solidCount: number;
+  /** Point and brush entities in the group. Hammer groups those as readily as brushes. */
+  entityCount: number;
 }
 
 export interface CordonInfo {
@@ -150,7 +152,7 @@ export function readOrganisation(source: string): OrganisationReport {
   for (const world of roots.filter((b) => b.name === "world")) {
     for (const g of children(world, "group")) {
       const id = Number(get(g, "id") ?? -1);
-      if (id >= 0) groups.set(id, { id, solidCount: 0 });
+      if (id >= 0) groups.set(id, { id, solidCount: 0, entityCount: 0 });
     }
   }
 
@@ -179,7 +181,10 @@ export function readOrganisation(source: string): OrganisationReport {
     if (groupId !== undefined && /^\d+$/.test(groupId)) {
       const g = groups.get(Number(groupId));
       if (!g) unknownGroup.add(Number(groupId));
-      else g.solidCount++;
+      else if (kind === "solid") g.solidCount++;
+      // A Hammer group holds entities as readily as brushes, and counting one as the other
+      // overreported how many solids a mixed group had.
+      else g.entityCount++;
     }
   };
 
@@ -322,7 +327,27 @@ export function setVisgroup(
   // than `id`, so maxId cannot see one. Taking the next id from maxId gave the second
   // visgroup of a map the same id as the first, which Hammer reads as one visgroup and
   // this tool reported as two.
-  const nextVisgroupId = flat.reduce((m, v) => Math.max(m, v.id), 0) + 1;
+  //
+  // The ids *used* count as much as the ids declared. A map carrying an orphaned
+  // membership -- an id on a brush whose visgroup is gone, which is what a hand edit or a
+  // bad merge leaves -- would otherwise have that id handed to the next new visgroup, and
+  // every unselected brush wearing it would be adopted silently. The handler's orphan
+  // check would then see nothing wrong, because there is nothing orphaned any more.
+  const usedIds: number[] = [];
+  for (const found of findSolids(roots)) {
+    const editor = editorOf(found.block);
+    if (editor) usedIds.push(...allValues(editor, "visgroupid").map(Number));
+  }
+  for (const ent of roots.filter((b) => b.name === "entity")) {
+    const editor = editorOf(ent);
+    if (editor) usedIds.push(...allValues(editor, "visgroupid").map(Number));
+  }
+  const nextVisgroupId =
+    Math.max(
+      0,
+      ...flat.map((v) => v.id),
+      ...usedIds.filter((n) => Number.isFinite(n)),
+    ) + 1;
   if (!existing && options.remove) {
     throw new VmfOrganiseError(
       `there is no visgroup called ${JSON.stringify(options.name)} to remove anything from`,
@@ -374,9 +399,7 @@ export function setVisgroup(
       if (!has) continue;
       for (const p of editor.entries.filter(isPair)) {
         if (p.key !== "visgroupid" || p.value !== String(visgroupId)) continue;
-        const lineStart = source.lastIndexOf("\n", p.start - 1) + 1;
-        const end = source[p.end] === "\n" ? p.end + 1 : p.end;
-        splices.push({ start: lineStart, end, text: "" });
+        splices.push({ ...pairRange(source, p), text: "" });
       }
       changed++;
       continue;
@@ -458,9 +481,7 @@ export function groupSolids(
       if (!editor) continue;
       for (const p of editor.entries.filter(isPair)) {
         if (p.key !== "groupid") continue;
-        const lineStart = source.lastIndexOf("\n", p.start - 1) + 1;
-        const end = source[p.end] === "\n" ? p.end + 1 : p.end;
-        splices.push({ start: lineStart, end, text: "" });
+        splices.push({ ...pairRange(source, p), text: "" });
         changed++;
       }
     }
@@ -549,18 +570,40 @@ export function setCordon(
 
   const roots = parse(source).filter(isBlock);
   const existing = roots.find((b) => b.name === "cordons");
-  const body =
-    `{\n\t"active" "${active ? 1 : 0}"\n\tcordon\n\t{\n\t\t"name" "${name}"\n` +
+  const entry =
+    `\tcordon\n\t{\n\t\t"name" "${name}"\n` +
     `\t\t"active" "${active ? 1 : 0}"\n\t\tbox\n\t\t{\n` +
     `\t\t\t"mins" "(${box.mins.join(" ")})"\n\t\t\t"maxs" "(${box.maxs.join(" ")})"\n` +
-    `\t\t}\n\t}\n}`;
+    `\t\t}\n\t}\n`;
 
   const splices: Splice[] = [];
-  if (existing) {
-    splices.push({ start: existing.bodyStart - 1, end: existing.end, text: body });
+  if (!existing) {
+    splices.push({
+      start: source.length,
+      end: source.length,
+      text: `cordons\n{\n\t"active" "${active ? 1 : 0}"\n${entry}}\n`,
+    });
   } else {
-    const at = source.endsWith("\n") ? source.length : source.length;
-    splices.push({ start: at, end: at, text: `cordons\n${body}\n` });
+    // Only the cordon of this name, and only the block's own `active` flag. Replacing the
+    // whole `cordons` body deleted every other saved cordon -- a map with one region per
+    // district lost all of them the first time a new one was set.
+    const named = children(existing, "cordon").find((c) => get(c, "name") === name);
+    if (named) {
+      splices.push({ ...lineRange(source, named), text: entry });
+    } else {
+      splices.push({ start: existing.bodyEnd, end: existing.bodyEnd, text: entry });
+    }
+    const flag = existing.entries
+      .filter(isPair)
+      .find((p) => p.key === "active");
+    const flagText = `"active" "${active ? 1 : 0}"`;
+    if (flag) {
+      if (flag.value !== (active ? "1" : "0")) {
+        splices.push({ start: flag.start, end: flag.end, text: flagText });
+      }
+    } else {
+      splices.push({ start: existing.bodyStart, end: existing.bodyStart, text: `\n\t${flagText}` });
+    }
   }
 
   const warnings: string[] = [];

@@ -78,7 +78,9 @@ export const readMapOrganisationTool = defineTool({
   outputSchema: {
     path: z.string(),
     visgroups: z.array(VisgroupNode),
-    groups: z.array(z.object({ id: z.number(), solidCount: z.number() })),
+    groups: z.array(
+      z.object({ id: z.number(), solidCount: z.number(), entityCount: z.number() }),
+    ),
     cordons: z.array(
       z.object({ name: z.string(), active: z.boolean(), mins: Vec, maxs: Vec }),
     ),
