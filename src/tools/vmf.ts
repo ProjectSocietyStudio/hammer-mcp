@@ -121,11 +121,26 @@ export const readVmf = defineTool({
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
     classname: z.string().optional().describe("Restrict the entity list to one class."),
+    collapseInstances: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Expand every func_instance first, the way vbsp does at compile time. A map " +
+          "using instances otherwise reads as one entity where there is a whole building: " +
+          "counts are far too low, and outputs crossing an instance look like they target " +
+          "nothing. Off by default because it changes every count and every targetname.",
+      ),
     limit: z.number().int().min(1).max(2000).default(200),
   },
   outputSchema: {
     path: z.string(),
     counts: COUNTS,
+    instances: z.object({
+      requested: z.boolean(),
+      collapsed: z.number(),
+      files: z.array(z.string()).optional(),
+      depthLimit: z.number().optional(),
+    }),
     histogram: z.record(z.number()),
     matched: z.number(),
     returned: z.number(),
@@ -156,6 +171,8 @@ export const readVmf = defineTool({
       {
         path: resolveInput(args.path, ctx.config),
         ...(args.classname ? { classname: args.classname } : {}),
+        collapseInstances: args.collapseInstances,
+        gameDir: ctx.config.gmodGameDir,
         limit: args.limit,
       },
       ctx.config,
@@ -168,6 +185,7 @@ interface LintReply {
   counts: Record<string, number>;
   toleratedHelpers: Record<string, number>;
   fgdsLoaded: string[];
+  instances: { requested: boolean; collapsed: number; files?: string[]; depthLimit?: number };
   luaClassesKnown: number;
   total: number;
   bySeverity: Record<string, number>;
@@ -199,11 +217,26 @@ export const readVmfLint = defineTool({
       .optional()
       .describe("Keep only findings at this severity."),
     rule: z.string().optional().describe("Keep only findings from this rule."),
+    collapseInstances: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Expand every func_instance first, the way vbsp does at compile time. A map " +
+          "using instances otherwise reads as one entity where there is a whole building: " +
+          "counts are far too low, and outputs crossing an instance look like they target " +
+          "nothing. Off by default because it changes every count and every targetname.",
+      ),
     limit: z.number().int().min(1).max(2000).default(200),
   },
   outputSchema: {
     path: z.string(),
     counts: COUNTS,
+    instances: z.object({
+      requested: z.boolean(),
+      collapsed: z.number(),
+      files: z.array(z.string()).optional(),
+      depthLimit: z.number().optional(),
+    }),
     nearLimit: z.array(
       z.object({
         what: z.string(),
@@ -230,6 +263,8 @@ export const readVmfLint = defineTool({
         path: resolveInput(args.path, ctx.config),
         binDir: ctx.config.gmodBin,
         fgd: fgdNames(ctx.config),
+        collapseInstances: args.collapseInstances,
+        gameDir: ctx.config.gmodGameDir,
         luaClasses: luaEntityClasses(ctx.config),
         limit: 2000,
       },
@@ -274,6 +309,7 @@ export const readVmfLint = defineTool({
     return {
       path: reply.path,
       counts: reply.counts,
+      instances: reply.instances,
       nearLimit,
       luaClassesKnown: reply.luaClassesKnown,
       toleratedHelpers: reply.toleratedHelpers,

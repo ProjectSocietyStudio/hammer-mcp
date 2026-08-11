@@ -40,7 +40,7 @@ async function lint(path: string): Promise<{
   findings: Array<Record<string, unknown>>;
   total: number;
 }> {
-  return (await readVmfLint.handler({ path, limit: 500 }, ctx)) as never;
+  return (await readVmfLint.handler({ path, limit: 500, collapseInstances: false }, ctx)) as never;
 }
 
 describe("the repo's Lua entity classes", () => {
@@ -163,7 +163,7 @@ describe("the Hammer++ compilers' own FGD", () => {
   it.skipIf(!ready)("says which schemas a verdict was reached against", async () => {
     // Reported rather than assumed. A lint that quietly widens its schema is a lint that
     // quietly stops catching things, and nothing in the output would show it.
-    const r = (await readVmfLint.handler({ path: PROBE_VMF, limit: 5 }, ctx)) as {
+    const r = (await readVmfLint.handler({ path: PROBE_VMF, limit: 5, collapseInstances: false }, ctx)) as {
       fgdsLoaded: string[];
     };
     expect(r.fgdsLoaded[0]).toBe("garrysmod.fgd");
@@ -204,7 +204,7 @@ describe("read_vmf_lint on a real Hammer-written map", () => {
   }, 120_000);
 
   it.skipIf(!ready || !hasTtt)("counts what the compiler will have to fit", async () => {
-    const out = (await readVmf.handler({ path: TTT, limit: 5 }, ctx)) as {
+    const out = (await readVmf.handler({ path: TTT, limit: 5, collapseInstances: false }, ctx)) as {
       counts: { entities: number; worldBrushes: number; entityBrushes: number };
     };
     expect(out.counts.entities).toBe(66);

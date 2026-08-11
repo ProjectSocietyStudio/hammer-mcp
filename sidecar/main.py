@@ -110,11 +110,26 @@ def _fgd_names(req: dict[str, Any]) -> tuple[str, ...]:
     return (names,) if isinstance(names, str) else tuple(names)
 
 
-def _load_vmf(path: str) -> Any:
+def _load_vmf(path: str, req: dict[str, Any] | None = None) -> tuple[Any, dict[str, Any]]:
+    """Parses a .vmf, optionally flattening its func_instances first.
+
+    Off by default: expanding changes every count and every targetname in the reply, and
+    that must be something the caller asked for rather than something that happens to a
+    map one day because an option gained a default.
+    """
     from srctools import Keyvalues, VMF
 
     with open(path, encoding="utf8", errors="replace") as f:
-        return VMF.parse(Keyvalues.parse(f))
+        vmf = VMF.parse(Keyvalues.parse(f))
+
+    if not (req or {}).get("collapseInstances"):
+        return vmf, {"collapsed": 0, "requested": False}
+
+    from instances import collapse_instances
+
+    info = collapse_instances(vmf, path, (req or {}).get("gameDir"))
+    info["requested"] = True
+    return vmf, info
 
 
 @verb("fgd_class")
@@ -162,7 +177,7 @@ def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
     """Entities, brushes and counts of a .vmf, without judging any of it."""
     from vmf_lint import count_vmf
 
-    vmf = _load_vmf(req["path"])
+    vmf, instances = _load_vmf(req["path"], req)
     limit = int(req.get("limit", 200))
     wanted = req.get("classname")
 
@@ -201,6 +216,7 @@ def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": req["path"],
         "counts": count_vmf(vmf),
+        "instances": instances,
         "histogram": dict(sorted(histogram.items(), key=lambda kv: -kv[1])),
         "matched": len(entities),
         "returned": min(len(entities), limit),
@@ -216,7 +232,7 @@ def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
 
     names = _fgd_names(req)
     fgd, tolerated = load_fgds(req["binDir"], names)
-    vmf = _load_vmf(req["path"])
+    vmf, instances = _load_vmf(req["path"], req)
     lua_classes = frozenset(req.get("luaClasses") or ())
     findings = lint_vmf(vmf, fgd, lua_classes)
 
@@ -230,6 +246,7 @@ def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": req["path"],
         "counts": count_vmf(vmf),
+        "instances": instances,
         "toleratedHelpers": tolerated,
         "fgdsLoaded": list(names),
         "luaClassesKnown": len(lua_classes),

@@ -88,8 +88,8 @@ async function readBoth(): Promise<[Record<string, unknown>, Record<string, unkn
     const { path: _path, ...rest } = o;
     return rest;
   };
-  const vanilla = (await readVmf.handler({ path: PROBE_VMF, limit: 200 }, ctx)) as never;
-  const plus = (await readVmf.handler({ path: hammerPlusPlusTwin(), limit: 200 }, ctx)) as never;
+  const vanilla = (await readVmf.handler({ path: PROBE_VMF, limit: 200, collapseInstances: false }, ctx)) as never;
+  const plus = (await readVmf.handler({ path: hammerPlusPlusTwin(), limit: 200, collapseInstances: false }, ctx)) as never;
   return [strip(vanilla), strip(plus)];
 }
 
@@ -120,7 +120,7 @@ describe("a VMF written by Hammer++", () => {
 
   it.skipIf(!ready)("lints exactly like the vanilla one, and just as quietly", async () => {
     const of = async (path: string) =>
-      (await readVmfLint.handler({ path, limit: 500 }, ctx)) as {
+      (await readVmfLint.handler({ path, limit: 500, collapseInstances: false }, ctx)) as {
         total: number;
         byRule: Record<string, number>;
         counts: Record<string, number>;
