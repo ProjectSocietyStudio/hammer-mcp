@@ -1,120 +1,127 @@
-# Géométrie de brush
+# Brush geometry
 
-La géométrie de brush est la matière première de toute carte Hammer : ce que vbsp compile, ce que
-vvis découpe, ce qui scelle ou fuit. Cette page couvre la grille, les formes valides, les textures
-d'outil et le choix world brush / `func_detail` / entité brush — pas la visibilité (`visibilite.md`),
-pas l'éclairage, pas les displacements, pas les perfs, qui ont chacun leur propre référence.
+Brush geometry is the raw material of any Hammer map: what vbsp compiles, what vvis cuts, what
+seals or leaks. This page covers the grid, valid shapes, tool textures and the world brush /
+`func_detail` / brush entity choice — not visibility (`visibility.md`), not lighting, not
+displacements, not performance, which each have their own reference.
 
-## La grille
+## The grid
 
-**Le pas de grille de Hammer est toujours une puissance de deux** : 1 - 2 - 4 - 8 - 16 - 32 - 64 -
-128 - 256 - 512 - 1024 unités, jamais de valeur intermédiaire [moteur]. Descendre sous 1 unité pour
-un ajustement fin est toléré mais rarement nécessaire — c'est le premier pas vers la tolérance de
-recollage ci-dessous, pas une échelle de travail normale [consensus].
+**Hammer's grid step is always a power of two**: 1 - 2 - 4 - 8 - 16 - 32 - 64 - 128 - 256 - 512 -
+1024 units, never an intermediate value `[engine]`. Going below 1 unit for a fine adjustment is
+tolerated but rarely necessary — it is the first step towards the welding tolerance below, not a
+normal working scale `[consensus]`.
 
-Vérification : jugement humain, non outillé — Hammer affiche le pas courant (`[`/`]`), et
-`read_vmf_lint` peut signaler un brush hors grille si le lint l'implémente ; sinon c'est une lecture
-visuelle en éditeur.
+Verifying: human judgement, not tooled — Hammer shows the current step (`[`/`]`), and
+`read_vmf_lint` can flag an off-grid brush where the rule is implemented; otherwise it is a visual
+read in the editor.
 
-## Formes valides
+## Valid shapes
 
-**Un brush doit être convexe, à faces planaires.** C'est la définition qu'applique vbsp : une face
-non plane ou un volume concave donne un *invalid brush* [moteur]. Un brush composé n'existe pas —
-une forme non convexe se construit en plusieurs brushes convexes assemblés.
+**A brush must be convex, with planar faces.** That is the definition vbsp applies: a non-planar
+face or a concave volume gives an *invalid brush* `[engine]`. There is no such thing as a compound
+brush — a non-convex shape is built from several convex brushes assembled.
 
-⚠️ **vbsp ne recolle un vertex mal aligné qu'à ~0.03 unité du plan de la face** [moteur]. Au-delà,
-aucune correction automatique : le brush reste invalide, silencieusement dans Hammer, et peut
-produire des portails de visleaf mal formés à la compile — donc un leak qui ne se voit pas en
-éditeur. Toute édition au vertex tool doit revérifier la planarité de **toutes** les faces qui
-partagent le vertex déplacé, pas seulement celle qu'on visait.
+⚠️ **vbsp only welds a misaligned vertex within ~0.03 units of the face plane** `[engine]`. Past
+that there is no automatic correction: the brush stays invalid, silently in Hammer, and can produce
+malformed visleaf portals at compile time — hence a leak that is invisible in the editor. Any
+vertex-tool edit must re-check the planarity of **every** face sharing the moved vertex, not just
+the one you were aiming at.
 
-Vérification : **Map → Check for Problems** (Alt+P) dans Hammer, avant toute compile — c'est du
-jugement humain assisté par l'éditeur, aucun outil `hammer-mcp` ne rejoue ce contrôle. En aval,
-`read_vmf_lint` et, si la compile est allée jusque-là, `read_leak`.
+`read_vmf_solids` recovers a solid's volume **from its planes**, running the opposite way to the
+writer — convexity, planarity, bounds and grid all get checked without opening the editor.
 
-## Découper une forme
+Verifying: **Map → Check for Problems** (Alt+P) in Hammer before any compile — editor-assisted
+human judgement. Downstream, `read_vmf_solids` and `read_vmf_lint`, and if the compile got that
+far, `read_leak`.
 
-| Besoin | Outil | Pourquoi |
+## Cutting a shape
+
+| Need | Tool | Why |
 |---|---|---|
-| Séparer un brush en deux par un plan | Clip tool | Coupe nette, résultat toujours convexe et planaire |
-| Ajuster un coin, un biseau | Vertex tool, avec prudence | Plus propre que Carve, mais chaque déplacement doit rester au grid — sinon la tolérance de 0.03u est dépassée |
-| Trou, arche, forme complexe | Assembler plusieurs brushes convexes, ou passer en displacement | Carve produit des faces invalides et des volumes corrompus dès que le résultat n'est plus un seul volume convexe |
-| Cas rare où Carve reste tolérable | Uniquement si la coupe reste **un seul** volume convexe, sans split | Un split en morceaux crée du brushwork non optimisé et des angles hors grille |
+| Split a brush in two along a plane | Clip tool | Clean cut, result always convex and planar |
+| Adjust a corner, a bevel | Vertex tool, carefully | Cleaner than Carve, but every move must stay on grid — otherwise the 0.03u tolerance is exceeded |
+| Hole, arch, complex shape | Assemble several convex brushes, or switch to a displacement | Carve produces invalid faces and corrupt volumes as soon as the result is no longer a single convex volume |
+| The rare case where Carve is still acceptable | Only if the cut stays **one** convex volume, with no split | A split into pieces creates unoptimised brushwork and off-grid angles |
 
-⚠️ « Ne jamais utiliser Carve » est **[contesté]** : trop absolu. Le vrai interdit porte sur l'usage
-qui force un split en plusieurs morceaux ou une forme concave — pas sur l'outil lui-même.
+⚠️ "Never use Carve" is **`[disputed]`**: too absolute. The real prohibition is on the usage that
+forces a split into several pieces or a concave shape — not on the tool itself.
 
-Vérification : Check for Problems après toute opération de découpe, puis `read_vmf_lint`. Aucun
-outil `hammer-mcp` ne juge la qualité géométrique d'un découpage — c'est un contrôle éditeur.
+Verifying: Check for Problems after any cutting operation, then `read_vmf_solids` and
+`read_vmf_lint`.
 
-## Textures d'outil
+## Tool textures
 
-| Besoin | Texture | Piège |
+| Need | Texture | Trap |
 |---|---|---|
-| Face jamais vue en jeu | `toolsnodraw` | Reste solide et **scelle** — zéro rendu, pas zéro collision [moteur] |
-| Face qui ne doit exister nulle part | `toolsskip` | N'existe pas dans le BSP compilé : aucune collision, aucune découpe. L'utiliser à la place de nodraw crée un trou de collision invisible en éditeur [moteur] |
-| Forcer une découpe de visleaf précise | `toolshint` sur la face de coupe, `toolsskip` sur les autres faces du même brush | Sans hint, vvis découpe seul et souvent mal dans un couloir en L [moteur] |
-| Bloquer joueur + physique + balles | `toolsclip` | Solide aussi aux items et au C4 selon le jeu |
-| Bloquer seulement le joueur | `toolsplayerclip` | ⚠️ ignoré par la génération de nav mesh — un bot peut traverser une zone bloquée au joueur [moteur] |
-| Volume d'entité non solide (trigger, viscluster) | `toolstrigger` | La texture seule ne fait rien : doit habiller un brush **attaché à une entité** (`trigger_*`) [moteur] |
-| Zone areaportal | `toolsareaportal` | Idem : sans `func_areaportal` lié, la texture est inerte [moteur] |
+| Face never seen in game | `toolsnodraw` | Stays solid and **seals** — zero rendering, not zero collision `[engine]` |
+| Face that must exist nowhere | `toolsskip` | Does not exist in the compiled BSP: no collision, no cut. Using it instead of nodraw creates a collision hole invisible in the editor `[engine]` |
+| Force a precise visleaf cut | `toolshint` on the cutting face, `toolsskip` on the other faces of the same brush | Without a hint, vvis cuts on its own and often badly in an L-corridor `[engine]` |
+| Block player + physics + bullets | `toolsclip` | Also solid to items and C4 depending on the game |
+| Block the player only | `toolsplayerclip` | ⚠️ ignored by nav mesh generation — a bot can walk through an area blocked to the player `[engine]` |
+| Non-solid entity volume (trigger, viscluster) | `toolstrigger` | The texture alone does nothing: it must clothe a brush **attached to an entity** (`trigger_*`) `[engine]` |
+| Areaportal area | `toolsareaportal` | Same: with no linked `func_areaportal`, the texture is inert `[engine]` |
 
-⚠️ « nodraw et skip sont interchangeables » est **[contesté]** : faux, comportements documentés
-opposés (nodraw scelle et découpe, skip n'existe pas dans le BSP compilé). Confusion fréquente et
-coûteuse — c'est la paire de textures la plus mal utilisée du corpus VDC.
+⚠️ "nodraw and skip are interchangeable" is **`[disputed]`**: false, with documented opposite
+behaviours (nodraw seals and cuts, skip does not exist in the compiled BSP). A frequent and
+expensive confusion — the most misused texture pair in the VDC corpus.
 
-Vérification : `read_compile_log` et `read_bsp_info` après compile — une face `toolsskip` ne doit
-apparaître nulle part dans les comptes du BSP compilé, contrairement à `toolsnodraw`.
+Verifying: `read_compile_log` and `read_bsp_info` after a compile — a `toolsskip` face must appear
+nowhere in the compiled BSP's counts, unlike `toolsnodraw`.
 
-## World brush, `func_detail`, entité brush
+## World brush, `func_detail`, brush entity
 
-**Le partage qui compte** : est-ce que retirer ce brush ouvre une ligne de vue ou casse le sceau du
-monde ? Si oui, c'est structurel (world brush). Sinon, c'est du détail.
+**The split that matters**: does removing this brush open a line of sight or break the world's
+seal? If yes, it is structural (world brush). Otherwise it is detail.
 
-| | World brush | `func_detail` | Entité brush (`func_brush`, `func_wall`…) |
+| | World brush | `func_detail` | Brush entity (`func_brush`, `func_wall`…) |
 |---|---|---|---|
-| Découpe les visleafs | oui | non — reversé en `CONTENTS_DETAIL` | non |
-| Peut sceller le monde / une areaportal | oui | **non, jamais** | non |
-| Compte dans `MAX_MAP_BRUSHES` | oui | oui | oui |
-| Usage | murs, sols, plafonds porteurs | moulures, mobilier, poteaux, marches | porte, vitre, mur qui bascule solide/non-solide |
+| Cuts visleaves | yes | no — merged back as `CONTENTS_DETAIL` | no |
+| Can seal the world / an areaportal | yes | **no, never** | no |
+| Counts against `MAX_MAP_BRUSHES` | yes | yes | yes |
+| Use | load-bearing walls, floors, ceilings | mouldings, furniture, posts, steps | door, window, a wall toggling solid/non-solid |
 
-⚠️ **Un `func_detail` ne scelle pas.** Un mur extérieur posé en détail fait fuir la carte même si la
-pièce a l'air close en jeu [moteur]. Et un `func_detail` **chope les autres `func_detail`** : vbsp
-stock n'a pas de niveaux de détail, donc deux détails qui se touchent se découpent l'un l'autre
-sans arbitrage — seul le contact détail/structurel est asymétrique (le détail est chopé, pas
-l'inverse) [moteur].
+⚠️ **A `func_detail` does not seal.** An exterior wall marked as detail leaks the map even if the
+room looks closed in game `[engine]`. And a `func_detail` **cuts against other `func_detail`**:
+stock vbsp has no detail levels, so two touching details cut each other with no arbitration — only
+the detail/structural contact is asymmetric (detail gets cut, not the reverse) `[engine]`.
 
-**`func_brush`** remplace `func_wall` / `func_illusionary` / `func_wall_toggle`, officiellement
-dépréciés — `Solidity` (0 = toggle, 1 = jamais solide, 2 = toujours solide) couvre les trois usages
-[moteur]. **`func_lod`** fait la même chose qu'un `prop_static` en LOD mais reste un edict à part
-entière — n'y a recours que si le modèle ne peut vraiment pas être un prop [moteur].
+`set_solid_class` flips a brush between the two and reports the visibility effect, refusing to move
+one out of a `hidden` block — unhiding a brush as a side effect of an edit that said nothing about
+visibility is exactly the kind of surprise a diff does not explain.
 
-Le choix structurel/détail est **le seul jugement vraiment humain de cette page** ; le comptage qui
-l'accompagne ne l'est pas.
+**`func_brush`** replaces `func_wall` / `func_illusionary` / `func_wall_toggle`, all officially
+deprecated — `Solidity` (0 = toggle, 1 = never solid, 2 = always solid) covers all three uses
+`[engine]`. **`func_lod`** does the same as a `prop_static` with LOD but remains a full edict — only
+reach for it when the model genuinely cannot be a prop `[engine]`.
 
-Vérification : `read_map_geometry` donne le ratio world/detail mais pas quel mur est lequel —
-c'est un point de départ, pas un verdict. `read_brush_volumes` chiffre le volume par brush. Le
-sceau se prouve en compilant et en lisant `read_leak` si la carte fuit. La VIS proprement dite —
-hint/skip, areaportals, occluders, visclusters — vit dans `visibilite.md`.
+The structural/detail choice is **the only genuinely human judgement on this page**; the counting
+that goes with it is not.
 
-## Limites dures
+Verifying: `read_map_geometry` gives the world/detail ratio but not which wall is which — a
+starting point, not a verdict. `read_brush_volumes` quantifies volume per brush. The seal is proven
+by compiling and reading `read_leak` if the map leaks. VIS proper — hint/skip, areaportals,
+occluders, visclusters — lives in `visibility.md`.
 
-Toutes lues dans `src/public/bspfile.h` (`ValveSoftware/source-sdk-2013`), pas sur un wiki
-[moteur] :
+## Hard limits
 
-| Constante | Valeur | Ce qui la fait grimper vite |
+All read in `src/public/bspfile.h` (`ValveSoftware/source-sdk-2013`), not off a wiki `[engine]`:
+
+| Constant | Value | What drives it up fast |
 |---|---|---|
-| `MAX_MAP_BRUSHES` | 8192 | tout brush, monde + détail + entité brush confondus |
-| `MAX_MAP_BRUSHSIDES` | 65536 | souvent la première limite atteinte — cylindres et arches en haute résolution en world brush plutôt qu'en détail |
-| `MAX_MAP_ENTITIES` | 8192 | comprend les entités brush |
-| `MAX_MAP_PLANES` | 65536 | chaque face unique ; aligner les brushes bord à bord sur un même plan réutilise l'entrée au lieu d'en créer une |
-| `MAX_MAP_TEXINFO` | 12288 | rarement la limite qui casse en premier |
+| `MAX_MAP_BRUSHES` | 8192 | every brush, world + detail + brush entity together |
+| `MAX_MAP_BRUSHSIDES` | 65536 | often the first limit reached — high-resolution cylinders and arches left as world brushes rather than detail |
+| `MAX_MAP_ENTITIES` | 8192 | includes brush entities |
+| `MAX_MAP_PLANES` | 65536 | every unique face; aligning brushes edge to edge on one plane reuses the entry instead of creating one |
+| `MAX_MAP_TEXINFO` | 12288 | rarely the limit that breaks first |
 
-⚠️ **32768 est une étendue, pas une borne.** Le monde va de −16384 à +16384 sur chaque axe
-(`MAX_COORD_INTEGER`) [moteur]. Construire « jusqu'à 32768 » sort du monde d'un facteur deux.
+⚠️ **32768 is an extent, not a bound.** The world runs from −16384 to +16384 on each axis
+(`MAX_COORD_INTEGER`) `[engine]`. Building "up to 32768" leaves the world by a factor of two.
 
-Le compilateur nomme la constante dépassée en toutes lettres dans son message d'erreur — pas besoin
-de deviner laquelle a cassé.
+The compiler names the constant it exceeded in full in its error message — no need to guess which
+one broke.
 
-Vérification : `read_bsp_info` et `read_compile_log` donnent les comptes compilés ; les comparer au
-tableau ci-dessus. `read_map_geometry` avant compile pour voir si une carte a encore de la marge.
+Verifying: `read_bsp_info` and `read_compile_log` give the compiled counts; compare them to the
+table above. `read_map_geometry` before compiling to see whether a map still has headroom — and
+note that it now applies byte-denominated ceilings too, so `MAX_MAP_LIGHTING` is watched alongside
+the record counts.

@@ -1,61 +1,88 @@
-# Optimiser la visibilité
+# Optimising visibility
 
-Source ne dessine que ce que le joueur peut voir, et « peut voir » est décidé à la compilation.
-Toute l'optimisation consiste à aider vvis à conclure que deux endroits ne se voient pas.
+Source only draws what the player can see, and "can see" is decided at compile time. All
+optimisation consists of helping vvis conclude that two places cannot see each other.
 
-## Structurel contre `func_detail`
+## Structural versus `func_detail`
 
-Le partage le plus rentable, et le seul jugement vraiment humain de cette page.
+The most profitable split, and the only genuinely human judgement on this page.
 
-- **Structurel** : ce qui constitue l'ossature — les murs qui séparent, les sols, le plafond, la
-  boîte qui scelle. vvis découpe le monde dessus.
-- **`func_detail`** : tout le reste — moulures, poteaux, escaliers, mobilier en brush. Reversé dans
-  le monde en `CONTENTS_DETAIL`, **invisible pour vvis**, ne découpe rien.
+- **Structural**: what forms the skeleton — the walls that separate, floors, ceiling, the box that
+  seals. vvis cuts the world along it.
+- **`func_detail`**: everything else — mouldings, posts, stairs, brush-built furniture. Merged back
+  into the world as `CONTENTS_DETAIL`, **invisible to vvis**, cutting nothing.
 
-Règle : *si l'enlever n'ouvre pas une ligne de vue entre deux pièces, c'est du détail.*
+Rule: *if removing it does not open a line of sight between two rooms, it is detail.*
 
-⚠️ **Un `func_detail` ne scelle pas.** Une carte dont un mur extérieur est en détail fuit.
+⚠️ **A `func_detail` does not seal.** A map with an exterior wall marked as detail leaks. And no
+static check can rule that out, because sealing is a property of the whole hull: on the probe map,
+a sealed box, all six brushes are load-bearing including the floor.
 
-`read_map_geometry` donne le ratio ; il ne dit pas quel mur est lequel.
+`set_solid_class` flips a brush between the two and reports the visibility effect. Measured on one
+pillar in the probe room:
 
-## Hints et skip
+| | leaves | clusters | VISIBILITY |
+|---|---|---|---|
+| empty room | 29 | 4 | 44 B |
+| pillar, structural | 33 | 7 | 74 B |
+| pillar, `func_detail` | 29 | 4 | 44 B |
 
-Un brush texturé `toolshint` sur une face et `toolsskip` sur les autres force une découpe de
-visleaf là où on la veut. C'est l'outil du couloir en L : sans hint, vvis découpe mal et les deux
-branches se voient.
+Read that narrowly: **vvis no longer sees the pillar, which is not the same as the pillar costing
+nothing.** It is still drawn, still counts in `FACES`, still costs its lightmap. `read_map_report`
+answers the wider question.
 
-Le placement dépend des lignes de vue réelles — **automatiser le comptage, pas le choix**.
+`read_map_geometry` gives the ratio; it does not say which wall is which.
 
-## Areaportals et occluders
+## Hints and skip
 
-Deux mécanismes qu'on confond souvent :
+A brush textured `toolshint` on one face and `toolsskip` on the others forces a visleaf cut where
+you want one. It is the tool for the L-shaped corridor: without a hint, vvis cuts badly and the two
+branches see each other.
+
+A diagonal hint is not an axial hint rotated. Measured on the same room, stock compilers:
+
+| | leaves | clusters | VISIBILITY |
+|---|---|---|---|
+| no hint | 29 | 4 | 44 B |
+| axial hint | 33 | 8 | 84 B |
+| 45° hint | 35 | 10 | 124 B |
+
+Placement depends on the real lines of sight — **automate the counting, not the choice**.
+
+## Areaportals and occluders
+
+Two mechanisms that are often confused:
 
 | | `func_areaportal` | `func_occluder` |
 |---|---|---|
-| Quand | à la compilation, découpe réellement les visleaves | à l'exécution |
-| Ce qu'il cache | tout | **seulement les props** |
-| Contrainte | doit sceller hermétiquement une ouverture | aucune |
+| When | at compile time, actually cuts visleaves | at runtime |
+| What it hides | everything | **props only** |
+| Constraint | must seal an opening airtight | none |
 
-Un areaportal posé dans une embrasure de porte, lié à la porte, est le meilleur rapport
-gain/effort d'une carte d'intérieurs. Mal scellé, il fait échouer la compilation.
+An areaportal in a doorway, tied to the door, is the best effort-to-gain ratio in an interior map.
+Badly sealed, it fails the compile.
 
-## Les props
+## Props
 
-`read_prop_survey` liste les `prop_dynamic` qui n'ont ni nom, ni parent, ni animation, ni sortie :
-ceux-là sont dynamiques pour rien. Chacun est une vraie entité serveur qui tourne à chaque tick et
-que tout balayage de `ents.GetAll()` compte, là où un `prop_static` ne coûte rien.
+`read_prop_survey` lists the `prop_dynamic` that have no name, no parent, no animation and no
+output: those are dynamic for nothing. Each is a real server entity ticking every frame and counted
+by every `ents.GetAll()` sweep, where a `prop_static` costs nothing.
 
-**Mais convertir exige de recompiler**, et un modèle sans support statique ne se convertit pas.
-La liste est un point de départ, pas un verdict — l'outil le dit lui-même.
+**But converting requires a recompile**, and a model without static support cannot be converted at
+all. The list is a starting point, not a verdict — the tool says so itself.
 
-Sur `rp_nycity_day` : 59 `prop_dynamic`, dont **17 candidats**. Les 42 autres sont parentés,
-nommés ou animés.
+On `rp_nycity_day`: 59 `prop_dynamic`, of which **17 candidates**. The other 42 are parented, named
+or animated.
 
-## Mesurer
+## Measuring
 
-Hors ligne : `read_map_geometry` (comptages, marge avant les plafonds), `read_sightlines` (les plus
-longues lignes de vue dégagées).
+Offline: `read_map_geometry` (counts, headroom before the ceilings), `read_sightlines` (the longest
+clear lines of sight), `read_visleaf_stats` (leaf and cluster counts, leaf volume distribution).
 
-En jeu, et donc via `gmod-mcp` : `mat_leafvis`, `+showbudget`, `cl_showfps 2`, `r_speeds`,
-`vprof_generate_report`. Toutes ces sorties sont du texte parsable — mais elles exigent un serveur
-qui tourne, partagé, qu'on ne redémarre pas de son propre chef.
+In game, and therefore through `gmod-mcp`: `mat_leafvis`, `+showbudget`, `cl_showfps 2`,
+`r_speeds`, `vprof_generate_report`. All of those outputs are parsable text — but they need a
+running server, shared, which is not restarted on your own initiative.
+
+⚠️ `mat_leafvis` and `mat_wireframe` are **client** render cvars. A dedicated server has no
+renderer, so sending them server-side does nothing whatever `sv_cheats` says. The working sequence
+is `sv_cheats` on the server, which replicates, then the render cvar in the **client** console.

@@ -1,85 +1,85 @@
 ---
 name: source-mapping
-description: Le savoir-métier du mapping Source / Garry's Mod — penser une carte, pas piloter un outil. Brushwork et grille, visibilité et visleaves, éclairage et lightmaps, displacements, entités et système I/O, performances, dimensions et composition, matériaux et packing, ambiance, mythes et anti-patterns. Utiliser dès qu'il faut décider comment construire, optimiser ou juger une carte : func_detail, hint, areaportal, occluder, lightmap scale, cubemap, prop_static, sightline, leak, budget, échelle en unités Hammer.
+description: The craft of Source / Garry's Mod mapping — thinking about a map, not driving a tool. Brushwork and grid, visibility and visleaves, lighting and lightmaps, displacements, entities and the I/O system, performance, dimensions and composition, materials and packing, atmosphere, myths and anti-patterns. Use whenever deciding how to build, optimise or judge a map: func_detail, hint, areaportal, occluder, lightmap scale, cubemap, prop_static, sightline, leak, budget, scale in Hammer units.
 ---
 
-# Penser une carte Source
+# Thinking about a Source map
 
-Ce skill porte le **métier**. Le pilotage de l'outillage — quel outil pour quelle question, Wine,
-le choix des compilateurs, le patch de lump — vit dans [`source-map`](../source-map/SKILL.md) et
-n'est pas répété ici. Les deux se renvoient l'un à l'autre ; aucun ne recopie l'autre.
+This skill carries the **craft**. Driving the tooling — which tool answers which question, Wine,
+choosing a compiler chain, lump patching — lives in [`source-map`](../source-map/SKILL.md) and is
+not repeated here. The two point at each other; neither copies the other.
 
-## La règle qui prime
+## The rule that comes first
 
-**Le mapping Source charrie plus de dogme que de mesure.** Vingt ans de forums ont sédimenté des
-règles qui étaient vraies sur du matériel de 2004, des chiffres recopiés sans source, et des
-conseils justes appliqués hors de leur cas. Un agent qui récite ce folklore avec assurance fait
-plus de dégâts qu'un agent qui dit ne pas savoir.
+**Source mapping carries more dogma than measurement.** Twenty years of forums have sedimented
+rules that were true on 2004 hardware, numbers copied without a source, and sound advice applied
+outside the case it was sound for. An agent reciting that folklore with confidence does more
+damage than an agent saying it does not know.
 
-D'où la convention qui tient tout ce skill : **chaque chiffre porte sa provenance.**
+Hence the convention holding this whole skill together: **every number carries its provenance.**
 
-| Marque | Ce que ça garantit |
+| Mark | What it guarantees |
 |---|---|
-| `[moteur]` | lu dans le code de Valve ou dans sa documentation. Ça ne se discute pas |
-| `[consensus]` | pratique largement admise, jamais chiffrée. Utile, pas opposable |
-| `[contesté]` | disputé, obsolète, ou faux tel qu'on l'entend. La clause qui suit dit ce qui est vrai |
-| `[mesuré]` | relevé par nous sur une vraie carte, avec l'outillage. Le plus solide après `[moteur]` |
+| `[engine]` | read in Valve's code or its documentation. Not up for discussion |
+| `[consensus]` | widely accepted practice, never quantified. Useful, not decisive |
+| `[disputed]` | contested, obsolete, or false as usually stated. The clause that follows says what is true |
+| `[measured]` | taken by us on a real map, with the tooling. The strongest after `[engine]` |
 
-Un chiffre sans marque est un chiffre qu'on supprime. Si tu ajoutes une règle à ce skill, elle
-arrive avec sa provenance ou elle n'arrive pas.
+A number with no mark is a number that gets deleted. If you add a rule to this skill, it arrives
+with its provenance or it does not arrive.
 
-## Les trois choses qui décident d'une carte
+## The three things that decide a map
 
-Dans cet ordre, et l'ordre compte plus que le détail :
+In this order, and the order matters more than the detail:
 
-1. **La visibilité.** Ce qui n'est pas dessiné ne coûte rien. Le découpage en visleaves, les
-   areaportals, les occluders décident des performances bien avant le nombre de triangles.
-   → [visibilite.md](references/visibilite.md)
-2. **Le scellement.** Une carte qui fuit n'a ni visibilité correcte ni éclairage correct, et elle
-   compile quand même — c'est ce qui la rend traître. → [compile.md](references/compile.md)
-3. **L'échelle.** Une carte mal dimensionnée ne se rattrape pas à l'habillage : elle se
-   reconstruit. → [level-design.md](references/level-design.md)
+1. **Visibility.** What is not drawn costs nothing. The visleaf split, areaportals and occluders
+   decide performance long before the triangle count does.
+   → [visibility.md](references/visibility.md)
+2. **Sealing.** A map that leaks has neither correct visibility nor correct lighting, and it
+   compiles anyway — which is what makes it treacherous. → [compiling.md](references/compiling.md)
+3. **Scale.** A badly proportioned map is not recovered by dressing it: it is rebuilt.
+   → [level-design.md](references/level-design.md)
 
-Tout le reste — matériaux, ambiance, densité de détail — se corrige. Ces trois-là, non.
+Everything else — materials, atmosphere, detail density — can be corrected. Those three cannot.
 
-## Ce qu'aucun outil ne tranche
+## What no tool settles
 
-Le découpage structurel/`func_detail`, le placement d'un hint, le lightmap scale d'une surface, la
-composition, la lisibilité d'une ville : **aucun outil ne répond**. Ce n'est pas une lacune de
-l'outillage, c'est la nature du métier.
+The structural/`func_detail` split, where a hint goes, a surface's lightmap scale, composition,
+whether a city reads clearly: **no tool answers**. That is not a gap in the tooling, it is the
+nature of the craft.
 
-⚠️ **Maquiller un jugement en métrique est la faute la plus coûteuse qu'un agent puisse commettre
-ici** : elle produit un chiffre faux et la confiance qui va avec. « Je ne peux pas trancher,
-regarde » est une réponse valide, et souvent la bonne.
+⚠️ **Dressing a judgement up as a metric is the most expensive mistake an agent can make here**: it
+produces a wrong number and the confidence that comes with it. "I cannot settle this, look at it"
+is a valid answer, and often the right one.
 
-La carte complète de ce qui se vérifie et de ce qui ne se vérifie pas :
-[couverture-outillage.md](references/couverture-outillage.md).
+The full map of what can and cannot be verified:
+[tooling-coverage.md](references/tooling-coverage.md).
 
-## Auditer une carte dont on n'a pas la source
+## Auditing a map you have no source for
 
-Un `.bsp` n'est pas une carte, c'est le **résultat** d'une carte. La compilation détruit la
-distinction structurel/détail, les hints, les visgroups. Face à une question qui porte dessus, la
-réponse est « non déterminable depuis un `.bsp` compilé », pas une estimation.
+A `.bsp` is not a map, it is the **result** of a map. Compiling destroys the structural/detail
+distinction, the hints, the visgroups. Faced with a question about any of those, the answer is
+"not determinable from a compiled `.bsp`", not an estimate.
 
-## Fichier → Quand le lire
+## File → when to read it
 
-| Fichier | Quand |
+| File | When |
 |---|---|
-| [brushwork.md](references/brushwork.md) | poser de la géométrie : grille, formes valides, textures d'outil, limites dures |
-| [visibilite.md](references/visibilite.md) | **avant toute question de performance** : visleaves, `func_detail`, hints, areaportals, occluders, skybox |
-| [lighting.md](references/lighting.md) | éclairer : lightmaps, entités de lumière, HDR, cubemaps, ombres |
-| [displacements.md](references/displacements.md) | du terrain, un rocher, une surface irrégulière |
-| [entites.md](references/entites.md) | faire fonctionner quelque chose : I/O, nommage, triggers, filtres, limites d'entités |
-| [performance.md](references/performance.md) | ça rame, ou ça va ramer : draw calls, props, physique, charge serveur |
-| [gmod.md](references/gmod.md) | la carte est pour Garry's Mod : SDK, montage, spawns, nav mesh, Workshop |
-| [level-design.md](references/level-design.md) | dimensionner, bloquer, composer — la table des dimensions est ici |
-| [assets.md](references/assets.md) | matériaux, modèles, et **le packing** : la table de ce qu'il faut embarquer |
-| [ambiance.md](references/ambiance.md) | son, brouillard, eau, ciel, météo, couleur |
-| [anti-patterns.md](references/anti-patterns.md) | **avant d'affirmer une règle apprise ailleurs**, et pour détecter une erreur dans un fichier |
-| [corpus-mesure.md](references/corpus-mesure.md) | dimensionner une carte urbaine : repères relevés sur trois cartes de production |
-| [couverture-outillage.md](references/couverture-outillage.md) | « comment je vérifie ça ? », et pour savoir ce qui n'est pas outillé |
+| [brushwork.md](references/brushwork.md) | placing geometry: grid, valid shapes, tool textures, hard limits |
+| [visibility.md](references/visibility.md) | **before any performance question**: visleaves, `func_detail`, hints, areaportals, occluders, skybox |
+| [lighting.md](references/lighting.md) | lighting it: lightmaps, light entities, HDR, cubemaps, shadows |
+| [displacements.md](references/displacements.md) | terrain, a rock, an irregular surface |
+| [entities.md](references/entities.md) | making something work: I/O, naming, triggers, filters, entity limits |
+| [performance.md](references/performance.md) | it stutters, or it is about to: draw calls, props, physics, server load |
+| [gmod.md](references/gmod.md) | the map is for Garry's Mod: SDK, mounting, spawns, nav mesh, Workshop |
+| [level-design.md](references/level-design.md) | sizing, blocking out, composing — the dimensions table is here |
+| [assets.md](references/assets.md) | materials, models, and **packing**: the table of what must ship |
+| [atmosphere.md](references/atmosphere.md) | sound, fog, water, sky, weather, colour |
+| [anti-patterns.md](references/anti-patterns.md) | **before asserting a rule learned elsewhere**, and to spot an error in a file |
+| [measured-corpus.md](references/measured-corpus.md) | sizing an urban map: figures taken from three production maps |
+| [tooling-coverage.md](references/tooling-coverage.md) | "how do I verify this?", and to find out what is not tooled at all |
 
-## Le serveur est partagé
+## The server is shared
 
-Toute vérification « en jeu » passe par `gmod-mcp`, donc par le `srcds` que d'autres sessions
-utilisent. Ne le redémarre jamais unilatéralement, et ne charge pas une autre carte sans le dire.
+Any in-game check goes through `gmod-mcp`, and therefore through the `srcds` other sessions are
+using. Never restart it unilaterally, and do not load another map without saying so.
