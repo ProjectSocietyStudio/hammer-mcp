@@ -1,130 +1,129 @@
-# Métier du level design
+# The craft of level design
 
-Le métier : dimensionner, bloquer, composer et faire lire une carte. Pas la visibilité — l'effet
-d'une sightline sur `vvis`, les hints, les areaportals vivent dans `visibilite.md`. Ici, une
-sightline est jugée par son effet sur le **joueur** : lisible, cassée, ou repère.
+The craft: sizing, blocking out, composing and making a map read. Not visibility — what a sightline
+does to `vvis`, hints and areaportals live in [visibility.md](visibility.md). Here a sightline is
+judged by its effect on the **player**: readable, broken, or a landmark.
 
-## Le piège de l'échelle
+## The scale trap
 
-**« 1 unité Hammer = 1 pouce » est vrai par convention, pas par contrainte moteur** — Source
-n'impose aucune taille réelle à l'unité, elle vient des assets. [moteur]
+**"1 Hammer unit = 1 inch" is true by convention, not by engine constraint** — Source imposes no
+real-world size on the unit; it comes from the assets. `[engine]`
 
-⚠️ **Deux échelles coexistent dans le même jeu.** L'architecture et la plupart des props sont
-modélisés sur la base 1/16 de pied ; les personnages, sur 1/12 de pied — soit environ 33 % de plus
-grand pour un mur ou une porte que pour la silhouette qui la franchit. [moteur] Il n'existe donc pas
-une conversion HU→mètres unique et fiable : une pièce cotée « au réel » et jouée à hauteur de
-joueur paraît petite, précisément parce que le décor et l'acteur ne partagent pas la même règle.
+⚠️ **Two scales coexist within the same game.** Architecture and most props are modelled on a
+1/16-foot base; characters on 1/12 of a foot — roughly 33% larger for a wall or a door than for the
+silhouette walking through it. `[engine]` So there is no single reliable HU→metres conversion: a room
+dimensioned "to the real thing" and played at player height feels small, precisely because the set
+and the actor do not share a ruler.
 
-## La table des dimensions (unités Hammer)
+## The dimensions table (Hammer units)
 
-| Grandeur | Valeur (HU) | Provenance |
+| Quantity | Value (HU) | Provenance |
 |---|---|---|
-| Hull debout (largeur × profondeur × hauteur) | 32 × 32 × 72 | [moteur] |
-| Hull accroupi (HL2) | 32 × 32 × 36 | [moteur] |
-| Hull accroupi (CS:S) | 32 × 32 × 45 | [moteur] |
-| Largeur de passage minimale, mur droit / à 45° / mur décalé de la grille | 33 / 46 / 65 | [moteur] |
-| Hauteur de vue debout (+ saut) | 64 (→ 85) | [moteur] |
-| Hauteur de vue accroupi (+ saut) | 28 (→ 49) | [moteur] |
-| Step size (marche franchie sans sauter) | 18 | [moteur] |
-| Franchissement en sautant, debout, simple / saut+crouch (**Garry's Mod**) | 30 / 68 | [moteur, GMod] |
-| Franchissement en sautant, accroupi (**Garry's Mod**) | 21 | [moteur, GMod] |
-| Écart horizontal franchissable, à hauteur égale — immobile / en course / sprint+crouch-jump | 84 / 176 / 272 | [moteur] |
-| Crouch-jump, obstacle vertical (CS:S, combos officiels) | 61 à 65 | [moteur, CS:S] |
-| Crouch-jump, franchissement en GMod | ~62-68 selon technique — Valve ne documente pas GMod ici | [contesté] |
-| Pente maximale praticable sans glisser | 45,573° | [moteur] |
-| Portée de +use (interrupteur, poignée) | 82 | [moteur] |
-| Largeur de couloir « normale » | 64 | [moteur] |
-| Hauteur de plafond de couloir « normale » | 128 | [moteur] |
-| Porte « normale » (largeur × hauteur) | 48 × 108 | [moteur] |
-| Porte, dev texture de blockout courante | 56 × 112 | [consensus] — pas une valeur moteur, dépend du prop réel |
-| Marche d'escalier (hauteur × profondeur) | 8 × 12 | [consensus] |
-| Largeur d'escalier, intérieur / extérieur | 72 / 128 | [consensus] |
-| 3D skybox, échelle | 1/16 (1/32 sur Left 4 Dead) | [moteur] |
-| Lightmap scale par défaut | 16 × 16 par texel | [moteur] |
+| Standing hull (width × depth × height) | 32 × 32 × 72 | `[engine]` |
+| Crouching hull (HL2) | 32 × 32 × 36 | `[engine]` |
+| Crouching hull (CS:S) | 32 × 32 × 45 | `[engine]` |
+| Minimum passage width, straight wall / at 45° / wall off the grid | 33 / 46 / 65 | `[engine]` |
+| Standing eye height (+ jump) | 64 (→ 85) | `[engine]` |
+| Crouching eye height (+ jump) | 28 (→ 49) | `[engine]` |
+| Step size (climbed without jumping) | 18 | `[engine]` |
+| Jumping over an obstacle, standing, plain / jump+crouch (**Garry's Mod**) | 30 / 68 | `[engine, GMod]` |
+| Jumping over an obstacle, crouched (**Garry's Mod**) | 21 | `[engine, GMod]` |
+| Horizontal gap cleared at equal height — standing still / running / sprint+crouch-jump | 84 / 176 / 272 | `[engine]` |
+| Crouch-jump, vertical obstacle (CS:S, official combos) | 61 to 65 | `[engine, CS:S]` |
+| Crouch-jump clearance in GMod | ~62-68 depending on technique — Valve documents nothing here | `[disputed]` |
+| Steepest slope walkable without sliding | 45.573° | `[engine]` |
+| +use range (switch, handle) | 82 | `[engine]` |
+| "Normal" corridor width | 64 | `[engine]` |
+| "Normal" corridor ceiling height | 128 | `[engine]` |
+| "Normal" door (width × height) | 48 × 108 | `[engine]` |
+| Door, the usual blockout dev texture | 56 × 112 | `[consensus]` — not an engine value, it depends on the real prop |
+| Stair step (height × depth) | 8 × 12 | `[consensus]` |
+| Staircase width, interior / exterior | 72 / 128 | `[consensus]` |
+| 3D skybox scale | 1/16 (1/32 on Left 4 Dead) | `[engine]` |
+| Default lightmap scale | 16 × 16 per texel | `[engine]` |
 
-⚠️ **La vitesse de déplacement ne se lit pas dans un tableau.** Le HL2/CS:S par défaut donne 320 en
-sprint, mais DarkRP et ses addons de mouvement changent couramment `sv_maxspeed`, `sv_stepsize`,
-`sv_gravity`. Vérifier : `read_convars` (`gmod-mcp`) sur le serveur cible avant tout calcul fin de
-largeur de couloir ou de hauteur de rebord — jamais une valeur trouvée en ligne.
+⚠️ **Movement speed cannot be read off a table.** Stock HL2/CS:S gives 320 sprinting, but DarkRP and
+its movement addons routinely change `sv_maxspeed`, `sv_stepsize`, `sv_gravity`. Verify with
+`read_convars` (`gmod-mcp`) on the target server before any fine calculation of corridor width or
+ledge height — never a value found online.
 
-Vérifier une cote existante sur une carte : `read_map_geometry`, `read_brush_volumes`,
-`read_map_extents` (`hammer-mcp`) — comparer aux lignes ci-dessus plutôt que juger à l'œil dans
-l'éditeur.
+Checking an existing dimension on a map: `read_map_geometry`, `read_brush_volumes`,
+`read_map_extents` (`hammer-mcp`) — compare against the lines above rather than eyeballing it in the
+editor.
 
-## Bloquer avant de détailer
+## Block out before you detail
 
-**Le blockout se joue avant de se regarde.** Dev textures (orange mur, gris sol), volumes en
-`toolsnodraw`/`toolsskip`, grille 16 ou 32 HU — jamais en dessous tant que le gameplay n'est pas
-validé. Descendre à 1-4 HU est réservé à la finition, pas au blocking. [consensus] La grille et les
-formes valides d'un brush sont couvertes par `brushwork.md`, pas ici.
+**A blockout is played before it is looked at.** Dev textures (orange for walls, grey for floors),
+volumes in `toolsnodraw`/`toolsskip`, a 16 or 32 HU grid — never finer while the gameplay is
+unvalidated. Dropping to 1-4 HU belongs to finishing, not to blocking. `[consensus]` The grid itself
+and what makes a brush valid are covered by [brushwork.md](brushwork.md), not here.
 
-**Habiller un blockout non testé oblige à tout refaire si l'échelle est fausse.** [consensus] Tester
-en jeu avant de détailer, pas après.
+**Dressing an untested blockout means redoing all of it if the scale is wrong.** `[consensus]` Test
+in game before detailing, not after.
 
-Vérifier : jugement humain en éditeur (playtest du blockout), puis `capture_screen`, `read_view`
-(`gmod-mcp`) une fois en jeu.
+Verifying: human judgement in the editor (playtest the blockout), then `capture_screen`, `read_view`
+(`gmod-mcp`) once in game.
 
-## Composition et lisibilité
+## Composition and readability
 
-- **Un repère se reconnaît à sa silhouette**, pas à sa texture — forme et verticalité doivent rester
-  lisibles à distance et en contre-jour. [consensus]
-- **La lumière est un signal de direction** au même titre qu'un couloir : une zone plus éclairée
-  attire l'œil et donc le déplacement. [consensus]
-- **La répétition sans variation casse la mémoire spatiale** : même module de couloir sans repère ni
-  contraste, le joueur ne peut plus s'orienter. [consensus]
-- **Un mur nu de grande surface aplatit la lecture du volume** et prive la lumière de tout contraste
-  à exploiter. [consensus]
+- **A landmark is recognised by its silhouette**, not its texture — shape and verticality have to
+  stay readable at distance and against the light. `[consensus]`
+- **Light is a directional signal** as much as a corridor is: a brighter area draws the eye and
+  therefore the movement. `[consensus]`
+- **Repetition without variation destroys spatial memory**: the same corridor module with no
+  landmark or contrast leaves the player unable to orient. `[consensus]`
+- **A large blank wall flattens the reading of a volume** and leaves the light no contrast to work
+  with. `[consensus]`
 
-Pour l'effet d'une sightline sur `vvis` et le calcul de visibilité, voir `visibilite.md`. Ici, une
-ligne de vue se juge à son effet sur le **combat** : au-delà de ~1028 HU le damage falloff domine, et
-au-delà de ~2048 HU un duel lisible devient du spam ou du sniping — une sightline trop longue est un
-problème de design avant d'être un problème de perf. [moteur/jeu, TF2]
+For what a sightline does to `vvis` and the visibility computation, see
+[visibility.md](visibility.md). Here a line of sight is judged by its effect on **combat**: past
+roughly 1028 HU damage falloff dominates, and past roughly 2048 HU a readable duel turns into spam
+or sniping — an over-long sightline is a design problem before it is a performance one. `[engine/game,
+TF2]`
 
-Vérifier : `read_sightlines` (`hammer-mcp`) mesure la longueur, pas la lisibilité — la composition
-elle-même est un jugement humain, non outillé. Ça ne se mesure pas, ça se regarde.
+Verifying: `read_sightlines` (`hammer-mcp`) measures length, not readability — composition itself is
+human judgement, not tooled. It is not measured, it is looked at.
 
 ## Flow
 
-**Une boucle vaut mieux qu'un couloir unique** : elle évite qu'un seul point de passage se fasse
-camper. Un chokepoint sans cover est une ligne de mort instantanée, pas un point de tension.
-[consensus] Casser une sightline trop longue en décalant un coin ou en posant un couvert préserve la
-route de circulation ; fermer le passage la détruit.
+**A loop beats a single corridor**: it stops one passage point from being camped. A chokepoint with
+no cover is an instant death line, not a point of tension. `[consensus]` Breaking an over-long
+sightline by offsetting a corner or placing cover preserves the route; closing the passage destroys
+it.
 
-Vérifier : jugement humain sur plan, confirmé par `read_sightlines` avant/après le décalage.
+Verifying: human judgement on the plan, confirmed by `read_sightlines` before and after the offset.
 
-## Situation → choix
+## Situation → choice
 
-| Situation | Choix | Pourquoi |
+| Situation | Choice | Why |
 |---|---|---|
-| Cote d'une pièce copiée sur un plan réel | grossir légèrement, jamais du 1:1 | l'échelle props/personnages diverge déjà de ~33 % ; une pièce « au réel » se sent écrasée à hauteur de joueur |
-| Marche franchissable sans escalier ni saut | ≤ 18 HU | au-delà, le moteur exige un saut — comportement, pas goût |
-| Rampe ou escalier | rampe pour un flux continu, escalier pour ponctuer le rythme | l'escalier introduit une pause et un point de vue, la rampe l'efface |
-| Sightline trop longue en zone de combat | décaler un coin ou poser un couvert à mi-distance | casse la ligne sans fermer la route |
-| Densité de detail | concentrer sur les repères et le niveau des yeux, simplifier hors champ courant | le joueur ne regarde presque jamais le plafond ni le sol nu |
-| Largeur de couloir secondaire vs principal | 64 HU tient le « normal » moteur ; au-delà de 96-128 HU c'est un choix de croisement à double sens, pas une norme | un couloir sous 2× la largeur du hull (64 HU) empêche deux joueurs de se croiser |
+| A room dimensioned from a real floor plan | enlarge slightly, never 1:1 | prop and character scales already diverge by ~33%; a "real-size" room feels crushed at player height |
+| A step climbable with no stairs and no jump | ≤ 18 HU | past that the engine demands a jump — behaviour, not taste |
+| Ramp or stairs | ramp for continuous flow, stairs to punctuate the rhythm | stairs introduce a pause and a vantage point, a ramp erases both |
+| An over-long sightline in a combat zone | offset a corner or place cover halfway | breaks the line without closing the route |
+| Detail density | concentrate on landmarks and eye level, simplify outside the usual field of view | the player almost never looks at the ceiling or at bare floor |
+| Secondary versus main corridor width | 64 HU holds the engine "normal"; past 96-128 HU it is a two-way crossing decision, not a standard | a corridor under twice the hull width (64 HU) stops two players from passing each other |
 
-## Échelle jouable contre échelle réaliste
+## Playable scale versus realistic scale
 
-Un intérieur RP dimensionné au plan réel se joue trop petit — cf. le piège d'échelle plus haut :
-décor et joueur ne partagent pas la même base. **Grossir légèrement plutôt que copier** est un
-réflexe de métier, pas un facteur unique publié par Valve : traiter tout coefficient précis comme
-[contesté] tant qu'aucune source primaire ne le fixe, mais garder « légèrement plus grand que réel »
-comme repère constant. [consensus]
+An RP interior dimensioned from a real plan plays too small — see the scale trap above: set and
+player do not share a base. **Enlarging slightly rather than copying** is a craft reflex, not a
+single factor published by Valve: treat any precise coefficient as `[disputed]` until a primary
+source fixes it, but keep "slightly larger than real" as a standing guide. `[consensus]`
 
-## Le cas d'une ville de rôle-play
+## The roleplay-city case
 
-Une carte DarkRP n'a pas d'objectif de duel — mais elle hérite quand même des contraintes de
-lisibilité et de flow d'une carte de combat, parce que le moteur ne fait pas de différence : les
-mêmes hulls, le même step size, les mêmes sightlines pèsent sur la circulation de rue comme sur un
-corridor CS. **Une avenue trop longue et rectiligne a le même effet qu'une sightline de sniping** —
-elle invite au camping plutôt qu'à la présence de rue. Rompre les longues perspectives par un
-décrochage de façade ou un mobilier urbain sert la même fonction qu'un hint en intérieur : casser
-une ligne sans fermer une route.
+A DarkRP map has no duelling objective — but it still inherits the readability and flow constraints
+of a combat map, because the engine draws no distinction: the same hulls, the same step size, the
+same sightlines bear on street circulation as on a CS corridor. **An over-long straight avenue has
+the same effect as a sniping sightline** — it invites camping rather than street presence. Breaking
+long perspectives with a façade offset or street furniture serves the same function as a hint
+indoors: cutting a line without closing a route.
 
-« Rue », « lot », « quartier » ne sont pas des notions que le `.bsp` porte — `read_sightlines` mesure
-des lignes de vue entre points praticables, pas « la plus longue avenue ». Nommer, c'est `LORE.md`,
-pas cette page.
+"Street", "lot", "block" are not notions the `.bsp` carries — `read_sightlines` measures lines of
+sight between walkable points, not "the longest avenue". Naming belongs to `LORE.md`, not to this
+page.
 
-Vérifier : `read_sightlines` pour les perspectives de rue, `read_convars` (`gmod-mcp`) pour la
-vitesse et le step size réels du serveur avant tout calcul de largeur de trottoir ou de hauteur de
-bordure — jamais une valeur par défaut supposée.
+Verifying: `read_sightlines` for street perspectives, `read_convars` (`gmod-mcp`) for the server's
+real speed and step size before any calculation of pavement width or kerb height — never an assumed
+default.

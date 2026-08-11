@@ -1,104 +1,107 @@
-# Displacements et terrain
+# Displacements and terrain
 
-Un displacement transforme une face de brush quadrilatère en un maillage de triangles librement
-sculptable — le seul outil natif pour une surface organique continue (terrain, collines, pentes).
-Cette page couvre les powers, les limites, le sewing, l'alpha painting et la collision — pas la
-visibilité (`visibilite.md`), pas l'éclairage (`lighting.md`), pas les matériaux de blend
-eux-mêmes (`assets.md`).
+A displacement turns a quadrilateral brush face into a freely sculptable triangle mesh — the only
+native tool for a continuous organic surface (terrain, hills, slopes). This page covers powers,
+limits, sewing, alpha painting and collision — not visibility (`visibility.md`), not lighting
+(`lighting.md`), not the blend materials themselves (`assets.md`).
 
-## Powers et coût
+## Powers and cost
 
-Le power fixe le nombre de triangles **indépendamment de la taille physique** de la face : une
-face de 64×64 et une de 4096×4096 au même power ont le même nombre de sommets, seule la taille des
-triangles change. Un displacement trop grand à un power donné produit des triangles énormes et un
-rendu anguleux — mieux vaut découper en plusieurs displacements à la même power qu'augmenter la
-power sur une grande face.
+The power fixes the triangle count **independently of the face's physical size**: a 64×64 face and
+a 4096×4096 face at the same power have the same vertex count, only the triangles change size. A
+displacement that is too large for its power produces enormous triangles and an angular look —
+better to split into several displacements at the same power than to raise the power on one big
+face.
 
-| Power | Sommets par côté | Triangles | Coût |
+| Power | Vertices per side | Triangles | Cost |
 |---|---|---|---|
-| 2 | 5 | 32 | terrain léger, relief mineur |
-| 3 | 9 | 128 | terrain courant, détail visible |
-| 4 | 17 | 512 | détail maximal, collision fragile — voir ⚠️ plus bas |
+| 2 | 5 | 32 | light terrain, minor relief |
+| 3 | 9 | 128 | ordinary terrain, visible detail |
+| 4 | 17 | 512 | maximum detail, fragile collision — see ⚠️ below |
 
-Triangles = `(1 << power) * (1 << power) * 2`, la formule du header lui-même [moteur]. Powers
-disponibles : 2 à 4 seulement, `MIN_MAP_DISP_POWER` / `MAX_MAP_DISP_POWER` [moteur] — Hammer ne
-propose rien en dehors.
+Triangles = `(1 << power) * (1 << power) * 2`, the formula from the header itself `[engine]`.
+Available powers: 2 to 4 only, `MIN_MAP_DISP_POWER` / `MAX_MAP_DISP_POWER` `[engine]` — Hammer
+offers nothing outside that.
 
-⚠️ **Power 4 crashe en collision physique.** Documenté comme cause de crash quand des objets
-physiques (débris, ragdolls) touchent un displacement power 4 [consensus] — préférer 4 displacements
-power 3 sewés (même densité totale, volumes de collision séparés donc plus stables) à un power 4
-unique.
+⚠️ **Power 4 crashes on physics collision.** Documented as a crash cause when physics objects
+(debris, ragdolls) touch a power-4 displacement `[consensus]` — prefer four sewn power-3
+displacements (same total density, separate collision volumes and therefore more stable) to a
+single power 4.
 
-## Limites dures
+## Hard limits
 
-`MAX_MAP_DISPINFO` = 2048 displacements par carte [moteur]. Limite de lightmap : 125×125 luxels
-sans bordure, 128×128 avec [moteur] — contrairement à une face brush, VBSP ne peut pas fragmenter
-un displacement qui dépasse cette limite ; plus le displacement est grand en unités, moins on peut
-descendre la lightmap scale.
+`MAX_MAP_DISPINFO` = 2048 displacements per map `[engine]`. Lightmap limit: 125×125 luxels without
+border, 128×128 with `[engine]` — unlike a brush face, VBSP cannot fragment a displacement that
+exceeds it; the larger the displacement in units, the less you can lower the lightmap scale.
 
-Vérification : `read_bsp_info` donne le compte de displacements compilés à comparer à 2048 ;
-`read_compile_log` signale un dépassement de lightmap à la compile.
+Note that this 125 is the displacement figure. A **brush** face is capped at 32
+(`MAX_BRUSH_LIGHTMAP_DIM_WITHOUT_BORDER`); `MAX_LIGHTMAP_DIM_WITHOUT_BORDER`, despite its
+obvious-looking name and a comment calling it "the actual max", aliases the displacement value.
+Taking the obvious name gives four times the real limit for a brush face `[engine]`.
 
-## Les trois règles dures
+Verifying: `read_bsp_info` gives the compiled displacement count to compare against 2048;
+`read_compile_log` reports a lightmap overflow at compile time.
 
-**Un displacement se crée seulement sur une face de brush world**, jamais sur une entité brush
-(`func_detail`, `func_brush`, `func_breakable`…) [moteur]. VBSP refuse toute entité qui porte un
-displacement — erreur `"Displacement found on a(n) X entity - not supported (entity N, brush M)"`,
-compile arrêtée net, aucun BSP produit. `read_vmf_lint` a une règle dédiée
-(`displacement-on-entity`) qui l'attrape avant la compile.
+## The three hard rules
 
-**Un displacement ne bloque jamais la visibilité**, quel que soit le matériau appliqué [moteur] :
-vvis l'ignore intégralement pour le calcul du PVS. Compter dessus pour couper une ligne de vue
-produit un PVS énorme et des chutes de framerate qui ne s'expliquent qu'une fois ce point vérifié.
-Le partage structurel / hint / areaportal est traité dans `visibilite.md`.
+**A displacement is created only on a world brush face**, never on a brush entity (`func_detail`,
+`func_brush`, `func_breakable`…) `[engine]`. VBSP refuses any entity carrying a displacement —
+error `"Displacement found on a(n) X entity - not supported (entity N, brush M)"`, compile stopped
+dead, no BSP produced. `read_vmf_lint` has a dedicated rule (`displacement-on-entity`) that catches
+it before the compile — and gives the real brush id, which the compiler never does: it always
+prints 0.
 
-**Un displacement ne scelle jamais contre le vide**, même topologiquement fermé à l'œil [moteur] :
-le hull de détection de leak l'ignore. Un sol en displacement posé directement au-dessus du vide
-fuit alors que rien ne semble ouvert visuellement.
+**A displacement never blocks visibility**, whatever material is applied `[engine]`: vvis ignores
+it entirely for the PVS. Counting on one to cut a line of sight produces an enormous PVS and
+framerate drops that make no sense until this point is checked. The structural / hint / areaportal
+split is covered in `visibility.md`.
 
-Vérification des trois : compiler et lire `read_compile_log` pour l'erreur d'entité ou l'avertissement
-de leak ; `read_leak` transforme un leak en entité nommée si la compile échoue. Le comportement
-visuel (une ligne de vue qui traverse, une porte qui ne devrait pas être visible) se confirme en jeu
-via `gmod-mcp` (`run_console_command`, `capture_screen`) — jugement humain sur le screenshot.
+**A displacement never seals against the void**, even when topologically closed to the eye
+`[engine]`: the leak detection hull ignores it. A displacement floor placed directly over the void
+leaks while nothing looks open.
 
-## Sceller un displacement exposé
+Verifying all three: compile and read `read_compile_log` for the entity error or the leak warning;
+`read_leak` turns a leak into a named entity if the compile fails. The visual behaviour (a sightline
+going through, a door that should not be visible) is confirmed in game — human judgement on the
+screenshot.
 
-Sous tout displacement exposé au vide (terrain, toit), un brush classique en `toolsnodraw`
-d'environ 16 unités referme le volume : deux brushes superposés, le supérieur devient le
-displacement, l'inférieur nodraw scelle [consensus]. Ne jamais mettre `toolsnodraw` sur la face
-sculptée elle-même — VBSP émet l'avertissement `"NODRAW on terrain surface!"`, signe que le nodraw
-est au mauvais endroit [moteur].
+## Sealing an exposed displacement
+
+Under any displacement exposed to the void (terrain, roof), a plain `toolsnodraw` brush of about 16
+units closes the volume: two stacked brushes, the upper one becomes the displacement, the lower
+nodraw one seals `[consensus]`. Never put `toolsnodraw` on the sculpted face itself — VBSP emits
+the warning `"NODRAW on terrain surface!"`, a sign the nodraw is in the wrong place `[engine]`.
 
 ## Sewing
 
-Deux displacements adjacents gardent chacun leurs propres sommets de bord tant qu'ils ne sont pas
-sewés (bouton *Sew* de Hammer) : sans ça, des micro-fissures apparaissent en vue rasante, et des
-trous de collision peuvent s'ouvrir là où les bords ne coïncident pas exactement [consensus]. Le
-sewing marche même entre deux powers différents — les sommets du plus fin bougent pour rejoindre
-le plus grossier — mais exige un `Elev` commun entre les deux faces de base.
+Two adjacent displacements each keep their own edge vertices until they are sewn (Hammer's *Sew*
+button): without it, micro-cracks appear at grazing angles, and collision holes can open where the
+edges do not coincide exactly `[consensus]`. Sewing works even between different powers — the finer
+one's vertices move to meet the coarser — but requires a common `Elev` between the two base faces.
 
-Vérification : `jugement humain, non outillé` — les cracks se voient en éditeur ou en jeu
-(`gmod-mcp` `capture_screen`), aucun outil `hammer-mcp` ne les détecte hors ligne.
+Verifying: **human judgement, not tooled** — cracks show in the editor or in game, and no
+`hammer-mcp` tool detects them offline.
 
-## Alpha painting et collision
+## Alpha painting and collision
 
-L'alpha painting par sommet blend deux textures sur un displacement (herbe → terre), mais exige un
-matériau `blend` dédié — le blend lui-même, ses shaders et sa fabrication vivent dans `assets.md`.
+Per-vertex alpha painting blends two textures on a displacement (grass → dirt), but requires a
+dedicated `blend` material — the blend itself, its shaders and its construction live in
+`assets.md`.
 
-Le displacement expose des flags de collision par surface, dont *No Physics Collide* — utile pour
-un relief fin surtout visuel (neige, débris) où on ne veut pas qu'un `prop_physics` s'y coince
-[consensus]. Désactiver ce qui n'est pas nécessaire réduit un coût de collision qui sinon tourne
-en continu même sans rien dessus.
+Displacements expose per-surface collision flags, including *No Physics Collide* — useful for fine,
+mostly visual relief (snow, debris) where you do not want a `prop_physics` getting stuck
+`[consensus]`. Disabling what is not needed removes a collision cost that otherwise runs
+continuously even with nothing on it.
 
-## Displacement, brush ou modèle
+## Displacement, brush or model
 
-| Cas | Choix | Pourquoi |
+| Case | Choice | Why |
 |---|---|---|
-| Terrain extérieur, collines, pentes de grande étendue | Displacement, power 2-3, découpé en plusieurs faces | Seul outil natif pour une surface organique continue |
-| Grande surface plane sans relief (route, dallage) | Brush classique | Le displacement ajoute triangulation, collision et lightmap sans bénéfice |
-| Rocher isolé, formation répétée | `prop_static` | Un displacement n'est jamais instancié — chaque copie recrée toute la géométrie ; un prop partage son mesh et a un LOD |
-| Mur ou plafond avec relief organique local (grotte) | Displacement power 2, `No Physics Collide` si des physprops peuvent s'y coincer | Coût de collision qui grimpe vite sur du vertical complexe |
-| Transition entre deux textures de terrain | Alpha painting sur `WorldVertexTransition`, pas une jointure dure entre displacements | Transition douce sans géométrie ni découpe supplémentaire |
+| Outdoor terrain, hills, large slopes | Displacement, power 2-3, split across several faces | The only native tool for a continuous organic surface |
+| Large flat surface with no relief (road, paving) | Plain brush | A displacement adds triangulation, collision and lightmap for no benefit |
+| Isolated rock, repeated formation | `prop_static` | A displacement is never instanced — every copy recreates the whole geometry; a prop shares its mesh and has LODs |
+| Wall or ceiling with local organic relief (cave) | Displacement power 2, `No Physics Collide` if physprops could get stuck | Collision cost climbs fast on complex vertical work |
+| Transition between two terrain textures | Alpha painting on `WorldVertexTransition`, not a hard seam between displacements | Smooth transition with no extra geometry or cutting |
 
-Vérification de l'arbitrage lui-même : `jugement humain, non outillé` — c'est un choix de design,
-pas un comptage.
+Verifying the choice itself: **human judgement, not tooled** — this is a design decision, not a
+count.

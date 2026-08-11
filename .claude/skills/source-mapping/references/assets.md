@@ -1,139 +1,156 @@
-# Matériaux, modèles et packing
+# Materials, models and packing
 
-Trois familles de fichiers rendent une carte autonome : VTF (texture), VMT (matériau), MDL et sa
-famille (modèle). Chacune a ses contraintes dures, et toutes finissent dans le même pakfile.
-L'éclairage des matériaux (`$envmap`, cubemaps) est dans [lighting.md](lighting.md) — pas ici.
-Le montage CS:S/HL2:EP2 est dans [gmod.md](gmod.md), le coût `prop_static`/`prop_dynamic` en jeu
-dans [performance.md](performance.md) : cette page traite la fabrication du modèle, pas son coût.
+Three families of file make a map self-contained: VTF (texture), VMT (material), MDL and its family
+(model). Each has its own hard constraints, and all of them end up in the same pakfile. Material
+lighting (`$envmap`, cubemaps) is in [lighting.md](lighting.md) — not here. Mounting CS:S/HL2:EP2 is
+in [gmod.md](gmod.md), the in-game cost of `prop_static`/`prop_dynamic` in
+[performance.md](performance.md): this page covers building the model, not what it costs.
 
-## VTF — la texture
+## VTF — the texture
 
-**Dimensions puissance de 2 obligatoires, et multiples de 4 pour tout format compressé** (bloc
-DXT). Une texture non puissance de 2 n'est pas refusée mais traitée comme la puissance de 2
-supérieure par Hammer. [moteur, VDC VTF]
+**Power-of-two dimensions are mandatory, and multiples of 4 for any compressed format** (DXT block).
+A non-power-of-two texture is not rejected but treated as the next power of two up by Hammer.
+`[engine, VDC VTF]`
 
-- Le VTF stocke ses mipmaps **du plus petit au plus grand**, à l'inverse du DDS. [moteur]
-- **DXT1** : 4 bits/pixel, sans alpha lisse (alpha 1-bit possible) — texture opaque standard.
-  **DXT5** : 8 bits/pixel, alpha 8-bit interpolé — canal alpha de qualité (masque spéculaire,
-  alpha-test fin). [moteur, VDC VTF]
-- ⚠️ **Sur les branches Source 2013, un VTF de plus de 32 Mio ne charge pas** : un 4096×4096 doit
-  rester en DXT1/DXT5/I8. VRAD ne calcule en plus aucune ombre de texture sur du DXT3 — DXT5 ou
-  BGRA8888 pour tout matériau qui projette une ombre. [moteur, VDC VTF]
+- A VTF stores its mipmaps **smallest to largest**, the reverse of DDS. `[engine]`
+- **DXT1**: 4 bits/pixel, no smooth alpha (1-bit alpha is possible) — the standard opaque texture.
+  **DXT5**: 8 bits/pixel, interpolated 8-bit alpha — a quality alpha channel (specular mask, fine
+  alpha-test). `[engine, VDC VTF]`
+- ⚠️ **On Source 2013 branches a VTF above 32 MiB does not load**: a 4096×4096 has to stay in
+  DXT1/DXT5/I8. VRAD also computes no texture shadow from DXT3 — use DXT5 or BGRA8888 for any
+  material meant to cast one. `[engine, VDC VTF]`
 
-## VMT — le matériau
+## VMT — the material
 
-Un matériau manquant produit le damier violet-noir ; un **wireframe blanc n'est pas un matériau
-manquant, c'est un shader manquant** — deux diagnostics différents. [moteur, VDC VMT]
+A missing material gives the purple-and-black chequerboard; a **white wireframe is not a missing
+material, it is a missing shader** — two different diagnoses. `[engine, VDC VMT]`
 
-Shaders qui comptent : `LightmappedGeneric` (brushes, lightmap), `VertexLitGeneric` (modèles,
-éclairage par vertex ou per-pixel), `UnlitGeneric` (HUD/UI), `WorldVertexTransition` (blend de
-deux textures sur displacement). Un paramètre non supporté par le shader ne produit **aucune
-erreur** — il est silencieusement ignoré. [moteur, VDC VMT]
+The shaders that matter: `LightmappedGeneric` (brushes, lightmap), `VertexLitGeneric` (models,
+per-vertex or per-pixel lighting), `UnlitGeneric` (HUD/UI), `WorldVertexTransition` (blending two
+textures on a displacement). A parameter the shader does not support produces **no error** — it is
+silently ignored. `[engine, VDC VMT]`
 
-- `$basetexture` quasi obligatoire ; sur un modèle, le canal alpha du `$bumpmap` (ou du
-  basetexture) porte le masque spéculaire — convention imposée, pas une option. [moteur]
-- **`$alphatest` est nettement moins cher que `$translucent`** : rendu plus rapide, tri toujours
-  correct (le translucent n'est correctement trié que sur le worldspawn non-`func_detail`), et
-  compatible flashlight/ombres projetées — mais binaire, sans semi-transparence sans banding.
-  [moteur, VDC $alphatest/$translucent]
-- `$alphatestreference` **ne vaut pas 0,5 par défaut** : `LightmappedGeneric`, `UnlitGeneric` et
-  `VertexLitGeneric` défaultent à **0,7** — toujours le fixer explicitement. `$translucent`
-  désactive en plus entièrement les ombres de texture projetée sur ce matériau. [moteur, VDC
-  $alphatest/$translucent]
-- Les `%compile*` (`%compiletrigger`, `%compilenodraw`, `%compilewater`…) sont des drapeaux de
-  matériau lus par VBSP à la compilation, pas des paramètres de rendu : un mauvais choix ne se
-  voit qu'au compile ou en jeu, jamais en survolant le matériau dans Hammer.
+- `$basetexture` is all but mandatory; on a model, the alpha channel of the `$bumpmap` (or of the
+  basetexture) carries the specular mask — an imposed convention, not an option. `[engine]`
+- **`$alphatest` is markedly cheaper than `$translucent`**: faster to render, always correctly
+  sorted (translucency only sorts correctly on non-`func_detail` worldspawn), and compatible with
+  the flashlight and projected shadows — but binary, with no semi-transparency free of banding.
+  `[engine, VDC $alphatest/$translucent]`
+- `$alphatestreference` **does not default to 0.5**: `LightmappedGeneric`, `UnlitGeneric` and
+  `VertexLitGeneric` default to **0.7** — always set it explicitly. `$translucent` additionally
+  disables projected texture shadows on that material entirely. `[engine, VDC
+  $alphatest/$translucent]`
+- The `%compile*` keys (`%compiletrigger`, `%compilenodraw`, `%compilewater`…) are material flags
+  read by VBSP at compile time, not render parameters: a wrong choice shows up at the compile or in
+  game, never while hovering the material in Hammer.
 
 ## Surfaceprops
 
-`$surfaceprop` (matériau) et son équivalent QC (modèle) pointent vers un bloc de
-`scripts/surfaceproperties.txt` : bruit de pas, friction, decal d'impact, et santé/débris si
-destructible. [moteur, VDC Material surface properties]
+`$surfaceprop` (material) and its QC equivalent (model) point at a block of
+`scripts/surfaceproperties.txt`: footstep sound, friction, impact decal, and health/debris when
+breakable. `[engine, VDC Material surface properties]`
 
-⚠️ **Une valeur absente ou mal orthographiée ne casse pas le compile** — elle retombe
-silencieusement sur `default`, son de pas et decal faux sans aucune erreur console. [consensus]
+⚠️ **A missing or misspelt value does not break the compile** — it silently falls back to `default`,
+wrong footsteps and wrong decals with no console error whatever. `[consensus]`
 
-## Anatomie d'un modèle
+## Anatomy of a model
 
-Le `.mdl` est un **index** : il référence `.vvd` (données par-vertex : position, normale, poids
-d'os, UV), `.dx90.vtx` (bandes de triangles par LOD, nécessaires au rendu) et `.phy` (collision).
-Aucun de ces fichiers ne contient l'intégralité à lui seul. [moteur, VDC .mdl/VTX]
+The `.mdl` is an **index**: it references `.vvd` (per-vertex data: position, normal, bone weights,
+UV), `.dx90.vtx` (triangle strips per LOD, required to render) and `.phy` (collision). None of those
+files holds the whole thing on its own. `[engine, VDC .mdl/VTX]`
 
-- **`$staticprop`** au QC réduit le squelette à un unique os `static_prop`. Sans ce flag, un
-  modèle garde animations et squelette : le placer en `prop_static` n'est pas fiable, le moteur
-  attend l'hypothèse "statique" que seul le flag pose. [moteur, VDC $staticprop] Coût runtime :
-  [performance.md](performance.md).
-- **`$concave`** dans `$collisionmodel` permet un hull non convexe (arche, tube coudé). Sans lui,
-  le compilateur remplit le creux avec un ou plusieurs hulls convexes — collision fausse, aucune
-  erreur. Un hull convexe reste moins cher en CPU physique : ne pas demander `$concave` sur un
-  objet qui n'a pas de creux. [moteur, VDC Collision Mesh]
-- **Static Prop Combine** (`-staticpropcombine` à VBSP) fusionne des `prop_static` partageant un
-  matériau en un modèle généré — un draw call de moins par groupe (Valve rapporte Nuke 40 % plus
-  rapide). Exige les sources QC de chaque prop combiné ; un prop stock Valve doit être recompilé
-  sous un autre nom, sinon la version VPK écrase la combinée. [moteur, VDC Static Prop Combine]
+- **`$staticprop`** in the QC reduces the skeleton to a single `static_prop` bone. Without the flag a
+  model keeps its animations and skeleton: placing it as a `prop_static` is not reliable, because the
+  engine expects the "static" assumption only that flag establishes. `[engine, VDC $staticprop]`
+  Runtime cost: [performance.md](performance.md).
+- **`$concave`** inside `$collisionmodel` allows a non-convex hull (an arch, a bent tube). Without
+  it the compiler fills the hollow with one or more convex hulls — wrong collision, no error. A
+  convex hull stays cheaper in physics CPU: do not ask for `$concave` on an object with no hollow.
+  `[engine, VDC Collision Mesh]`
+- **Static Prop Combine** (`-staticpropcombine` on VBSP) merges `prop_static` sharing a material
+  into a generated model — one draw call fewer per group (Valve reports Nuke 40% faster). It needs
+  the QC sources of every prop combined; a stock Valve prop has to be recompiled under another name,
+  or the VPK version overrides the combined one. `[engine, VDC Static Prop Combine]`
 
-## La table de packing
+## The packing table
 
-Chemins relatifs au dossier du jeu (`garrysmod/`). Un fichier manquant dans cette liste = damier
-violet ou modèle ERROR chez le joueur qui ne l'a pas déjà.
+Paths are relative to the game folder (`garrysmod/`). A file missing from this list means a purple
+chequerboard or an ERROR model for any player who does not already have it.
 
-| Asset | Fichiers à embarquer | Piège |
+| Asset | Files to embed | Trap |
 |---|---|---|
-| Matériau simple | `.vmt` + `.vtf` du `$basetexture` | tout VTF référencé (`$bumpmap`, `$envmapmask`, `$detail`…) doit aussi être packé |
-| Matériau `WorldVertexTransition` | `.vmt` + **2** basetextures (`$basetexture`, `$basetexture2`) + leurs bumpmaps | un seul packé sur deux = damier sur la moitié du blend |
-| Modèle (prop) | `.mdl` + `.vvd` + `.dx90.vtx` (+ `.dx80.vtx`/`.sw.vtx` si générés) + `.phy` si collision + **chaque** matériau de **chaque** skin | un skin alternatif non packé = ERROR uniquement sur ce skin, invisible en testant le skin 0 |
-| Modèle avec LOD | idem + matériaux propres à chaque LOD si `$lod` en change | rare, à vérifier au QC |
-| Son | `sound/<chemin>/<fichier>` | chemin relatif à `sound/` |
-| Soundscape | `.txt` de soundscape + tous les `.wav` référencés + entrée dans `scripts/soundscapes_manifest.txt` | manifest absent = ne charge jamais, aucune erreur |
-| Particules | `.pcf` + chaque matériau de particule (`.vmt`/`.vtf`) + entrée dans `particles/particles_manifest.txt` | idem, silencieux |
-| Nav mesh | `maps/<carte>.nav`, à côté du `.bsp` | **jamais dans le pakfile** — fichier séparé, généré en jeu |
-| Cubemaps | auto-générés dans le pakfile par `buildcubemaps` + resave, `c-X_Y_Z.vtf` | ne jamais copier/fabriquer à la main — encodent une position précise |
-| Skybox 3D custom | 6 faces `skyname*up/dn/lf/rt/ft/bk.vtf` + `.vmt` | inutile si la skybox vient déjà d'un jeu monté |
-| Detail sprites | `materials/detail/....vmt/.vtf` + `detail.vbsp` référencé par `detailvbsp` | concerne les displacements avec detail props |
+| Simple material | `.vmt` + the `$basetexture`'s `.vtf` | every referenced VTF (`$bumpmap`, `$envmapmask`, `$detail`…) has to be packed too |
+| `WorldVertexTransition` material | `.vmt` + **2** basetextures (`$basetexture`, `$basetexture2`) + their bumpmaps | one packed out of two = a chequerboard over half the blend |
+| Model (prop) | `.mdl` + `.vvd` + `.dx90.vtx` (+ `.dx80.vtx`/`.sw.vtx` if generated) + `.phy` if it collides + **every** material of **every** skin | an unpacked alternate skin gives ERROR on that skin only, invisible while testing skin 0 |
+| Model with LODs | the same + materials specific to each LOD if `$lod` changes them | rare, check in the QC |
+| Sound | `sound/<path>/<file>` | path relative to `sound/` |
+| Soundscape | the soundscape `.txt` + every referenced `.wav` + an entry in `scripts/soundscapes_manifest.txt` | no manifest entry = never loads, no error |
+| Particles | `.pcf` + every particle material (`.vmt`/`.vtf`) + an entry in `particles/particles_manifest.txt` | same, silent |
+| Nav mesh | `maps/<map>.nav`, next to the `.bsp` | **never in the pakfile** — a separate file, generated in game |
+| Cubemaps | auto-generated into the pakfile by `buildcubemaps` + resave, `c-X_Y_Z.vtf` | never copy or hand-build them — they encode a precise position |
+| Custom 3D skybox | 6 faces `skyname*up/dn/lf/rt/ft/bk.vtf` + `.vmt` | pointless when the skybox already comes from a mounted game |
+| Detail sprites | `materials/detail/….vmt/.vtf` + the `detail.vbsp` referenced by `detailvbsp` | concerns displacements carrying detail props |
 
-⚠️ **Un `.vmt` posé à la racine de `materials/`** (pas dans un sous-dossier) peut être ignoré par
-`bspzip` et les scanners qui l'enrobent : ranger sous un sous-dossier systématiquement. [moteur,
-VDC BSPZIP]
+⚠️ **A `.vmt` sitting at the root of `materials/`** (not in a subfolder) can be ignored by `bspzip`
+and the scanners wrapping it: always file them under a subfolder. `[engine, VDC BSPZIP]`
 
-**`run_pack` (hammer-mcp) ne devine rien** : il empaquette la liste explicite qu'on lui donne, il
-ne scanne pas le `.bsp` pour trouver ce qu'une carte référence — détecter automatiquement les
-assets référencés, y compris les `Model()`/`ClientsideModel()` appelés dynamiquement en Lua que
-rien côté carte ne trace, est un trou d'outillage connu, ici comme dans le domaine public. `bspzip`
-sort en 0 qu'il ait ajouté quelque chose ou non ; `run_pack` compte le pakfile avant/après plutôt
-que de croire ce code retour.
+## What `run_pack` derives, and what it refuses to imply
 
-## Deux échecs visuels, deux causes
+`run_pack` takes an explicit list of pairs. With `auto: true` it also **derives** that list from the
+map itself: `read_map_dependencies` resolves every reference and separates "packed already",
+"provided by the game" and "missing", and auto packs the files that sit loose on disk.
 
-| Symptôme | Cause | Diagnostic |
+Three things it deliberately will not pretend:
+
+- **Loose is a candidate, not a proof.** No rule cleanly separates a mapper's work from a game's own
+  loose files — they live under the same installation. Garry's Mod ships `detail.vbsp` loose in its
+  own root `[measured]`, which is why `excludePaths` exists. Leaning towards inclusion is acceptable
+  only because the asymmetry is: packing a game file costs a few kilobytes, missing one ships a
+  broken map.
+- **The derived list comes back in the output**, so what was packed is visible rather than assumed.
+  A tool that packed silently would leave no way to tell "nothing needed packing" from "the
+  derivation failed" — both look identical from a successful exit code.
+- **What is missing everywhere is named as such.** Packing will not fix it, and a run that packs six
+  files while four stay missing must not read as finished.
+
+Neither can anything trace assets called dynamically from Lua (`Model()`, `ClientsideModel()`), which
+nothing on the map side records — a known tooling gap, here as in the public domain. And `bspzip`
+exits 0 whether or not it added anything; `run_pack` counts the pakfile before and after rather than
+believing that return code.
+
+## Two visual failures, two causes
+
+| Symptom | Cause | Diagnosis |
 |---|---|---|
-| Damier violet-noir | le modèle charge, **un de ses matériaux** échoue (VMT absent, sous-dossier oublié, shader/paramètre invalide) | console `mat_reloadmaterial`, `developer 1` (`gmod-mcp` → `run_console_command`, `read_console`) |
-| ERROR model (balise rouge/noir 3D) | le **`.mdl` lui-même** ne charge pas — fichier manquant, corrompu, ou dépendance VTX/PHY absente | `read_pakfile` (hammer-mcp) pour vérifier que la famille complète est embarquée |
+| Purple-and-black chequerboard | the model loads, **one of its materials** fails (missing VMT, forgotten subfolder, invalid shader or parameter) | console `mat_reloadmaterial`, `developer 1` (`gmod-mcp` → `run_console_command`, `read_console`) |
+| ERROR model (the red-and-black 3D sign) | the **`.mdl` itself** does not load — file missing, corrupt, or a VTX/PHY dependency absent | `read_pakfile` (hammer-mcp) to check the whole family is embedded |
 
-⚠️ **La casse des chemins ne pardonne pas sous Linux.** Un dédié GMod tourne sur un système de
-fichiers sensible à la casse ; `Materials/Props/Foo.vmt` référencé comme `materials/props/foo.vmt`
-charge sur un poste Windows et casse silencieusement en prod, sans exception pour `materials/`,
-`models/` ou `sound/`. [moteur — comportement du système de fichiers]
+⚠️ **Path case is unforgiving on Linux.** A GMod dedicated server runs on a case-sensitive
+filesystem; `Materials/Props/Foo.vmt` referenced as `materials/props/foo.vmt` loads on a Windows
+workstation and breaks silently in production, with no exception for `materials/`, `models/` or
+`sound/`. `[engine — filesystem behaviour]`
 
-## Les arbitrages
+## The trade-offs
 
-| Situation | Choix | Pourquoi |
+| Situation | Choice | Why |
 |---|---|---|
-| Transparence nette (grille, clôture) | `$alphatest` | moins cher, tri toujours correct |
-| Dégradé de transparence (vitre teintée) | `$translucent`, avec parcimonie | seul moyen sans banding, mais paie le tri et l'overdraw |
-| Géométrie décorative répétée (ferronnerie, moulure) | Propper → `prop_static` (`$staticprop`) | un modèle est un seul draw call optimisé ; réduit le coût BSP/visleaf |
-| Géométrie simple à rôle structurel (porte, découpe de VIS) | rester en brush (`func_detail` si non structurel) | Propper sur un objet qui doit garder un rôle de compile est un contre-emploi |
-| Collision concave (arche, tube coudé) | `$concave`, plusieurs hulls convexes assemblés | sans lui le compilateur remplit le creux |
-| Collision simple (caisse, planche) | convexe simple, sans `$concave` | moins cher en CPU physique |
+| Hard-edged transparency (grate, fence) | `$alphatest` | cheaper, always correctly sorted |
+| Graded transparency (tinted glass) | `$translucent`, sparingly | the only way without banding, but pays for sorting and overdraw |
+| Repeated decorative geometry (ironwork, moulding) | Propper → `prop_static` (`$staticprop`) | a model is a single optimised draw call; it cuts the BSP/visleaf cost |
+| Simple geometry with a structural role (door, VIS cut) | stay a brush (`func_detail` when not structural) | Propper on an object that must keep a compile role is a misuse |
+| Concave collision (arch, bent tube) | `$concave`, several convex hulls assembled | without it the compiler fills the hollow |
+| Simple collision (crate, plank) | plain convex, no `$concave` | cheaper in physics CPU |
 
-## Vérifier
+## Verifying
 
-- Packing complet et croissance du pakfile : `read_pakfile`, `run_pack` (hammer-mcp).
-- Modèle/matériau chargé sans erreur en jeu : `capture_screen`, `read_console`, `read_logs`
-  (gmod-mcp) — le test qui tranche reste de retirer le dossier d'assets custom et chercher
-  `ERROR`/`Missing` en console (le protocole de livraison est dans
-  [`source-map`](../../source-map/references/livraison.md)).
-- Comptage d'entités pour situer le coût d'un choix brush/modèle : `read_map_geometry`,
+- Packing completeness and pakfile growth: `read_map_dependencies`, `run_pack`, `read_pakfile`
+  (hammer-mcp).
+- Model or material loading without error in game: `capture_screen`, `read_console`, `read_logs`
+  (gmod-mcp) — the test that settles it is still removing the custom asset folder and looking for
+  `ERROR`/`Missing` in the console (the shipping protocol is in
+  [`source-map`](../../source-map/references/shipping.md)).
+- Entity counts, to place the cost of a brush-versus-model choice: `read_map_geometry`,
   `read_bsp_entities` (hammer-mcp).
-- Dimensions/format VTF, validité d'un `$surfaceprop`, flag `$staticprop` effectif, hull de
-  collision réellement concave : jugement humain, non outillé — rien ici ne lit l'intérieur d'un
-  VTF ou d'un MDL. Externe : VTFEdit, model viewer Hammer++/Crowbar.
+- VTF dimensions and format, the validity of a `$surfaceprop`, whether `$staticprop` really took,
+  whether a collision hull is genuinely concave: human judgement, not tooled — nothing here reads
+  inside a VTF or an MDL. External: VTFEdit, the Hammer++ model viewer, Crowbar.
