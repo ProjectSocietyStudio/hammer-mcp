@@ -29,6 +29,13 @@ export const ConfigFile = z.object({
    * them.
    */
   gmodBin: z.string().default(join(STEAM_GMOD, "bin")),
+  /**
+   * Directory holding the Hammer++ compilers, when they are installed. Defaults to
+   * `<gmodBin>/win64`, which is where they must go: they are x86-64 where the stock ones
+   * are i386, and they require the x86-64 beta branch of GMod. The .fgd files stay in
+   * `gmodBin`. Nothing needs this set unless the install is unusual.
+   */
+  gmodBinPlusPlus: z.string().optional(),
   /** The `-game` directory the compilers resolve content against. */
   gmodGameDir: z.string().default(join(STEAM_GMOD, "garrysmod")),
   /**

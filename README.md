@@ -267,10 +267,10 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_fgd_class` | `map` | | Le schéma d'une classe selon la FGD du jeu : keyvalues, entrées, sorties |
 | `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement |
 | `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler |
-| `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape |
+| `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape. `toolchain: "plusplus"` pour la chaîne Hammer++ |
 | `read_compile_log` | `map` | | Traduit la sortie d'un compilateur en findings expliqués |
 | `read_leak` | `map` | | Transforme « leaked! » en un lieu et une entité nommée |
-| `run_pack` | `local` | ● | Empaquette des fichiers dans un `.bsp` via bspzip, et vérifie |
+| `run_pack` | `local` | ● | Empaquette des fichiers dans un `.bsp` via bspzip, et vérifie. `toolchain` idem |
 | `read_nav` | `map` | | Dit si un nav mesh correspond encore à sa carte |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
@@ -601,6 +601,7 @@ en dépendent se sautent proprement quand ils sont absents ; les deux ont bien t
 | Champ | Défaut |
 |---|---|
 | `gmodBin` | `~/.steam/steam/steamapps/common/GarrysMod/bin` |
+| `gmodBinPlusPlus` | `<gmodBin>/win64` |
 | `gmodGameDir` | `~/.steam/steam/steamapps/common/GarrysMod/garrysmod` |
 | `backend` | `wine` |
 | `winePrefix` | `~/.wine` |
