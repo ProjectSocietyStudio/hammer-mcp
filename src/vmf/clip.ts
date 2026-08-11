@@ -394,9 +394,25 @@ export function clipSolids(
         throw new VmfClipError(`solid ${found.id}: the second piece's cut face has no area`);
       }
       const solidIndent = indentOf(source, found.block);
+      // The source brush's own editor block, copied verbatim. Two things go wrong without
+      // it: a piece with no editor block at all can never be put in a visgroup or a group,
+      // and a piece given a fresh one loses the membership and the colour the original
+      // had -- so half of a brush that was in "north tenement" comes back outside it the
+      // next time Hammer opens the map.
+      const sourceEditor = found.block.entries.find(
+        (n): n is KvBlock => n.kind === "block" && n.name === "editor",
+      );
+      const editorText = sourceEditor
+        ? source.slice(
+            lineRange(source, sourceEditor).start,
+            lineRange(source, sourceEditor).end,
+          )
+        : `${solidIndent}\teditor\n${solidIndent}\t{\n${solidIndent}\t\t"color" "0 180 220"\n` +
+          `${solidIndent}\t\t"visgroupshown" "1"\n${solidIndent}\t\t"visgroupautoshown" "1"\n` +
+          `${solidIndent}\t}\n`;
       const body = `${solidIndent}solid\n${solidIndent}{\n${solidIndent}\t"id" "${otherId}"\n${kept
         .map((t) => `${indent}${t}\n`)
-        .join("")}${face}${solidIndent}}\n`;
+        .join("")}${face}${editorText}${solidIndent}}\n`;
       const after = lineRange(source, found.block).end;
       splices.push({ start: after, end: after, text: body });
     }
@@ -432,18 +448,28 @@ export function clipSolids(
   return { text, matched: wanted.length, solids: results, warnings, unchanged: text === source };
 }
 
-/** Material of the biggest face among those kept, which is what Hammer gives the cut. */
+/**
+ * Material of the biggest face among those kept, which is what Hammer gives the cut.
+ *
+ * Tool textures are skipped when the brush has anything else, because a nodraw side is
+ * usually the one nobody sees and a cut face usually is seen. But a brush made **only** of
+ * tool textures is a tool brush -- a hint, a trigger, a skip -- and forcing NODRAW onto it
+ * strips the semantics it exists for: a hint brush cut in two would come back as a hint
+ * with a nodraw face, which vvis reads as neither. So the fallback is the largest tool
+ * face of such a brush, not a fixed default.
+ */
 function largestFaceMaterial(check: SolidCheck, kept: readonly number[]): string {
-  let best = "TOOLS/TOOLSNODRAW";
-  let area = -1;
-  for (const i of kept) {
-    const side = check.sides[i];
-    if (side && side.area > area && !side.material.toUpperCase().startsWith("TOOLS/")) {
-      area = side.area;
-      best = side.material;
+  const pick = (toolTextures: boolean): { material: string; area: number } | null => {
+    let best: { material: string; area: number } | null = null;
+    for (const i of kept) {
+      const side = check.sides[i];
+      if (!side) continue;
+      if (side.material.toUpperCase().startsWith("TOOLS/") !== toolTextures) continue;
+      if (!best || side.area > best.area) best = { material: side.material, area: side.area };
     }
-  }
-  return best;
+    return best;
+  };
+  return (pick(false) ?? pick(true))?.material ?? "TOOLS/TOOLSNODRAW";
 }
 
 export { planeFromPoints };

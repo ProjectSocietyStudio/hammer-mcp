@@ -165,6 +165,38 @@ describe("arch", () => {
     }
   });
 
+  it("refuses a segment past a quarter turn, instead of building its complement", () => {
+    // A segment is a quadrilateral through four corners, so beyond 90 degrees it describes
+    // the sector between its ends rather than the sector asked for. Measured: a 270-degree
+    // arch in one segment came out with corners at 0 and -90 degrees -- the complementary
+    // wedge -- and everyBrushIsValid accepted it, because that wedge is a valid brush.
+    expect(() =>
+      expandShape({
+        shape: "arch",
+        centre: [0, 0, 0],
+        innerRadius: 64,
+        outerRadius: 128,
+        height: 32,
+        arcDegrees: 270,
+        segments: 1,
+      }),
+    ).toThrow(/quarter turn/);
+
+    // Exactly a quarter turn is the common case -- a full ring in four segments -- and
+    // must still work.
+    const ring = build({
+      shape: "arch",
+      centre: [0, 0, 0],
+      innerRadius: 64,
+      outerRadius: 128,
+      height: 32,
+      arcDegrees: 360,
+      segments: 4,
+    });
+    expect(ring.solids).toHaveLength(4);
+    everyBrushIsValid(ring.solids);
+  });
+
   it("refuses an inner radius that is not inside the outer one", () => {
     expect(() =>
       expandShape({

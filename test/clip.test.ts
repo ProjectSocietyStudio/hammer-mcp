@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { runCompile } from "../src/tools/compile.js";
+import { insertSolids } from "../src/vmf/build.js";
 import { clipSolids, VmfClipError } from "../src/vmf/clip.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
 import type { Plane, SolidCheck, Vec3 } from "../src/vmf/solid.js";
@@ -120,6 +121,49 @@ describe("clipSolids: what happens to the faces", () => {
     });
     const cutFace = byId(r.text, FLOOR)!.sides.find((s) => s.plane!.normal[0] < -0.9)!;
     expect(cutFace.material).toBe("TOOLS/TOOLSNODRAW");
+  });
+
+  it("keeps a tool brush a tool brush when it cuts one", () => {
+    // A hint brush is TOOLS/TOOLSHINT and TOOLS/TOOLSSKIP and nothing else. Skipping every
+    // tool texture when choosing the cut material fell through to NODRAW, so a hint cut in
+    // two came back as a hint with a nodraw face -- which vvis reads as neither.
+    const hint = insertSolids(probe(), [{ shape: "box", mins: [0, 0, 0], maxs: [256, 256, 8] }], {
+      material: "TOOLS/TOOLSSKIP",
+      materialForFace: (f) => (f.areaRank <= 1 ? "TOOLS/TOOLSHINT" : "TOOLS/TOOLSSKIP"),
+    });
+    const id = hint.solidIds[0]!;
+    const r = clipSolids(hint.text, { ids: [id] }, { normal: [1, 0, 0], dist: 128 }, {
+      keep: "front",
+    });
+    const cutFace = byId(r.text, id)!.sides.find((s) => s.plane!.normal[0] < -0.9)!;
+    expect(cutFace.material).toMatch(/^TOOLS\//);
+    expect(cutFace.material).not.toBe("TOOLS/TOOLSNODRAW");
+  });
+
+  it("gives the second piece the source brush's own editor block", () => {
+    // Without the source's block the half this tool made is outside every visgroup the
+    // original was in, the next time Hammer opens the map -- and with no block at all it
+    // can never be put in one.
+    const built = insertSolids(probe(), [
+      { shape: "box", mins: [-128, -128, 512], maxs: [128, 128, 640] },
+    ]);
+    const id = built.solidIds[0]!;
+    // A membership and a colour of its own, as Hammer would have written them.
+    const marked = built.text.replace(
+      '"color" "0 180 220"',
+      '"color" "12 34 56"\n\t\t\t"visgroupid" "77"\n\t\t\t"groupid" "88"',
+    );
+    expect(marked).not.toBe(built.text);
+
+    const r = clipSolids(marked, { ids: [id] }, THROUGH_ORIGIN, { keep: "both" });
+    const otherId = r.solids[0]!.otherId!;
+    expect(otherId).toBeGreaterThan(0);
+
+    // Two brushes now carry the membership, the colour and the group: the original and
+    // the piece cut off it.
+    expect((r.text.match(/"visgroupid" "77"/g) ?? [])).toHaveLength(2);
+    expect((r.text.match(/"groupid" "88"/g) ?? [])).toHaveLength(2);
+    expect((r.text.match(/"color" "12 34 56"/g) ?? [])).toHaveLength(2);
   });
 
   it("drops a face that no longer bounds anything, rather than leaving it redundant", () => {
