@@ -99,19 +99,45 @@ def _pakfile(req: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _load_vmf(path: str) -> Any:
+def _fgd_names(req: dict[str, Any]) -> tuple[str, ...]:
+    """Which FGDs to check against, relative to `binDir`.
+
+    A list rather than one name since Hammer++ ships its own. The caller decides -- it is
+    the side that knows which files exist -- and the reply names what was loaded, so the
+    schema can never widen without it being visible.
+    """
+    names = req.get("fgd") or ("garrysmod.fgd",)
+    return (names,) if isinstance(names, str) else tuple(names)
+
+
+def _load_vmf(path: str, req: dict[str, Any] | None = None) -> tuple[Any, dict[str, Any]]:
+    """Parses a .vmf, optionally flattening its func_instances first.
+
+    Off by default: expanding changes every count and every targetname in the reply, and
+    that must be something the caller asked for rather than something that happens to a
+    map one day because an option gained a default.
+    """
     from srctools import Keyvalues, VMF
 
     with open(path, encoding="utf8", errors="replace") as f:
-        return VMF.parse(Keyvalues.parse(f))
+        vmf = VMF.parse(Keyvalues.parse(f))
+
+    if not (req or {}).get("collapseInstances"):
+        return vmf, {"collapsed": 0, "requested": False}
+
+    from instances import collapse_instances
+
+    info = collapse_instances(vmf, path, (req or {}).get("gameDir"))
+    info["requested"] = True
+    return vmf, info
 
 
 @verb("fgd_class")
 def _fgd_class(req: dict[str, Any]) -> dict[str, Any]:
     """Describes one class as the game's own FGD declares it, or lists the classes."""
-    from fgd_support import describe_class, load_fgd
+    from fgd_support import describe_class, load_fgds
 
-    fgd, tolerated = load_fgd(req["binDir"], req.get("fgd", "garrysmod.fgd"))
+    fgd, tolerated = load_fgds(req["binDir"], _fgd_names(req))
     name = req.get("classname")
 
     if not name:
@@ -151,7 +177,7 @@ def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
     """Entities, brushes and counts of a .vmf, without judging any of it."""
     from vmf_lint import count_vmf
 
-    vmf = _load_vmf(req["path"])
+    vmf, instances = _load_vmf(req["path"], req)
     limit = int(req.get("limit", 200))
     wanted = req.get("classname")
 
@@ -190,6 +216,7 @@ def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": req["path"],
         "counts": count_vmf(vmf),
+        "instances": instances,
         "histogram": dict(sorted(histogram.items(), key=lambda kv: -kv[1])),
         "matched": len(entities),
         "returned": min(len(entities), limit),
@@ -200,11 +227,12 @@ def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
 @verb("vmf_lint")
 def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
     """Checks a .vmf against the FGD and against what the compilers accept."""
-    from fgd_support import load_fgd
+    from fgd_support import load_fgds
     from vmf_lint import count_vmf, lint_vmf
 
-    fgd, tolerated = load_fgd(req["binDir"], req.get("fgd", "garrysmod.fgd"))
-    vmf = _load_vmf(req["path"])
+    names = _fgd_names(req)
+    fgd, tolerated = load_fgds(req["binDir"], names)
+    vmf, instances = _load_vmf(req["path"], req)
     lua_classes = frozenset(req.get("luaClasses") or ())
     findings = lint_vmf(vmf, fgd, lua_classes)
 
@@ -218,7 +246,9 @@ def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": req["path"],
         "counts": count_vmf(vmf),
+        "instances": instances,
         "toleratedHelpers": tolerated,
+        "fgdsLoaded": list(names),
         "luaClassesKnown": len(lua_classes),
         "total": len(findings),
         "bySeverity": by_severity,

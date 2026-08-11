@@ -1,0 +1,18 @@
+ficool2 - vvisplusplus.exe (Jun 20 2026)
+16 threads
+CPU supports AVX2
+reading Z:\scratch\hmcp_probe.bsp
+reading Z:\scratch\hmcp_probe.prt
+   4 portalclusters
+   4 numportals
+BasePortalVis:       0...1...2...3...4...5...6...7...8...9...10 (0)
+PortalFlow:          0...1...2...3...4...5...6...7...8...9...10 (0)
+Optimized: 0 visible clusters (0.00%)
+Total clusters visible: 16
+Average clusters visible: 4
+Building PAS...
+Average clusters audible: 4
+visdatasize:44  compressed from 64
+writing Z:\scratch\hmcp_probe.bsp
+Wrote ZIP buffer, estimated size 58110, actual size 57896
+0 seconds elapsed

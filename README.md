@@ -19,11 +19,12 @@ dans `gmod-mcp`, pas ici.
 |---|---|
 | BSP (`read_bsp_info`, `read_bsp_entities`) | **prouvé** — jalon 1 ci-dessous |
 | Patch de lump (`read_lump_patch`, `write_lump_patch`, `read_lump_patch_status`) | codec prouvé ; **effet en jeu non prouvé** (porte B) |
-| VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée |
-| Compile (`run_compile`, `read_compile_log`, `read_leak`, `run_pack`) | **prouvé** — fuite provoquée puis localisée |
+| VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée ; `func_instance` dépliés |
+| Compile (`run_compile`, `read_compile_log`, `read_leak`, `run_pack`) | **prouvé** — fuite provoquée puis localisée, sur les deux chaînes |
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
 | Sidecar Python (srctools) | **installé et prouvé** — voir ci-dessous |
+| Chaîne Hammer++ | **prouvée** — porte C ; `cull` mesuré, deux flags écartés faute d'oracle |
 | Mesure (`read_map_extents`, `read_map_geometry`, `read_prop_survey`) | **prouvé** — recoupe trois mesures indépendantes |
 
 ## Les portes de faisabilité
@@ -52,6 +53,124 @@ géométrie.
 **Le chemin doit être en forme Windows absolue** (`Z:\...`). Un chemin relatif se résout contre le
 cwd de wine et compile silencieusement le mauvais fichier. `WINEDEBUG=-all` est indispensable :
 sinon stderr est un mur de `fixme:`.
+
+### Porte C — la chaîne Hammer++ sous Wine : **passée le 11/08/2026**
+
+`vbspplusplus.exe`, `vvisplusplus.exe`, `vradplusplus.exe` et `bspzipplusplus.exe` (builds de
+juin 2026) s'exécutent sous le même wine 9.0 que la chaîne stock, sans DLL supplémentaire.
+
+**Ce que la porte a corrigé, et c'est l'essentiel : ils ne vivent pas là où on les attendait.**
+
+| | stock | Hammer++ |
+|---|---|---|
+| Répertoire | `GarrysMod/bin/` | `GarrysMod/bin/win64/` |
+| Architecture | PE32 i386 | PE32+ x86-64 |
+| Les `.fgd` | `bin/` | — (`toolsplusplus.fgd` livré avec, à part) |
+
+`bin/win64/` a **aussi** ses propres `vbsp.exe`/`vvis.exe`/`vrad.exe` 64-bit stock, et exige la
+branche bêta **x86-64** de GMod (`BetaKey "x86-64"` dans `appmanifest_4000.acf`). Conséquence pour
+la configuration : `gmodBin` désigne à la fois le dossier des compilateurs **et** celui des `.fgd`
+— les deux rôles se séparent ici, et un seul chemin ne suffit plus.
+
+Deux archives distinctes, contrairement à ce que la page de téléchargement laisse croire :
+
+- `hammerplusplus_gmod_build8871.zip` — l'**éditeur seul**, aucun compilateur dedans ;
+- `tools_plusplus.zip` (dépôt `ficool2/misc_tools`) — les quatre compilateurs, `studiomdlplusplus`
+  et `toolsplusplus.fgd`. Son dossier `compatibility/` **n'a pas été installé** : il contient
+  `tier0.dll`, `vstdlib.dll`, `filesystem_stdio.dll` et consorts, qui écraseraient ceux de
+  l'install Steam. Rien n'en a eu besoin.
+
+Compile complet de `test/fixtures/hmcp_probe.vmf`, les trois étapes à 0 :
+
+| | PLANES | VERTEXES | TEXINFO | FACES | BRUSHES |
+|---|---|---|---|---|---|
+| stock | 40 | 35 | 3 | 16 | 6 |
+| Hammer++ | 40 | 35 | 3 | 16 | 6 |
+
+**Contrôle négatif** — sans lui la porte ne prouverait qu'une carte qui marche. `info_player_start`
+déplacé en `0 0 2000`, hors du volume scellé : VBSP++ imprime le même `**** leaked ****`, la même
+ligne `Entity info_player_start (0.00 0.00 2000.00) leaked!`, et écrit un `.lin` de deux points **au
+même format, l'entité au second** — exactement la convention sur laquelle `read_leak` est calibré.
+
+Les quatre sorties brutes sont versionnées dans `test/fixtures/logs/` et rejouées par
+`test/compile.test.ts` : `parseCompileLog` reste muet sur les trois compiles propres et voit la
+fuite. Cela prouve ces deux cas, **pas** que toutes les erreurs des builds `++` sont couvertes —
+leurs messages propres n'ont pas encore d'échantillon.
+
+### Ce que la chaîne Hammer++ rapporte, et ce qu'elle ne rapporte pas
+
+Un seul flag est exposé — `cull` sur `run_compile` — parce qu'un seul a pu être mesuré ici.
+
+**`cull`** active `-cullverts -cullplanes -cullbrushes -cullbrushsides` : vbsp ne supprime
+normalement ce que rien ne référence qu'une fois une limite atteinte. Sur `ttt_traps.vmf`,
+mesuré le 11/08/2026 :
+
+| | sans | avec | écart |
+|---|---|---|---|
+| `PLANES` | 400 | 318 | **−20,5 %** |
+| `VERTEXES` | 725 | 632 | **−12,8 %** |
+| `FACES` | 441 | 441 | 0 |
+| `TEXINFO` | 101 | 101 | 0 |
+| octets | 218 912 | 195 936 | **−10,5 %** |
+
+Faces et texinfos inchangés : c'est ce qui distingue un élagage d'une carte cassée. `BRUSHES` et
+`BRUSHSIDES` n'ont pas bougé non plus — cette carte n'a rien d'inutilisé de ce côté, pas la preuve
+que les deux flags ne servent à rien.
+
+`cull` sur la chaîne stock est **refusé**, pas ignoré : vbsp accepte les options inconnues en
+silence, et une compile qui annonce un succès sans avoir rien élagué est pire qu'une erreur.
+
+**La FGD des compilateurs `++` rejoint le lint.** `toolsplusplus.fgd` déclare cinq classes que
+`garrysmod.fgd` ignore : `func_detail_illusionary`, `func_detail_blocker`, `func_nobevel`,
+`light_directional`, `light_projected`. Sans elle, une carte qui les utilise récolte un
+`unknown-classname` par occurrence — exactement le faux positif qu'avaient produit les entités Lua
+du dépôt, depuis une autre source manquante.
+
+Elle n'est chargée **que si le fichier est là**, et `read_vmf_lint` renvoie `fgdsLoaded` : un
+schéma qui s'élargit en silence est un lint qui cesse d'attraper en silence. `hammerplusplus_fgd.fgd`,
+livré avec l'éditeur, est délibérément écarté — il redéclare surtout des classes existantes pour
+leur ajouter des helpers d'affichage, donc le fusionner changerait les keyvalues acceptées
+d'entités que le jeu définit déjà.
+
+**Deux flags que la veille annonçait et qui ne tiennent pas ici** :
+
+- **`-allowdynamicpropsasstatic` ne convertit rien.** Il lève le refus de vbsp sur un
+  `prop_static` dont le modèle n'est pas marqué statique ; la conversion elle-même reste une
+  édition du VMF. Non exposé : `ttt_traps.vmf` n'a **aucun** prop, et la seule carte qui en a 59
+  (`rp_nycity_day`) n'a pas de source. Sans oracle constructible, pas d'outil — même règle que
+  pour `read_vprof`.
+- **`bspzip -threads` ne concerne pas `run_pack`.** Le multithread de BSPZIP++ est sur `-repack`,
+  une autre opération ; `run_pack` fait `-addlist`. `toolchain: "plusplus"` lui donne quand même
+  le binaire `++`. `-repack -compress` n'a pas été essayé : rien ne dit que GMod lise un lump
+  compressé en LZMA.
+
+### Un `func_instance` non déplié est un mensonge dans les deux sens
+
+Rien à voir avec Hammer++ — le `vbsp.exe` stock de GMod gère les instances (`InstancePath`,
+`instance_variable`, `func_instance_parms` sont dans le binaire). C'est un manque qui coûtait déjà.
+
+Une instance, c'est **une entité dans le fichier et un bâtiment dans la carte**. Lu tel quel :
+
+| | replié | déplié |
+|---|---|---|
+| `worldBrushes` | 0 | 6 |
+| `brushSides` | 0 | 36 |
+| entités | 2 | 4 |
+
+Mesuré sur une carte racine qui ne contient qu'une instance de `hmcp_probe.vmf`. Une carte très
+au-delà de `MAX_MAP_BRUSHES` paraît donc confortable, et `read_map_geometry` ne peut pas la
+contredire puisqu'il n'y a pas encore de `.bsp`. Dans l'autre sens, toute sortie qui franchit la
+frontière d'une instance vise un nom absent du fichier racine : `output-target-missing` accusait des
+références parfaitement correctes.
+
+`read_vmf` et `read_vmf_lint` prennent `collapseInstances` (défaut `false` — déplier change tous les
+comptages et tous les `targetname`, ça se demande). L'expansion délègue à `srctools.instancing`,
+qui modélise le comportement de vbsp : les trois styles de fixup, la substitution des `$variables`
+et les noms automatiques des instances anonymes sont exactement ce qu'on réimplémente de travers.
+
+Deux échecs sont nommés plutôt que subis : un fichier d'instance introuvable dit **lequel** (le
+chemin vient de l'intérieur de la carte, pas de l'appelant), et une instance qui s'inclut elle-même
+est refusée à 16 niveaux — sinon le symptôme est un sidecar qui expire, ce qui accuse le sidecar.
 
 ### Porte B — GMod honore-t-il `maps/<map>_l_0.lmp` ? : **NON TESTÉE**
 
@@ -222,12 +341,12 @@ qui écrivent ou exécutent sont **gardés** — ils exigent `confirm: true`, ou
 | `read_sightlines` | `map` | | Les plus longues lignes de vue dégagées, tracées contre l'arbre du monde |
 | `read_brush_volumes` | `map` | | Emprise au sol et volume de chaque entité-brush, par classe |
 | `read_fgd_class` | `map` | | Le schéma d'une classe selon la FGD du jeu : keyvalues, entrées, sorties |
-| `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement |
-| `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler |
-| `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape |
+| `read_vmf` | `map` | | Entités, sorties et comptages d'un `.vmf`, sans jugement. `collapseInstances` déplie les `func_instance` |
+| `read_vmf_lint` | `map` | | Ce qui clochera à la compilation ou en jeu, avant de compiler. `collapseInstances` idem |
+| `run_compile` | `local` | ● | vbsp, vvis et vrad sous Wine, rendus en findings par étape. `toolchain: "plusplus"` pour la chaîne Hammer++ |
 | `read_compile_log` | `map` | | Traduit la sortie d'un compilateur en findings expliqués |
 | `read_leak` | `map` | | Transforme « leaked! » en un lieu et une entité nommée |
-| `run_pack` | `local` | ● | Empaquette des fichiers dans un `.bsp` via bspzip, et vérifie |
+| `run_pack` | `local` | ● | Empaquette des fichiers dans un `.bsp` via bspzip, et vérifie. `toolchain` idem |
 | `read_nav` | `map` | | Dit si un nav mesh correspond encore à sa carte |
 
 Le realm `map` désigne le travail fichier hors ligne ; `local` un binaire de l'hôte. Ce ne sont
@@ -558,6 +677,7 @@ en dépendent se sautent proprement quand ils sont absents ; les deux ont bien t
 | Champ | Défaut |
 |---|---|
 | `gmodBin` | `~/.steam/steam/steamapps/common/GarrysMod/bin` |
+| `gmodBinPlusPlus` | `<gmodBin>/win64` |
 | `gmodGameDir` | `~/.steam/steam/steamapps/common/GarrysMod/garrysmod` |
 | `backend` | `wine` |
 | `winePrefix` | `~/.wine` |
