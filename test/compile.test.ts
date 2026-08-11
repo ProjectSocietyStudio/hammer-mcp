@@ -3,9 +3,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { readGeometry } from "../src/bsp/geometry.js";
 import { locateLeak, readPointfile } from "../src/compile/leak.js";
 import { parseCompileLog } from "../src/compile/log.js";
-import { ToolchainError, toWindowsPath } from "../src/compile/wine.js";
+import {
+  compilerExe,
+  runCompiler,
+  ToolchainError,
+  toolchainDir,
+  toWindowsPath,
+} from "../src/compile/wine.js";
 import { loadConfig } from "../src/config.js";
 import type { MapEntity } from "../src/entity/model.js";
 import type { ToolContext } from "../src/mcp/registry.js";
@@ -117,6 +124,51 @@ describe("pointfile correlation", () => {
   });
 });
 
+describe("the Hammer++ compilers say the same things", () => {
+  // Captured from vbspplusplus/vvisplusplus/vradplusplus on 11/08/2026, gate C. The rules
+  // in log.ts were written against the stock compilers of 2013; nothing guaranteed the
+  // ++ builds phrase their failures the same way, and a parser that silently found
+  // nothing in a ++ log would look exactly like a clean compile.
+  const log = (name: string): string =>
+    readFileSync(join(FIXTURES, "logs", `plusplus-${name}.txt`), "utf8");
+
+  it.each(["vbsp", "vvis", "vrad"])("stays quiet on a clean %s run", (stage) => {
+    const r = parseCompileLog(log(stage));
+    expect(r.clean).toBe(true);
+    expect(r.leaked).toBe(false);
+    expect(r.findings).toEqual([]);
+  });
+
+  it("still recognises a leak, banner and entity line alike", () => {
+    // The half that gives the three above their meaning: silence on a clean log only
+    // counts once the same parser has been shown to speak up on a broken one.
+    const r = parseCompileLog(log("leak"));
+    expect(r.leaked).toBe(true);
+    expect(r.clean).toBe(false);
+    expect(r.byRule["leak"]).toBe(2);
+  });
+});
+
+/** One vbsp pass over `vmf`, on whichever toolchain. */
+async function compile(
+  vmf: string,
+  toolchain: "stock" | "plusplus" = "stock",
+  stages: Array<"vbsp" | "vvis" | "vrad"> = ["vbsp"],
+  cull = false,
+): Promise<{
+  ok: boolean;
+  leaked: boolean;
+  bspExists: boolean;
+  pointfile: string | null;
+  toolchain: string;
+  stages: Array<{ stage: string; stdoutTail: string }>;
+}> {
+  return (await runCompile.handler(
+    { vmf, fast: true, hdr: false, stages, toolchain, cull, timeoutMinutes: 10, confirm: true },
+    ctx,
+  )) as never;
+}
+
 describe("compiling for real, under wine", () => {
   const sealed = join(scratch, "sealed.vmf");
   const leaky = join(scratch, "leaky.vmf");
@@ -135,10 +187,7 @@ describe("compiling for real, under wine", () => {
   }
 
   it.skipIf(!canCompile)("compiles the sealed probe without error", async () => {
-    const r = (await runCompile.handler(
-      { vmf: sealed, fast: true, hdr: false, stages: ["vbsp"], timeoutMinutes: 10, confirm: true },
-      ctx,
-    )) as { ok: boolean; leaked: boolean; bspExists: boolean; pointfile: string | null };
+    const r = await compile(sealed);
     expect(r.leaked).toBe(false);
     expect(r.bspExists).toBe(true);
     expect(r.pointfile).toBeNull();
@@ -146,10 +195,7 @@ describe("compiling for real, under wine", () => {
   }, 300_000);
 
   it.skipIf(!canCompile)("detects the leak and locates its cause", async () => {
-    const compiled = (await runCompile.handler(
-      { vmf: leaky, fast: true, hdr: false, stages: ["vbsp"], timeoutMinutes: 10, confirm: true },
-      ctx,
-    )) as { ok: boolean; leaked: boolean; pointfile: string | null };
+    const compiled = await compile(leaky);
     expect(compiled.leaked).toBe(true);
     expect(compiled.ok).toBe(false);
     expect(compiled.pointfile).not.toBeNull();
@@ -160,4 +206,88 @@ describe("compiling for real, under wine", () => {
     expect(located.leakingEntity?.classname).toBe("info_player_start");
     expect(located.leakingEntity?.distanceUnits).toBeLessThan(16);
   }, 300_000);
+});
+
+describe("choosing the Hammer++ toolchain", () => {
+  const plusDir = toolchainDir(config, "plusplus");
+  const hasPlus = existsSync(join(plusDir, "vbspplusplus.exe"));
+
+  it("resolves the binaries of each chain to its own directory", () => {
+    // The correction gate C forced: the ++ compilers are not siblings of the stock ones.
+    expect(compilerExe("vbsp", "stock")).toBe("vbsp.exe");
+    expect(compilerExe("vbsp", "plusplus")).toBe("vbspplusplus.exe");
+    expect(toolchainDir(config, "stock")).toBe(config.gmodBin);
+    expect(plusDir).toBe(join(config.gmodBin, "win64"));
+  });
+
+  it.skipIf(!hasPlus)("really runs the ++ binary, not the stock one", async () => {
+    // Without this, the test below would pass unchanged if the toolchain argument were
+    // ignored entirely: a stock compile of a map that compiles looks exactly like a ++
+    // one. Only the binary's own banner tells them apart, and it is the first line, so
+    // run_compile's stdoutTail (the last 40) cannot carry it.
+    const run = await runCompiler(config, compilerExe("vbsp", "plusplus"), [], 60_000, "plusplus");
+    expect(run.stdout.split("\n")[0]).toContain("vbspplusplus.exe");
+  }, 120_000);
+
+  it.skipIf(!hasPlus)("compiles the sealed probe the same way the stock chain does", async () => {
+    const vmf = join(scratch, "sealed-plusplus.vmf");
+    copyFileSync(join(FIXTURES, "hmcp_probe.vmf"), vmf);
+    const r = await compile(vmf, "plusplus");
+    expect(r.toolchain).toBe("plusplus");
+    expect(r.leaked).toBe(false);
+    expect(r.bspExists).toBe(true);
+    expect(r.ok).toBe(true);
+  }, 300_000);
+
+  const TTT = join(
+    REPO,
+    "srcds/garrysmod/gamemodes/terrortown/mapexamples/ttt_traps.vmf",
+  );
+
+  it.skipIf(!hasPlus || !existsSync(TTT))("culls what it says it culls", async () => {
+    // The probe map is six brushes and would show nothing. ttt_traps is the only real
+    // Hammer-written source here -- and it lives under srcds/, where the repo hooks
+    // refuse writes, while the compilers write the .bsp beside their source. Hence the
+    // copy: this is the trap anyone hits the first time they compile a repo map.
+    const plain = join(scratch, "cull-off.vmf");
+    const culled = join(scratch, "cull-on.vmf");
+    copyFileSync(TTT, plain);
+    copyFileSync(TTT, culled);
+
+    expect((await compile(plain, "plusplus")).ok).toBe(true);
+    expect((await compile(culled, "plusplus", ["vbsp"], true)).ok).toBe(true);
+
+    const countOf = (bsp: string, lump: string): number =>
+      readGeometry(bsp).lumps.find((l) => l.name === lump)!.count!;
+    const off = plain.replace(/\.vmf$/, ".bsp");
+    const on = culled.replace(/\.vmf$/, ".bsp");
+
+    // Measured 11/08/2026: 400 -> 318 planes, 725 -> 632 vertices. Asserted as a real
+    // reduction rather than as those exact numbers, which would break on any compiler
+    // update without anything actually being wrong.
+    expect(countOf(on, "PLANES")).toBeLessThan(countOf(off, "PLANES"));
+    expect(countOf(on, "VERTEXES")).toBeLessThan(countOf(off, "VERTEXES"));
+    // And the point of culling: it removes what nothing referenced, so the map itself
+    // is untouched. A "reduction" that also dropped faces would be a broken map.
+    expect(countOf(on, "FACES")).toBe(countOf(off, "FACES"));
+    expect(countOf(on, "TEXINFO")).toBe(countOf(off, "TEXINFO"));
+  }, 600_000);
+
+  it("refuses cull on the stock chain instead of dropping it", async () => {
+    // vbsp accepts unknown flags in silence. Ignoring cull here would produce a compile
+    // that reports success and culled nothing, which is worse than an error.
+    await expect(compile(join(scratch, "irrelevant.vmf"), "stock", ["vbsp"], true)).rejects.toThrow(
+      /Hammer\+\+ flag/,
+    );
+  });
+
+  it("names the missing chain rather than blaming the GMod install", async () => {
+    // The negative control, and the reason the message is not the generic one: without
+    // the chain named, "vbspplusplus.exe not found" reads as a broken GMod install --
+    // and the stock compilers sitting right there are perfectly fine.
+    const absent = { ...config, gmodBinPlusPlus: join(scratch, "no-such-toolchain") };
+    await expect(
+      runCompiler(absent, compilerExe("vbsp", "plusplus"), [], 5_000, "plusplus"),
+    ).rejects.toThrow(/"plusplus" toolchain is not installed/);
+  });
 });
