@@ -161,6 +161,14 @@ def _model_info(req: dict[str, Any]) -> dict[str, Any]:
     return model_info(req)
 
 
+@verb("vmf_displacements")
+def _vmf_displacements(req: dict[str, Any]) -> dict[str, Any]:
+    """Displacements as srctools reads them -- the oracle for our own reader."""
+    from displacements import vmf_displacements
+
+    return vmf_displacements(req)
+
+
 @verb("fgd_class")
 def _fgd_class(req: dict[str, Any]) -> dict[str, Any]:
     """Describes one class as the game's own FGD declares it, or lists the classes."""
