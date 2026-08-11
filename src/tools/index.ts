@@ -5,6 +5,7 @@ import { clipTools } from "./clip.js";
 import { compileTools } from "./compile.js";
 import { contentTools } from "./content.js";
 import { depsTools } from "./deps.js";
+import { displacementTools } from "./displacement.js";
 import { gmaTools } from "./gma.js";
 import { faceTools } from "./face.js";
 import { gameTools } from "./games.js";
@@ -36,6 +37,7 @@ export const allTools: AnyToolDef[] = [
   ...vmfTools,
   ...contentTools,
   ...solidTools,
+  ...displacementTools,
   ...buildTools,
   ...modifyTools,
   ...clipTools,

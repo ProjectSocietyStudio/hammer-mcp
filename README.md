@@ -381,6 +381,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Moving and deleting brushes | **proven** — a room turned 45 degrees compiles sealed, and leaks when one of its walls is deleted |
 | Reading the game's content | **proven** — searches and model bounds checked against Garry's Mod's own install |
 | Vertex editing | **proven** — a slab tilted into a wedge stays a valid brush; every move that would break a face is refused |
+| Reading displacements | **proven** — srctools reads the same power, grid, start and extremes from the same file |
 | Hollowing | **proven** — the walls sum exactly to the outer volume less the room, and the hollowed probe still seals |
 | Clipping | **proven** — a room whose every wall was cut diagonally compiles sealed; the two halves sum to the original volume |
 | Texture alignment | **proven** — aligning to world reproduces, on all 36 faces, the six axis pairs `gen_probe.py` states by hand |
@@ -446,6 +447,7 @@ from and whether a file was read; `health` reports it. See
 | `read_game_content` | `map` | | Hammer's texture and model browsers: what the game actually has, by name |
 | `read_model_info` | `map` | | A prop's hull, skins, sequences and materials, before you place it |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
+| `read_displacements` | `map` | | The terrain grids of a `.vmf`, their vertices in world space, and their seams |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
