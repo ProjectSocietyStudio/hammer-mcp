@@ -1,151 +1,154 @@
-# Performance client et serveur
+# Client and server performance
 
-Ce qui coûte des images par seconde, et ce qui coûte des millisecondes de tick serveur, sont deux
-sujets distincts — l'un se mesure en jeu sur un client, l'autre sur les 60+ joueurs connectés.
-La **visibilité** (VIS, areaportals, hints, occluders) prime sur tout le reste : c'est ce qui décide
-si une chose est dessinée du tout, avant même de demander combien elle coûte. Détail :
-[visibilite.md](visibilite.md) — n'en refais pas le contenu ici.
+What costs frames per second and what costs milliseconds of server tick are two separate subjects —
+one is measured in game on a client, the other across the 60-plus connected players. **Visibility**
+(VIS, areaportals, hints, occluders) outranks everything else here: it decides whether a thing is
+drawn at all, before you get to ask what it costs. Detail: [visibility.md](visibility.md) — not
+restated here.
 
-## La règle qui résume tout, côté client
+## The rule that sums up the client side
 
-**Le nombre de triangles à l'écran n'est presque jamais le facteur limitant.** Le goulot typique
-est le nombre de **draw calls** (un par changement de matériau ou par prop non batché), le
-**fillrate** (overdraw, transparence) et, côté serveur, le nombre d'entités simulées. [consensus]
+**Triangle count on screen is almost never the limiting factor.** The usual bottleneck is the number
+of **draw calls** (one per material change, or per unbatched prop), the **fillrate** (overdraw,
+transparency) and, server-side, the number of simulated entities. `[consensus]`
 
-⚠️ **« Source n'a pas de `r_speeds` » est [contesté].** La cvar existe bien dans le moteur — c'est
-un héritage GoldSrc — mais elle est devenue peu informative sur Source, où `+showbudget` et
-`mat_wireframe` la remplacent en pratique. Dire « Source n'a pas de r_speeds » revient donc à
-recopier une inexactitude répétée par la doc communautaire ; la formulation correcte est
-« obsolète, pas absente ».
+⚠️ **"Source has no `r_speeds`" is `[disputed]`.** The cvar does exist in the engine — a GoldSrc
+inheritance — but it became uninformative on Source, where `+showbudget` and `mat_wireframe` replace
+it in practice. Saying "Source has no r_speeds" copies an inaccuracy the community docs repeat; the
+correct phrasing is "obsolete, not absent".
 
-**Aucun budget de triangles officiel Valve n'a été retrouvé pour une scène complète.** Les seuls
-chiffres Valve identifiés (3000 à 7500 tris) portent sur des **modèles individuels** de HL2, datés
-2004 — pas une scène. Les seuils « restez sous 10 000/20 000 tris visibles » qui circulent sur les
-forums de mapping sont du folklore sans source primaire. [contesté] Ne pas citer de chiffre : le
-budget se **mesure** sur cette carte, avec `+showbudget` (catégorie rendu monde, en ms/frame) et
-`mat_wireframe 2` pour voir ce qui est réellement dessiné depuis les points de vue joueur réels.
+**No official Valve triangle budget for a whole scene was ever found.** The only Valve figures
+identified (3000 to 7500 tris) are for **individual models** in HL2, dated 2004 — not a scene. The
+"stay under 10,000/20,000 visible tris" thresholds circulating on mapping forums are folklore with
+no primary source. `[disputed]` Do not quote a figure: the budget is **measured** on this map, with
+`+showbudget` (the world-render category, in ms/frame) and `mat_wireframe 2` to see what is actually
+drawn from the real player vantage points.
 
 ## `prop_static` / `prop_dynamic` / `prop_physics`
 
 | | `prop_static` | `prop_dynamic` | `prop_physics` |
 |---|---|---|---|
-| Edict | non — pas d'entité réseau après compile [moteur] | oui | oui |
-| Batching | oui, prop combine possible à la compile | non | non |
-| Coût par tick | quasi nul | faible, entité réelle même immobile | simulation VPhysics à chaque tick |
-| Éclairage | bakeable en lightmap ou per-vertex, coût VRAD | dynamique | dynamique |
-| Quand | tout objet qui ne bouge, ne s'anime et n'a ni I/O ni parent — la grande majorité du décor | animation, parentage, changement de skin/modèle à l'exécution | ramassable, poussable, destructible |
+| Edict | no — no network entity after the compile `[engine]` | yes | yes |
+| Batching | yes, prop combine possible at compile time | no | no |
+| Cost per tick | close to nil | low, but a real entity even standing still | VPhysics simulation every tick |
+| Lighting | bakeable to lightmap or per-vertex, a VRAD cost | dynamic | dynamic |
+| When | anything that does not move, does not animate and has neither I/O nor a parent — the vast majority of the set | animation, parenting, changing skin or model at runtime | pick-up-able, pushable, breakable |
 
-⚠️ **« `prop_static` est gratuit » est approximatif.** Pas d'edict ne veut pas dire pas de coût :
-lightmaps par LOD, VRAM, temps VRAD avec `-StaticPropLighting`. C'est la classe la moins chère du
-moteur, pas une classe sans coût. [moteur]
+⚠️ **"`prop_static` is free" is an approximation.** No edict does not mean no cost: lightmaps per
+LOD, VRAM, VRAD time with `-StaticPropLighting`. It is the cheapest class in the engine, not a class
+without cost. `[engine]`
 
-`func_lod` fait la même chose qu'un `prop_static` en fade mais **reste un edict** — n'y recourir
-que si le modèle ne peut vraiment pas devenir un prop. [moteur, VDC `Func_lod`]
+`func_lod` does what a fading `prop_static` does but **remains an edict** — reach for it only when
+the model genuinely cannot become a prop. `[engine, VDC Func_lod]`
 
-Mesurer : `read_prop_survey` (hammer-mcp) liste les `prop_dynamic` sans nom, parent, animation ni
-sortie — candidats à la conversion, jamais un verdict, puisque convertir exige de recompiler et
-qu'un modèle sans support statique ne se convertit pas. Sur `rp_nycity_day` : 59 `prop_dynamic`,
-17 candidats identifiés, 42 justifiés (parentés, nommés ou animés).
+Measuring: `read_prop_survey` (hammer-mcp) lists the `prop_dynamic` with no name, parent, animation
+or output — conversion candidates, never a verdict, since converting takes a recompile and a model
+without static support cannot be converted at all. On `rp_nycity_day`: 59 `prop_dynamic`, 17
+candidates identified, 42 justified (parented, named or animated) `[measured]`.
 
-## Brush contre modèle
+⚠️ **That survey does not see `prop_static` at all.** It walks lump 0, and a `prop_static` is not an
+entity there: `vbsp` moves it into `GAME_LUMP` (35) at compile time. So a class breakdown that shows
+zero `prop_static` on a map visibly full of them is the reader's gap, not an empty map — reading
+`GAME_LUMP` is an open tooling gap in this repository. The independent oracle for
+`rp_nycity_day` is **861** `prop_static` `[measured]`.
 
-| | Brush (world ou `func_detail`) | Modèle (`prop_static`) |
+## Brush versus model
+
+| | Brush (world or `func_detail`) | Model (`prop_static`) |
 |---|---|---|
-| VIS | profite nativement du culling par visleaf | aucun impact sur le découpage (sauf s'il est structurel via `func_brush`, qui n'en a pas) |
-| Lightmapping | natif, cohérent avec le reste du monde | lightmap par LOD, coût VRAM propre |
-| Coût de compile | subdivise les visleaves si posé en world brush non-detail | aucun coût VIS, profite du LOD modèle |
-| Bon usage | grande surface plane, structure porteuse | détail architectural complexe, non bloquant pour le gameplay |
+| VIS | natively benefits from visleaf culling | no impact on the subdivision (unless structural through `func_brush`, which has none) |
+| Lightmapping | native, consistent with the rest of the world | lightmap per LOD, its own VRAM cost |
+| Compile cost | subdivides visleaves when placed as a non-detail world brush | no VIS cost, benefits from model LODs |
+| Good use | large flat surface, load-bearing structure | complex architectural detail, not blocking for gameplay |
 
-**Un radiateur ou une balustrade en world brush peut fragmenter le VIS d'une zone entière** et
-faire chuter le framerate d'endroits sans rapport avec l'objet — le réflexe est de le passer en
-`func_detail` ou en modèle, pas de le garder en world brush par habitude. Le partage
-structurel/détail et son diagnostic (`mat_leafvis`, `read_map_geometry`) sont dans
-[visibilite.md](visibilite.md) et [brushwork.md](brushwork.md).
+**A radiator or a railing left as a world brush can fragment the VIS of an entire area** and drop the
+framerate in places unrelated to the object — the reflex is to make it a `func_detail` or a model,
+not to keep it as a world brush out of habit. The structural/detail split and its diagnosis
+(`mat_leafvis`, `read_map_geometry`) are in [visibility.md](visibility.md) and
+[brushwork.md](brushwork.md).
 
-Ne pas remplacer systématiquement du brushwork simple par des modèles en pensant gagner : un
-modèle échappe au VIS mais ajoute un draw call par renderable ; pour une grande surface plane, le
-brush reste souvent moins cher.
+Do not systematically replace simple brushwork with models expecting a win: a model escapes VIS but
+adds a draw call per renderable; for a large flat surface the brush is often still cheaper.
 
-## Fade distance et LOD
+## Fade distance and LOD
 
-`fademindist`/`fademaxdist` réduit le nombre de renderables traités par frame, sans recompilation.
-Le fade « pop » plutôt qu'il ne fond en douceur sur du matériel bas de gamme, et un petit objet
-disparaît plus près qu'un gros à distance de fade égale. [moteur]
+`fademindist`/`fademaxdist` cuts the number of renderables handled per frame, with no recompile. The
+fade "pops" rather than blending smoothly on low-end hardware, and a small object disappears closer
+than a large one at the same fade distance. `[engine]`
 
-Le LOD d'un modèle (`$lod` du QC) ne se déclenche pas sur la distance brute à la caméra, mais sur
-`(100 / pixels-écran-par-unité)` — dépend donc de la résolution, du FOV et de la taille à l'écran,
-pas seulement des unités Hammer. Jusqu'à 8 niveaux par modèle. [moteur, VDC `$lod`]
+A model's LOD (`$lod` in the QC) is not triggered by raw distance to the camera but by
+`(100 / screen-pixels-per-unit)` — so it depends on resolution, FOV and on-screen size, not on Hammer
+units alone. Up to 8 levels per model. `[engine, VDC $lod]`
 
-Mesurer : comparer le framerate avec `fademaxdist` activé/désactivé, ou `r_drawothermodels 0/2`
-pour isoler le poids des props dans la frame courante (`gmod-mcp` → `run_console_command`).
+Measuring: compare the framerate with `fademaxdist` on and off, or `r_drawothermodels 0/2` to isolate
+what props weigh in the current frame (`gmod-mcp` → `run_console_command`).
 
-## Fillrate et overdraw
+## Fillrate and overdraw
 
-L'overdraw scale avec la **surface en pixels** des couches superposées, pas avec le nombre de
-triangles — un feuillage low-poly avec plusieurs calques alpha peut coûter plus cher qu'un décor
-massif opaque. [consensus] Transparence, réfraction (eau expensive), reflets spéculaires et HDR
-sont les sources classiques de double rendu.
+Overdraw scales with the **pixel area** of the stacked layers, not with triangle count — low-poly
+foliage with several alpha layers can cost more than a massive opaque set piece. `[consensus]`
+Transparency, refraction (expensive water), specular reflections and HDR are the classic sources of
+double rendering.
 
-Eau : `WaterCheap` n'a ni réflexion ni réfraction temps réel (une réflexion appauvrie via `$envmap`
-reste possible) ; `Water` expensive fait les deux. Le joueur peut forcer le fallback cheap depuis
-les options vidéo — **toujours poser des `env_cubemap`** même en ne comptant que sur l'expensive,
-car le fallback s'appuie dessus. [moteur]
+Water: `WaterCheap` has neither real-time reflection nor refraction (a degraded reflection through
+`$envmap` remains possible); expensive `Water` does both. The player can force the cheap fallback
+from the video options — **always place `env_cubemap`** even when counting on expensive water, because
+the fallback leans on them. `[engine]`
 
-Mesurer : `mat_fillrate 1` (aussi `mat_measurefillrate` selon la version) colore les pixels par
-nombre de fois redessinés, à combiner avec `+showbudget` pour chiffrer en ms (`gmod-mcp` →
+Measuring: `mat_fillrate 1` (also `mat_measurefillrate` depending on the version) colours pixels by
+how many times they were redrawn; combine it with `+showbudget` to put a number in ms (`gmod-mcp` →
 `run_console_command`).
 
-## Ombres et matériaux coûteux
+## Shadows and expensive materials
 
-Les ombres de `prop_static` sur lightmap coûtent en temps VRAD, pas en temps de rendu — le budget
-à surveiller est celui de la compile (`-StaticPropLighting`), pas celui du client. Les lightmaps
-par prop peuvent avoir une résolution supérieure aux lightmaps de brush/displacement, avec un coût
-VRAM par LOD. [moteur]
+`prop_static` shadows on the lightmap cost VRAD time, not render time — the budget to watch is the
+compile's (`-StaticPropLighting`), not the client's. Per-prop lightmaps can be higher-resolution than
+brush and displacement lightmaps, with a VRAM cost per LOD. `[engine]`
 
-Un matériau normal-mappé désactive le per-vertex lighting des `prop_static` selon la branche du
-moteur ; sur les branches qui le permettent, **un seul prop normal-mappé fait traiter tous les
-autres props comme normal-mappés**, ce qui allonge VRAD pour toute la carte. [moteur]
+A normal-mapped material disables per-vertex lighting on `prop_static` on some engine branches; on
+the branches that allow it, **one normal-mapped prop makes every other prop be treated as
+normal-mapped**, which lengthens VRAD for the whole map. `[engine]`
 
-## La charge serveur — un sujet distinct
+## Server load — a separate subject
 
-Ce qui compte à 60 joueurs connectés n'est pas ce qui compte sur un client seul :
+What matters at 60 connected players is not what matters on a lone client:
 
-- **La boucle serveur (réseau, physique, Lua) est mono-thread.** Plus de cœurs n'aide quasiment
-  pas le tick — seule la fréquence single-thread compte. [consensus]
-- **`prop_physics` en nombre** : chaque instance ajoute un coût physique par tick (collision,
-  intégration) en plus du coût edict/réseau. Une accumulation en sandbox se corrige par une limite
-  de gameplay, pas en montant le tickrate — le tickrate ne corrige pas une simulation O(n) qui
-  explose. [consensus]
-- **La limite d'edicts réseau du moteur Source 1 est 2048** (`MAX_EDICTS`, `src/public/const.h`
-  l.65-67) [moteur]. La valeur runtime effective sur la branche GMod du serveur n'est pas
-  vérifiable dans ce dépôt (moteur fermé) — à mesurer via `gmod-mcp`, pas à citer de mémoire.
-- **Monter le tickrate sans réduire la charge simulée sature le CPU** plutôt que d'améliorer la
-  fluidité perçue. Le symptôme n'est pas réseau : `net_graph 4` montre la ligne `sv` clignoter en
-  rouge quand le serveur consomme tout son budget de tick.
+- **The server loop (networking, physics, Lua) is single-threaded.** More cores barely help the tick
+  — only single-thread frequency counts. `[consensus]`
+- **`prop_physics` in bulk**: each instance adds a physics cost per tick (collision, integration) on
+  top of the edict and network cost. An accumulation in sandbox is fixed by a gameplay limit, not by
+  raising the tickrate — the tickrate does not fix an O(n) simulation that is blowing up.
+  `[consensus]`
+- **The Source 1 network edict limit is 2048** (`MAX_EDICTS`, `src/public/const.h` l.65-67)
+  `[engine]`. The effective runtime value on the server's GMod branch is not verifiable in this
+  repository (closed engine) — measure it through `gmod-mcp`, do not quote it from memory.
+- **Raising the tickrate without cutting the simulated load saturates the CPU** rather than
+  improving perceived smoothness. The symptom is not a network one: `net_graph 4` shows the `sv` line
+  flashing red when the server is spending its whole tick budget.
 
-Mesurer côté serveur : `net_graph 4` (ligne `sv`), `vprof_generate_report` (rapport `.txt` par
-sous-système, utile en post-mortem hors session live), et le comptage d'entités de la carte
-(`read_bsp_entities`, hammer-mcp) à confronter à la limite d'edicts. Le détail par hook Lua — le
-vrai coût CPU d'un `Think` ou d'un `PlayerTick` — n'est pas un sujet de cette page : voir
-`.claude/skills/glua/references/perf.md`, qui documente `r_harness_hookcost` et `vprof` (HolyLib)
-pour ça, et met en garde contre `fprofiler` qui ne fait pas ce qu'on lui prête.
+Measuring server-side: `net_graph 4` (the `sv` line), `vprof_generate_report` (a `.txt` per
+subsystem, useful post-mortem outside a live session), and the map's entity count
+(`read_bsp_entities`, hammer-mcp) set against the edict limit. Per-Lua-hook detail — the real CPU
+cost of a `Think` or a `PlayerTick` — is not this page's subject: see
+`.claude/skills/glua/references/perf.md`, which documents `r_harness_hookcost` and `vprof`
+(HolyLib) for that, and warns about `fprofiler` not doing what it is credited with.
 
-## Mesurer, en un tableau
+## Measuring, in one table
 
-| Question | Outil |
+| Question | Tool |
 |---|---|
-| Budget de frame par sous-système moteur | `+showbudget` (`gmod-mcp` → `run_console_command`) — forcer `mat_queue_mode 0` pendant la mesure, sinon le multithreading fausse la répartition |
-| Ce qui est réellement dessiné (pas juste dans le PVS) | `mat_wireframe 2` |
-| L'overdraw / le fillrate | `mat_fillrate 1` |
-| Le poids des props dans la frame | `r_drawothermodels 0` ou `2`, comparé |
-| Charge réseau/CPU serveur en direct | `net_graph 4`, ligne `sv` |
-| Profil par sous-système serveur, hors session live | `vprof_generate_report` (écrit un `.txt` dans le gamedir) |
-| Candidats `prop_dynamic` → `prop_static` | `read_prop_survey` (hammer-mcp, hors ligne) |
-| Ratio structurel/détail, comptages bruts | `read_map_geometry` (hammer-mcp, hors ligne) |
-| Comptage d'entités contre la limite d'edicts | `read_bsp_entities` (hammer-mcp, hors ligne) |
-| Coût par hook Lua (`Think`, `PlayerTick`…) | hors sujet ici — `glua/references/perf.md` |
-| Où couper : quel modèle passer en `prop_static`, quel niveau de fade choisir | jugement humain, non outillé |
+| Frame budget per engine subsystem | `+showbudget` (`gmod-mcp` → `run_console_command`) — force `mat_queue_mode 0` while measuring, or multithreading skews the breakdown |
+| What is actually drawn (not merely in the PVS) | `mat_wireframe 2` |
+| Overdraw / fillrate | `mat_fillrate 1` |
+| What props weigh in the frame | `r_drawothermodels 0` versus `2` |
+| Live server network/CPU load | `net_graph 4`, the `sv` line |
+| Per-subsystem server profile, outside a live session | `vprof_generate_report` (writes a `.txt` into the gamedir) |
+| `prop_dynamic` → `prop_static` candidates | `read_prop_survey` (hammer-mcp, offline) |
+| Structural/detail ratio, raw counts | `read_map_geometry` (hammer-mcp, offline) |
+| Entity count against the edict limit | `read_bsp_entities` (hammer-mcp, offline) |
+| Cost per Lua hook (`Think`, `PlayerTick`…) | out of scope here — `glua/references/perf.md` |
+| Where to cut: which model to make a `prop_static`, which fade level to pick | human judgement, not tooled |
 
-Aucun outil `read_vprof` n'existe dans ce dépôt : `vprof` se pilote par console
-(`run_console_command`) et se lit via `vprof_generate_report`, pas via un lecteur `hammer-mcp` ou
-`gmod-mcp` dédié — un tel outil est envisagé, pas construit.
+No `read_vprof` tool exists in this repository: `vprof` is driven from the console
+(`run_console_command`) and read through `vprof_generate_report`, not through a dedicated
+`hammer-mcp` or `gmod-mcp` reader — such a tool is contemplated, not built.
