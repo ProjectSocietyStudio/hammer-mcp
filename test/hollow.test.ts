@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { runCompile } from "../src/tools/compile.js";
 import { hollowSolidsTool } from "../src/tools/hollow.js";
+import { setSolidClassTool } from "../src/tools/optimise.js";
 import { VmfBuildError } from "../src/vmf/build.js";
 import { hollowSolid } from "../src/vmf/hollow.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
@@ -18,6 +19,7 @@ const solid = (id: number): SolidCheck => read(probe()).find((s) => s.id === id)
 
 /** The probe's floor: 576 x 576 x 32. */
 const FLOOR = 7;
+const WALL = 21;
 
 describe("hollowSolid: the conservation law", () => {
   it("makes walls that sum to the outer volume less the room inside", () => {
@@ -128,6 +130,91 @@ describe("hollow_solids", () => {
 
     const kept = run({ solidIds: [FLOOR], keepSource: true });
     expect(kept.reply.solidsAfter).toBe(12);
+  });
+
+  it("puts the walls in the entity the brush belonged to, not in the world", () => {
+    // Hollowing a func_detail used to put every wall in worldspawn and then delete the
+    // entity's only brush: what the map does at runtime changes, and the entity can be
+    // left with no solids at all. The empty conditional that caused it was written here.
+    const file = join(scratch, `ent${Math.round(performance.now() * 1000)}.vmf`);
+    writeFileSync(file, probe());
+    setSolidClassTool.handler(
+      { path: file, solidIds: [FLOOR], to: "func_detail", backup: false, confirm: true } as never,
+      ctx,
+    );
+    const before = checkVmfSolids("x", readFileSync(file, "utf8")).solids;
+    expect(before.find((s) => s.id === FLOOR)!.owner).toBe("func_detail");
+
+    hollowSolidsTool.handler(
+      {
+        path: file,
+        solidIds: [FLOOR],
+        thickness: 8,
+        direction: "in",
+        backup: false,
+        confirm: true,
+      } as never,
+      ctx,
+    );
+
+    const after = checkVmfSolids("x", readFileSync(file, "utf8")).solids;
+    expect(after.filter((s) => s.owner === "func_detail")).toHaveLength(6);
+    expect(after.filter((s) => s.owner === "world")).toHaveLength(5);
+  });
+
+  it("refuses a brush carrying a displacement rather than destroying it", () => {
+    // transform_solids and clip_solids both refuse. This path deletes the source
+    // afterwards, so it was the one that could lose the displacement outright.
+    const file = join(scratch, `disp${Math.round(performance.now() * 1000)}.vmf`);
+    writeFileSync(
+      file,
+      probe().replace(
+        '\t\t\t"smoothing_groups" "0"',
+        '\t\t\t"smoothing_groups" "0"\n\t\t\tdispinfo\n\t\t\t{\n\t\t\t\t"power" "3"\n\t\t\t}',
+      ),
+    );
+    expect(() =>
+      hollowSolidsTool.handler(
+        {
+          path: file,
+          solidIds: [FLOOR],
+          thickness: 8,
+          direction: "in",
+          backup: false,
+          confirm: true,
+        } as never,
+        ctx,
+      ),
+    ).toThrow(/displacement/);
+  });
+
+  it("hollows a map that already holds an invalid brush somewhere else", () => {
+    // Checking every solid made the tool refuse on exactly the map someone is trying to
+    // repair. Only the walls this call created are its business.
+    const file = join(scratch, `bad${Math.round(performance.now() * 1000)}.vmf`);
+    // Three collinear points state no plane at all, which read_vmf_solids reports as an
+    // error on that solid and on no other.
+    const broken = probe().replace(
+      /"plane" "[^"]+"/,
+      '"plane" "(0 0 0) (16 0 0) (32 0 0)"',
+    );
+    expect(broken).not.toBe(probe());
+    writeFileSync(file, broken);
+    expect(checkVmfSolids("x", broken).solids.some((s) => !s.valid)).toBe(true);
+
+    const reply = hollowSolidsTool.handler(
+      {
+        path: file,
+        solidIds: [WALL],
+        thickness: 8,
+        direction: "in",
+        backup: false,
+        confirm: true,
+      } as never,
+      ctx,
+    ) as unknown as Reply;
+    expect(reply.matched).toBe(1);
+    expect(reply.hollowed[0]!.walls).toBe(6);
   });
 
   it("refuses a selector that names nothing", () => {
