@@ -23,13 +23,12 @@
  * The projection is reported before the write for exactly that reason: the expensive part
  * of this edit is the part that does not look like an edit.
  */
-import { children, get, parse } from "../kv/parse.js";
-import type { KvBlock, KvNode } from "../kv/parse.js";
-import { eachSide, matchesFace } from "./select.js";
+import type { KvNode } from "../kv/parse.js";
+import { resolveFaces, setSidePair } from "./face.js";
 import type { FaceSelector } from "./select.js";
 import { applySplices } from "./splice.js";
 import type { Splice } from "./splice.js";
-import { checkSolid, parsePlanePoints, parseTextureAxis, planeFromPoints } from "./solid.js";
+
 import type { SolidSide, Vec3 } from "./solid.js";
 
 export class VmfLightmapError extends Error {
@@ -117,23 +116,17 @@ export function setLightmapScale(
     );
   }
 
-  const nodes: KvNode[] = parse(source);
-  const roots = nodes.filter((n): n is KvBlock => n.kind === "block");
-  const sides = eachSide(roots);
-
-  // Geometry once, so a face's own vertices are available for the luxel projection. The
-  // checker is reused rather than reimplemented: the extent of a face is the extent of the
-  // hull corners lying on it, and that is exactly what it already computes.
-  const geometry = new Map<KvBlock, ReturnType<typeof checkSolid>>();
-  const solidIdOf = new Map<KvBlock, number | null>();
-  for (const { solid, owner } of sides) {
-    if (geometry.has(solid)) continue;
-    const checked = checkSolid(solid, owner, 0);
-    geometry.set(solid, checked);
-    solidIdOf.set(solid, checked.id);
-  }
-
-  const wanted = selector.solidIds ? new Set(selector.solidIds) : null;
+  // resolveFaces does the walking, the geometry and the reconciliation between a side
+  // block and what the reader measured for it. This file had its own copy of all three,
+  // and face.ts was written from it -- so when the copy in face.ts was fixed to tell two
+  // faces apart by their normal as well as their distance, this one kept the fault. An
+  // origin-centred box has four walls at one distance, and set_lightmap_scale was giving
+  // all four of them the first wall's normal, its area and its corners: the `facing`
+  // selector picked the wrong faces and the luxel projection measured the wrong extent.
+  //
+  // One copy now. The lesson is the copy, not the fix: a second implementation of a
+  // subtlety is a place for it to survive being corrected.
+  const faces = resolveFaces(source, selector);
   const splices: Splice[] = [];
   const changed: FaceChange[] = [];
   let alreadyAtScale = 0;
@@ -141,23 +134,9 @@ export function setLightmapScale(
   let luxelsAfter = 0;
   let overCap = 0;
 
-  for (const { solid, side } of sides) {
-    const checked = geometry.get(solid)!;
-    if (wanted && !wanted.has(checked.id ?? -1)) continue;
-
-    // Match the parsed side to its block by id, falling back to plane equality for a file
-    // whose sides carry no id.
-    const sideIdRaw = get(side, "id");
-    const sideId = sideIdRaw !== undefined && /^\d+$/.test(sideIdRaw) ? Number(sideIdRaw) : null;
-    const planeText = get(side, "plane");
-    const parsed =
-      checked.sides.find((s) => s.id !== null && s.id === sideId) ??
-      checked.sides.find((s) => {
-        const pts = planeText ? parsePlanePoints(planeText) : null;
-        const p = pts ? planeFromPoints(...pts) : null;
-        return p && s.plane && Math.abs(p.dist - s.plane.dist) < 0.01;
-      });
-    if (!parsed || !matchesFace(parsed, selector)) continue;
+  for (const face of faces) {
+    const parsed = face.side;
+    const side = face.block;
 
     const current = parsed.lightmapScale ?? 16;
     const before = luxelsFor(parsed, current);
@@ -172,8 +151,8 @@ export function setLightmapScale(
     if (after.worstAxis > MAX_BRUSH_LUXELS_PER_AXIS) overCap++;
 
     changed.push({
-      solidId: checked.id ?? -1,
-      sideId,
+      solidId: face.solidId,
+      sideId: parsed.id,
       material: parsed.material,
       areaUnits: Math.round(parsed.area),
       from: current,
@@ -183,7 +162,9 @@ export function setLightmapScale(
       worstAxisAfter: after.worstAxis,
     });
 
-    const existing = side.entries.find((e) => e.kind === "pair" && e.key === "lightmapscale");
+    const existing = side.entries.find(
+      (e: KvNode) => e.kind === "pair" && e.key === "lightmapscale",
+    );
     if (existing && existing.kind === "pair") {
       splices.push({
         start: existing.start,
@@ -192,8 +173,7 @@ export function setLightmapScale(
       });
     } else {
       // No such key: insert it where Hammer puts it, just before the closing brace.
-      const at = side.bodyEnd;
-      splices.push({ start: at, end: at, text: `\t\t\t"lightmapscale" "${scale}"\n` });
+      setSidePair(source, side, "lightmapscale", String(scale), splices);
     }
   }
 
