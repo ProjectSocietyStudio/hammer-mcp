@@ -52,7 +52,13 @@ const OPTIONAL_FGDS = ["win64/toolsplusplus.fgd"];
  * `gameinfo.txt` (`GameData`). That is what makes this work for a game nobody on this
  * machine owns -- CS:S declares `cstrike.fgd` itself.
  */
-function fgdContext(
+/**
+ * Where the FGDs are and which ones exist, for a game.
+ *
+ * Exported because `validate_io` needs exactly this and computing it a second way is how
+ * two tools end up disagreeing about which game they are talking about.
+ */
+export function fgdContext(
   config: Config,
   id?: string,
 ): { game: ResolvedGame; from: "argument" | "config"; binDir: string; fgd: string[] } {

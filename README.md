@@ -382,6 +382,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Reading the game's content | **proven** — searches and model bounds checked against Garry's Mod's own install |
 | Vertex editing | **proven** — a slab tilted into a wedge stays a valid brush; every move that would break a face is refused |
 | Writing displacements | **proven** — srctools reads back the grid, the relief and the blend this wrote |
+| Entity wiring | **proven** — a wire to a name nothing has, and an input a class does not have, are both found against the real FGD |
 | Reading displacements | **proven** — srctools reads the same power, grid, start and extremes from the same file |
 | Hollowing | **proven** — the walls sum exactly to the outer volume less the room, and the hollowed probe still seals |
 | Clipping | **proven** — a room whose every wall was cut diagonally compiles sealed; the two halves sum to the original volume |
@@ -453,6 +454,8 @@ from and whether a file was read; `health` reports it. See
 | `sew_displacements` | `map` | ● | Pulls displacements back together along the edges they share |
 | `sculpt_displacement` | `map` | ● | Flatten, raise, slope or noise — with a seed, so it can be made twice |
 | `paint_displacement` | `map` | ● | The blend channel: uniform, by height, or by slope |
+| `write_portal` | `map` | ● | Areaportals and occluders — the runtime half of visibility |
+| `set_map_properties` | `map` | ● | worldspawn: the sky, the detail sprites, the fog |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
@@ -469,6 +472,8 @@ from and whether a file was read; `health` reports it. See
 | `write_hint_brush` | `map` | ● | Places a hint brush, straight or diagonal, to shape where vvis splits the map |
 | `set_solid_class` | `map` | ● | Moves brushes between the world and a brush entity — `func_detail` and back |
 | `set_lightmap_scale` | `map` | ● | Sets `lightmapscale` on selected faces, and projects the luxel bill before writing |
+| `read_entity_report` | `map` | | Hammer's Entity Report: every entity and its keyvalues, filterable |
+| `validate_io` | `map` | | Every output checked against the FGD — the wire that fires into nothing |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |

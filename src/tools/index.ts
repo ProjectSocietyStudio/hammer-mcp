@@ -24,6 +24,7 @@ import { vertexTools } from "./vertex.js";
 import { visleafTools } from "./visleaf.js";
 import { vmfTools } from "./vmf.js";
 import { vmfEditTools } from "./vmfedit.js";
+import { wiringTools } from "./wiring.js";
 
 export const allTools: AnyToolDef[] = [
   ...healthTools,
@@ -48,6 +49,7 @@ export const allTools: AnyToolDef[] = [
   ...optimiseTools,
   ...depsTools,
   ...gmaTools,
+  ...wiringTools,
   ...vmfEditTools,
   ...compileTools,
   ...lmpTools,
