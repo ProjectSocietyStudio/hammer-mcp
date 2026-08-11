@@ -50,11 +50,46 @@ flowchart LR
 | | |
 |---|---|
 | **Measure** | how full each lump is, world extents, prop inventory, packed assets, sightlines |
+| **Judge** | the same measurements against a budget profile, as a verdict per criterion — so a caller knows when it is done, not just where it stands |
 | **Read and lint** | entities, outputs and brush counts of a `.vmf`; every finding checked against the FGD the game itself declares |
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
 | **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
+
+## Knowing when you are done
+
+Every reader above answers *how much*. None of them answers *is that enough* — so anything
+driving this toolchain can measure a map forever without learning that it is finished.
+`read_map_report` closes that: it runs the readers and judges them against a **budget
+profile**.
+
+```
+> read_map_report rp_nycity_day.bsp --profile source-stock
+
+  FAIL   17 pass · 3 warn · 3 fail · 1 skipped
+
+  fail   MODELS            119%   past MAX_MAP_MODELS
+  fail   LIGHTING          264%   42.29 MiB of a 16 MiB ceiling
+  fail   edicts            174%   3555 entities against MAX_EDICTS (2048)
+  skip   luxel-density      --    nothing calibrates a threshold for this
+```
+
+Measured on 11/08/2026. The `LIGHTING` line is the one that was not already known: this map
+carries **42.29 MiB of lightmap data against `MAX_MAP_LIGHTING`'s 16 MiB**, and it holds no
+HDR at all (lumps 53, 54 and 58 are empty), so that is LDR alone. It is a second stock
+ceiling exceeded, in a lump entirely independent of the first — which corroborates the
+`MODELS` reading rather than repeating it.
+
+Two things this design refuses to do:
+
+- **It never restates a limit.** Ceilings live once, in `src/bsp/geometry.ts` and in
+  `LIMITS`, read from Valve's headers with a date. A profile carries *thresholds* — policy —
+  and every one of them states its own provenance, including "we chose it".
+- **It never invents a threshold to fill a row.** `luxel-density` is measurable and
+  uncalibrated, so it reports `skipped` and says so. A confident verdict about nothing is
+  worse than an admitted gap, and the same goes for the overall verdict: a run that judged
+  nothing comes back `skipped`, never `pass`.
 
 ## Proven, and not proven
 
@@ -125,6 +160,7 @@ from and whether a file was read; `health` reports it. See
 | `read_materials` | `map` | | Material table of a compiled map, and how many `TEXINFO` reference each one |
 | `read_lightmap_budget` | `map` | | Where a compiled map's lightmap resolution went: total luxels, distribution, costliest faces |
 | `read_visleaf_stats` | `map` | | Quality of a compiled map's visibility split: leaf/cluster counts, leaf volume distribution |
+| `read_map_report` | `map` | | Judges a map against a budget profile: a verdict per criterion, not another number |
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
