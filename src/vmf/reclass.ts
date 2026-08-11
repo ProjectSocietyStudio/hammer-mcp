@@ -24,6 +24,7 @@
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
 import { maxId } from "./edit.js";
+import { findSolids, lineRange } from "./select.js";
 import { applySplices } from "./splice.js";
 import type { Splice } from "./splice.js";
 
@@ -65,45 +66,6 @@ export interface ReclassResult {
   warnings: string[];
   /** True when the text is unchanged, byte for byte. */
   unchanged: boolean;
-}
-
-interface FoundSolid {
-  id: number;
-  block: KvBlock;
-  owner: string;
-  /** The root block it currently sits in. */
-  ownerBlock: KvBlock;
-  /** True when it sits inside a `hidden` wrapper rather than directly in its owner. */
-  hidden: boolean;
-}
-
-function findSolids(roots: readonly KvBlock[]): FoundSolid[] {
-  const out: FoundSolid[] = [];
-  const take = (host: KvBlock, ownerBlock: KvBlock, owner: string, hidden: boolean): void => {
-    for (const solid of children(host, "solid")) {
-      const raw = get(solid, "id");
-      if (raw === undefined || !/^\d+$/.test(raw)) continue;
-      out.push({ id: Number(raw), block: solid, owner, ownerBlock, hidden });
-    }
-  };
-  for (const root of roots) {
-    if (root.name === "world") {
-      take(root, root, "world", false);
-      for (const h of children(root, "hidden")) take(h, root, "world", true);
-    } else if (root.name === "entity") {
-      const cls = get(root, "classname") ?? "entity";
-      take(root, root, cls, false);
-      for (const h of children(root, "hidden")) take(h, root, cls, true);
-    }
-  }
-  return out;
-}
-
-/** The full source line range of a block, so cutting it leaves no blank indented line. */
-function lineRange(text: string, block: KvBlock): { start: number; end: number } {
-  const start = text.lastIndexOf("\n", block.start - 1) + 1;
-  const end = text[block.end] === "\n" ? block.end + 1 : block.end;
-  return { start, end };
 }
 
 /**
