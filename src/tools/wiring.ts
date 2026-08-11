@@ -5,7 +5,10 @@ import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
 import { checkWiring, entityReport, readConnections } from "../vmf/wiring.js";
 import type { ClassSchema } from "../vmf/wiring.js";
-import { GAME, GAME_BLOCK, resolveInput } from "./paths.js";
+import { writeGuarded } from "../fs/write.js";
+import { setMapProperties, writePortal } from "../vmf/portals.js";
+import { checkVmfSolids } from "../vmf/solid.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, GAME, GAME_BLOCK, resolveInput } from "./paths.js";
 import { fgdContext } from "./vmf.js";
 
 export const readEntityReportTool = defineTool({
@@ -167,4 +170,203 @@ export const validateIoTool = defineTool({
   },
 });
 
-export const wiringTools = [readEntityReportTool, validateIoTool];
+
+
+const Vec = z.tuple([z.number(), z.number(), z.number()]);
+
+export const writePortalTool = defineTool({
+  name: "write_portal",
+  description:
+    "Places an areaportal, an areaportal window or an occluder: the two brush entities " +
+    "read_map_geometry has counted since the beginning and nothing has ever placed. They " +
+    "are the runtime half of visibility. An areaportal seals a doorway and the engine " +
+    "opens and closes it as the player moves, culling everything beyond it while it is " +
+    "shut -- the strongest tool Source has and the fussiest, because vbsp refuses the whole " +
+    "map if the brush does not fill its opening exactly. An occluder hides what is behind " +
+    "it per frame on the CPU: it never fails a compile and it costs time whether or not it " +
+    "saves any. The brush is written through the same path as every other, and gets the " +
+    "tool material without which the entity is a solid wall the player walks into.",
+  realm: "map",
+  guarded: true,
+  meta: { "anthropic/requiresUserInteraction": true },
+  inputSchema: {
+    path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
+    classname: z
+      .enum(["func_areaportal", "func_areaportalwindow", "func_occluder"])
+      .describe("What to place. A window fades rather than sealing."),
+    mins: Vec,
+    maxs: Vec,
+    targetname: z.string().optional(),
+    keyvalues: z.record(z.string(), z.string()).optional(),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
+    confirm: CONFIRM,
+  },
+  outputSchema: {
+    path: z.string(),
+    written: z.boolean(),
+    backupPath: BACKUP_PATH,
+    entityId: z.number(),
+    solidId: z.number(),
+    classname: z.string(),
+    /** Thinnest side, in units. A portal is a sheet; a box this solid is usually a mistake. */
+    thickness: z.number(),
+    warnings: z.array(z.string()),
+    nextStep: z.string(),
+  },
+  handler: (args, ctx) => {
+    const path = resolveInput(args.path, ctx.config);
+    const before = readFileSync(path, "utf8");
+    const beforeReport = checkVmfSolids(path, before);
+
+    const result = writePortal(
+      before,
+      args.classname,
+      args.mins as [number, number, number],
+      args.maxs as [number, number, number],
+      {
+        ...(args.targetname !== undefined ? { targetname: args.targetname } : {}),
+        ...(args.keyvalues !== undefined ? { keyvalues: args.keyvalues } : {}),
+      },
+    );
+
+    // The oracle: the brush must read back as a brush, in the entity, and nothing else in
+    // the map may have moved.
+    const afterReport = checkVmfSolids(path, result.text);
+    const made = afterReport.solids.find((s) => s.id === result.solidId);
+    if (!made || !made.valid) {
+      throw new Error(
+        `refusing to write: the brush this made is not a valid one. ` +
+          (made?.findings ?? [])
+            .filter((f) => f.severity === "error")
+            .map((f) => f.message)
+            .join(" | "),
+      );
+    }
+    if (made.owner !== args.classname) {
+      throw new Error(
+        `refusing to write: the brush ended up in ${made.owner} rather than in the ` +
+          `${args.classname} it was written for. A brush in the world is a solid wall.`,
+      );
+    }
+    if (afterReport.solidCount !== beforeReport.solidCount + 1) {
+      throw new Error(
+        `refusing to write: the solid count went from ${beforeReport.solidCount} to ` +
+          `${afterReport.solidCount}, and one brush was added.`,
+      );
+    }
+    for (const b of beforeReport.solids) {
+      if (b.id === null) continue;
+      const a = afterReport.solids.find((s) => s.id === b.id);
+      if (!a || a.volume !== b.volume) {
+        throw new Error(`refusing to write: solid ${b.id} changed. It never should.`);
+      }
+    }
+
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+    });
+    return {
+      path,
+      written: write.written,
+      backupPath: write.backupPath,
+      entityId: result.entityId,
+      solidId: result.solidId,
+      classname: result.classname,
+      thickness: result.thickness,
+      warnings: result.warnings,
+      nextStep:
+        args.classname === "func_occluder"
+          ? "Compile and measure. An occluder that hides nothing still costs its test against " +
+            "every prop, every frame."
+          : "Compile. If the brush does not seal its opening exactly, vbsp stops with " +
+            "'areaportal brush doesn't touch two areas' and read_compile_log says which.",
+    };
+  },
+});
+
+export const setMapPropertiesTool = defineTool({
+  name: "set_map_properties",
+  description:
+    "Sets the keyvalues of worldspawn: the sky, the detail sprites, the fog. Ordinary " +
+    "keyvalues on an ordinary entity, so this is edit_vmf with a shorter name -- except " +
+    "that detailvbsp and detailmaterial come as a pair, and setting one without the other " +
+    "gives a map whose grass either has no sprites or has sprites with no material. vbsp " +
+    "mentions neither, so this says so.",
+  realm: "map",
+  guarded: true,
+  meta: { "anthropic/requiresUserInteraction": true },
+  inputSchema: {
+    path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
+    skyname: z.string().optional(),
+    detailvbsp: z.string().optional().describe("Which sprites go on which material."),
+    detailmaterial: z.string().optional().describe("The sprite sheet itself."),
+    maxpropscreenwidth: z.string().optional(),
+    fogenable: z.string().optional(),
+    fogstart: z.string().optional(),
+    fogend: z.string().optional(),
+    fogcolor: z.string().optional(),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
+    confirm: CONFIRM,
+  },
+  outputSchema: {
+    path: z.string(),
+    written: z.boolean(),
+    backupPath: BACKUP_PATH,
+    unchanged: z.boolean(),
+    changed: z.record(
+      z.string(),
+      z.object({ from: z.string().nullable(), to: z.string() }),
+    ),
+    warnings: z.array(z.string()),
+    nextStep: z.string(),
+  },
+  handler: (args, ctx) => {
+    const path = resolveInput(args.path, ctx.config);
+    const before = readFileSync(path, "utf8");
+    const result = setMapProperties(before, {
+      ...(args.skyname !== undefined ? { skyname: args.skyname } : {}),
+      ...(args.detailvbsp !== undefined ? { detailvbsp: args.detailvbsp } : {}),
+      ...(args.detailmaterial !== undefined ? { detailmaterial: args.detailmaterial } : {}),
+      ...(args.maxpropscreenwidth !== undefined
+        ? { maxpropscreenwidth: args.maxpropscreenwidth }
+        : {}),
+      ...(args.fogenable !== undefined ? { fogenable: args.fogenable } : {}),
+      ...(args.fogstart !== undefined ? { fogstart: args.fogstart } : {}),
+      ...(args.fogend !== undefined ? { fogend: args.fogend } : {}),
+      ...(args.fogcolor !== undefined ? { fogcolor: args.fogcolor } : {}),
+    });
+
+    const b = checkVmfSolids(path, before);
+    const a = checkVmfSolids(path, result.text);
+    if (a.solidCount !== b.solidCount) {
+      throw new Error("refusing to write: setting a map property changed the geometry");
+    }
+
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+      unchanged: result.unchanged,
+    });
+    return {
+      path,
+      written: write.written,
+      backupPath: write.backupPath,
+      unchanged: result.unchanged,
+      changed: result.changed,
+      warnings: result.warnings,
+      nextStep:
+        "A sky that is not packed is a sky the player does not have. " +
+        "read_map_dependencies after the next compile.",
+    };
+  },
+});
+
+export const wiringTools = [
+  readEntityReportTool,
+  validateIoTool,
+  writePortalTool,
+  setMapPropertiesTool,
+];

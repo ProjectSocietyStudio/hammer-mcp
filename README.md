@@ -454,6 +454,8 @@ from and whether a file was read; `health` reports it. See
 | `sew_displacements` | `map` | ● | Pulls displacements back together along the edges they share |
 | `sculpt_displacement` | `map` | ● | Flatten, raise, slope or noise — with a seed, so it can be made twice |
 | `paint_displacement` | `map` | ● | The blend channel: uniform, by height, or by slope |
+| `write_portal` | `map` | ● | Areaportals and occluders — the runtime half of visibility |
+| `set_map_properties` | `map` | ● | worldspawn: the sky, the detail sprites, the fog |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
