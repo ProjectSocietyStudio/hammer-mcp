@@ -1,10 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { insertSolids } from "../vmf/build.js";
 import type { SolidSpec } from "../vmf/build.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { CONFIRM, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -60,15 +61,14 @@ export const writeVmfSolidTool = defineTool({
       .describe("Material for every face. Default TOOLS/TOOLSNODRAW, which draws nothing."),
     lightmapScale: z.number().optional().describe("Luxels per unit on every face. Default 16."),
     textureScale: z.number().optional().describe("Texture scale on both axes. Default 0.25."),
-    dryRun: z
-      .boolean()
-      .optional()
-      .describe("Check and report without writing. The verification runs either way."),
+    dryRun: DRY_RUN,
+    backup: BACKUP,
     confirm: CONFIRM,
   },
   outputSchema: {
     path: z.string(),
     written: z.boolean(),
+    backupPath: BACKUP_PATH,
     target: z.string(),
     solidIds: z.array(z.number()),
     solidsBefore: z.number(),
@@ -129,12 +129,15 @@ export const writeVmfSolidTool = defineTool({
       s.findings.filter((f) => f.severity !== "error").map((f) => f.message),
     );
 
-    const write = args.dryRun !== true;
-    if (write) writeFileSync(path, result.text, "utf8");
+    const write = writeGuarded(path, result.text, ctx.config, {
+      dryRun: args.dryRun,
+      backup: args.backup,
+    });
 
     return {
       path,
-      written: write,
+      written: write.written,
+      backupPath: write.backupPath,
       target: result.target,
       solidIds: result.solidIds,
       solidsBefore: beforeReport.solidCount,

@@ -26,7 +26,7 @@ async function hint(
   writeFileSync(path, probe());
   const out = shape.parse(
     await writeHintBrushTool.handler(
-      { path, mins: [-256, -8, 0], maxs: [256, 8, 256], confirm: true, ...extra },
+      { path, mins: [-256, -8, 0], maxs: [256, 8, 256], backup: false, confirm: true, ...extra },
       ctx,
     ),
   );
@@ -83,7 +83,7 @@ describe("write_hint_brush", () => {
     writeFileSync(path, probe());
     const out = shape.parse(
       await writeHintBrushTool.handler(
-        { path, mins: [-256, -8, 0], maxs: [256, 8, 256], dryRun: true, confirm: true },
+        { path, mins: [-256, -8, 0], maxs: [256, 8, 256], dryRun: true, backup: false, confirm: true },
         ctx,
       ),
     );
@@ -112,7 +112,7 @@ describe("does the hint actually split anything", () => {
     writeFileSync(path, probe());
     if (extra) {
       await writeHintBrushTool.handler(
-        { path, mins: [-256, -8, 0], maxs: [256, 8, 256], confirm: true, ...extra },
+        { path, mins: [-256, -8, 0], maxs: [256, 8, 256], backup: false, confirm: true, ...extra },
         ctx,
       );
     }

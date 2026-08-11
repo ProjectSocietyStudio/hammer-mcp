@@ -378,6 +378,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Compiling, both toolchains | **proven** — a leak caused, then located, on stock and Hammer++ |
 | Python sidecar (srctools) | **proven** |
 | Game discovery | **proven for Garry's Mod only** — the readers are generic Source, but one game has been run here |
+| The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
 | `read_vprof` | **not written**: no real sample to calibrate it against |
 

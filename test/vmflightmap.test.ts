@@ -106,7 +106,7 @@ describe("set_lightmap_scale", () => {
   it("refuses to touch the whole map without being told to", async () => {
     const path = join(scratch, "guard.vmf");
     writeFileSync(path, probe());
-    expect(() => setLightmapScaleTool.handler({ path, scale: 32, confirm: true }, ctx)).toThrow(
+    expect(() => setLightmapScaleTool.handler({ path, scale: 32, backup: false, confirm: true }, ctx)).toThrow(
       /all:true/,
     );
     expect(readFileSync(path, "utf8")).toBe(probe());
@@ -116,7 +116,7 @@ describe("set_lightmap_scale", () => {
     const path = join(scratch, "all.vmf");
     writeFileSync(path, probe());
     const out = shape.parse(
-      await setLightmapScaleTool.handler({ path, scale: 32, all: true, confirm: true }, ctx),
+      await setLightmapScaleTool.handler({ path, scale: 32, all: true, backup: false, confirm: true }, ctx),
     );
     expect(out.written).toBe(true);
     expect(out.facesChanged).toBe(36);
@@ -129,7 +129,7 @@ describe("set_lightmap_scale", () => {
     writeFileSync(path, probe());
     const out = shape.parse(
       await setLightmapScaleTool.handler(
-        { path, scale: 8, all: true, dryRun: true, confirm: true },
+        { path, scale: 8, all: true, dryRun: true, backup: false, confirm: true },
         ctx,
       ),
     );
@@ -153,7 +153,7 @@ describe("what vrad does with the scale it was given", () => {
     const path = join(scratch, `${name}.vmf`);
     writeFileSync(path, probe());
     if (scale !== undefined) {
-      await setLightmapScaleTool.handler({ path, scale, all: true, confirm: true }, ctx);
+      await setLightmapScaleTool.handler({ path, scale, all: true, backup: false, confirm: true }, ctx);
     }
     const r = (await runCompile.handler(
       {

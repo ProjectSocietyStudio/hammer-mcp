@@ -130,7 +130,7 @@ describe("set_solid_class", () => {
     writeFileSync(path, probe());
     const out = shape.parse(
       await setSolidClassTool.handler(
-        { path, solidIds: [WALL], to: "func_detail", dryRun: true, confirm: true },
+        { path, solidIds: [WALL], to: "func_detail", dryRun: true, backup: false, confirm: true },
         ctx,
       ),
     );
@@ -144,7 +144,7 @@ describe("set_solid_class", () => {
     writeFileSync(path, probe());
     const out = shape.parse(
       await setSolidClassTool.handler(
-        { path, solidIds: [WALL], to: "func_detail", confirm: true },
+        { path, solidIds: [WALL], to: "func_detail", backup: false, confirm: true },
         ctx,
       ),
     );
@@ -158,13 +158,13 @@ describe("set_solid_class", () => {
     const path = join(scratch, "noop.vmf");
     writeFileSync(path, probe());
     await setSolidClassTool.handler(
-      { path, solidIds: [WALL], to: "func_detail", confirm: true },
+      { path, solidIds: [WALL], to: "func_detail", backup: false, confirm: true },
       ctx,
     );
     const once = readFileSync(path, "utf8");
     const out = shape.parse(
       await setSolidClassTool.handler(
-        { path, solidIds: [WALL], to: "func_detail", confirm: true },
+        { path, solidIds: [WALL], to: "func_detail", backup: false, confirm: true },
         ctx,
       ),
     );
@@ -215,7 +215,7 @@ describe("what func_detail actually does to the tree", () => {
     const path = join(scratch, `c_${name}.vmf`);
     writeFileSync(path, probe());
     if (move) {
-      await setSolidClassTool.handler({ path, solidIds: move.ids, to: move.to, confirm: true }, ctx);
+      await setSolidClassTool.handler({ path, solidIds: move.ids, to: move.to, backup: false, confirm: true }, ctx);
     }
     return compileAt(path);
   }
@@ -248,7 +248,7 @@ describe("what func_detail actually does to the tree", () => {
       const structural = join(scratch, "pillar_world.vmf");
       writeFileSync(structural, probe());
       const made = (await writeVmfSolidTool.handler(
-        { path: structural, solids: [pillar], material: "DEV/DEV_MEASUREGENERIC01", confirm: true },
+        { path: structural, solids: [pillar], material: "DEV/DEV_MEASUREGENERIC01", backup: false, confirm: true },
         ctx,
       )) as { solidIds: number[] };
       const pillarId = made.solidIds[0]!;
@@ -256,7 +256,7 @@ describe("what func_detail actually does to the tree", () => {
       const detailed = join(scratch, "pillar_detail.vmf");
       writeFileSync(detailed, readFileSync(structural, "utf8"));
       await setSolidClassTool.handler(
-        { path: detailed, solidIds: [pillarId], to: "func_detail", confirm: true },
+        { path: detailed, solidIds: [pillarId], to: "func_detail", backup: false, confirm: true },
         ctx,
       );
 
