@@ -54,7 +54,6 @@ describe("budget profiles", () => {
   it("carries the world bound as 16384, not the 32768 extent", () => {
     expect(LIMITS.worldBound).toBe(16384);
     expect(LIMITS.edicts).toBe(2048);
-    expect(LIMITS.lightingBytes).toBe(16777216);
   });
 });
 
@@ -86,6 +85,15 @@ describe("reportMap", () => {
     expect(r.summary.fail).toBeGreaterThan(0);
   });
 
+  it("judges the lighting ceiling exactly once, through the lump table", () => {
+    // It briefly had a criterion of its own as well, and the two agreed to three decimals
+    // on the same map -- which is what a duplicated fact looks like just before the copies
+    // start disagreeing.
+    const r = reportMap(PROBE, SOURCE_STOCK);
+    expect(find(r, "lighting-bytes")).toBeUndefined();
+    expect(r.criteria.filter((c) => c.id.includes("LIGHTING"))).toHaveLength(1);
+  });
+
   it("reports luxel density as skipped, naming the missing calibration", () => {
     const c = find(reportMap(PROBE, SOURCE_STOCK), "luxel-density");
     expect(c?.verdict).toBe("skipped");
@@ -98,12 +106,10 @@ describe("reportMap", () => {
       ...SOURCE_STOCK,
       id: "quiet",
       edicts: null,
-      lighting: null,
       requireVis: false,
     };
     const r = reportMap(PROBE, quiet);
     expect(find(r, "edicts")).toBeUndefined();
-    expect(find(r, "lighting-bytes")).toBeUndefined();
     expect(find(r, "vis-run")).toBeUndefined();
     expect(r.summary.skipped).toBeGreaterThan(0);
   });

@@ -67,7 +67,7 @@ profile**.
 ```
 > read_map_report rp_nycity_day.bsp --profile source-stock
 
-  FAIL   17 pass · 3 warn · 3 fail · 1 skipped
+  FAIL   19 pass · 3 warn · 3 fail · 1 skipped
 
   fail   MODELS            119%   past MAX_MAP_MODELS
   fail   LIGHTING          264%   42.29 MiB of a 16 MiB ceiling

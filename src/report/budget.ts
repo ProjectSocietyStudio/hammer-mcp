@@ -27,8 +27,6 @@ import { readLightmapBudget } from "../bsp/lightmap.js";
 import { readModels, worldExtents } from "../bsp/models.js";
 import { readVisleafStats } from "../bsp/visleaf.js";
 
-/** `LUMP_LIGHTING`, the LDR lightmap data vrad writes. */
-const LUMP_LIGHTING = 8;
 /** `LUMP_CUBEMAPS`, one record per `env_cubemap` vrad resolved. */
 const LUMP_CUBEMAPS = 42;
 
@@ -36,8 +34,12 @@ const LUMP_CUBEMAPS = 42;
  * The limits that are not per-lump, so have no home in `LUMP_SPECS`.
  *
  * Read from source-sdk-2013 on 11/08/2026, via the GitHub raw API rather than the wiki:
- * `src/public/const.h` for `MAX_EDICTS`, `src/public/worldsize.h` for the world bound,
- * `src/public/bspfile.h` for the lighting budget.
+ * `src/public/const.h` for `MAX_EDICTS` and `src/public/worldsize.h` for the world bound.
+ *
+ * `MAX_MAP_LIGHTING` is deliberately absent. It lives in `LUMP_SPECS` with every other
+ * per-lump ceiling, and briefly lived here too -- which produced two criteria reporting the
+ * identical 264% on the same map. Exactly the duplication the header of this file warns
+ * about, committed in this file, within a day.
  *
  * ⚠️ `bspfile.h` redefines every one of its `MAX_MAP_*` constants to `2` under a
  * conditional branch further down the file. Any automated re-read of that header must take
@@ -46,8 +48,6 @@ const LUMP_CUBEMAPS = 42;
 export const LIMITS = {
   /** `MAX_EDICTS` = 1 << MAX_EDICT_BITS = 1 << 11. Stock Source; Garry's Mod raises it. */
   edicts: 2048,
-  /** `MAX_MAP_LIGHTING` = 0x1000000 bytes = 16 MiB. */
-  lightingBytes: 0x1000000,
   /**
    * `MAX_COORD_INTEGER`. The world runs from -16384 to +16384 on each axis.
    *
@@ -98,8 +98,6 @@ export interface BudgetProfile {
    * a fact, and the criterion message says so.
    */
   edictLimit: { value: number; source: string } | null;
-  /** Fraction of `LIMITS.lightingBytes` used by lump 8. */
-  lighting: Threshold | null;
   /** Luxels per square metre of lit surface. Null when nothing calibrates it. */
   luxelDensity: Threshold | null;
   /** Visleaves per hectare of world footprint. `direction: under` -- too few is the fault. */
@@ -134,11 +132,6 @@ export const SOURCE_STOCK: BudgetProfile = {
   },
   edicts: { warnAt: 0.8, failAt: 1, source: "MAX_EDICTS from const.h; fractions are policy" },
   edictLimit: null,
-  lighting: {
-    warnAt: 0.8,
-    failAt: 1,
-    source: "MAX_MAP_LIGHTING from bspfile.h; fractions are policy",
-  },
   luxelDensity: null,
   visleafDensity: null,
   noClusterFraction: null,
@@ -173,7 +166,6 @@ export const GMOD_DARKRP: BudgetProfile = {
       "is not checkable in any open tree. Treated as a target here, never as a fact -- to " +
       "settle it, measure it on a running instance with gmod-mcp.",
   },
-  lighting: { warnAt: 0.8, failAt: 1, source: "MAX_MAP_LIGHTING from bspfile.h" },
   luxelDensity: null,
   visleafDensity: {
     warnAt: 250,
@@ -300,23 +292,6 @@ export function reportMap(path: string, profile: BudgetProfile): MapReport {
         `${entities} entities against a ceiling of ${edictLimit}` +
         (profile.edictLimit ? ` (${profile.edictLimit.source})` : ` (MAX_EDICTS, stock)`) +
         `. This is what the map costs empty; everything a gamemode spawns comes on top.`,
-    });
-  }
-
-  // --- the lightmap data vrad wrote, against its own 16 MiB ceiling ---
-  const lighting = header.lumps[LUMP_LIGHTING];
-  if (profile.lighting && lighting) {
-    const fraction = lighting.length / LIMITS.lightingBytes;
-    criteria.push({
-      id: "lighting-bytes",
-      what: "LIGHTING against MAX_MAP_LIGHTING",
-      verdict: judge(fraction, profile.lighting, "over"),
-      value: Math.round(fraction * 1000) / 1000,
-      unit: "fraction",
-      warnAt: profile.lighting.warnAt,
-      failAt: profile.lighting.failAt,
-      direction: "over",
-      message: `${(lighting.length / 1048576).toFixed(2)} MiB of 16 MiB.`,
     });
   }
 
