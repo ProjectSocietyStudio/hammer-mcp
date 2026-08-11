@@ -1,0 +1,5 @@
+# Pinned on purpose. srctools is the whole reason this sidecar exists -- it already
+# reads and writes VMF, BSP, VPK, VTF, VMT and FGD, and no maintained JS/TS or Rust
+# equivalent exists for BSP. An unpinned version would silently change how we parse
+# the production map between two runs.
+srctools==2.7.0

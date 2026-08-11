@@ -11,6 +11,10 @@ export const MAP_REVISION_OFFSET = 4 + 4 + 64 * 16; // 1032
 
 /** Lump index for the entity list -- plain KeyValues text, NUL-terminated. */
 export const LUMP_ENTITIES = 0;
+/** Brush models. Model 0 is the world, and its bounding box is the map's real extent. */
+export const LUMP_MODELS = 14;
+/** The embedded pakfile: a plain ZIP, and on `rp_nycity_day` 1004 MB of the 1.13 GB. */
+export const LUMP_PAKFILE = 40;
 
 /** Names for the lumps we actually reason about; the rest report as undefined. */
 export const LUMP_NAMES: Readonly<Record<number, string>> = {
