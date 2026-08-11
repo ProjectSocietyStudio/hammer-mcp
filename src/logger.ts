@@ -1,7 +1,9 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { AuditLog as CoreAuditLog } from "@rolists/mcp-core";
 
-/** Audit entry kinds. */
+/**
+ * Audit entry kinds. Widens the shared base with this server's own vocabulary: it drives
+ * a toolchain and writes map files, where gmod-mcp drives a live engine.
+ */
 export type AuditKind =
   | "server_start"
   | "tool_call"
@@ -11,14 +13,6 @@ export type AuditKind =
   | "compile_end"
   | "error";
 
-export interface AuditEntry {
-  ts: number;
-  kind: AuditKind;
-  commandId?: string;
-  /** Free-form payload, shaped by `kind`. */
-  data?: Record<string, unknown>;
-}
-
 /**
  * Append-only JSONL audit log, written to `<stateDir>/logs/audit.jsonl`.
  *
@@ -26,21 +20,6 @@ export interface AuditEntry {
  * sources and writes into `server-config/` -- if it dies mid-action we want the record
  * of what it had already touched.
  */
-export class AuditLog {
-  private readonly file: string;
+export class AuditLog extends CoreAuditLog<AuditKind> {}
 
-  constructor(stateDir: string) {
-    const dir = join(stateDir, "logs");
-    mkdirSync(dir, { recursive: true });
-    this.file = join(dir, "audit.jsonl");
-  }
-
-  record(entry: Omit<AuditEntry, "ts"> & { ts?: number }): void {
-    const full: AuditEntry = { ts: entry.ts ?? Date.now(), ...entry };
-    appendFileSync(this.file, JSON.stringify(full) + "\n");
-  }
-
-  get path(): string {
-    return this.file;
-  }
-}
+export type { AuditEntry } from "@rolists/mcp-core";

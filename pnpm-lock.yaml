@@ -9,8 +9,11 @@ importers:
   .:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.12.0
+        specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
+      '@rolists/mcp-core':
+        specifier: file:../mcp-core
+        version: file:../mcp-core(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(zod@3.25.76)
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -349,6 +352,13 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@rolists/mcp-core@file:../mcp-core':
+    resolution: {directory: ../mcp-core, type: directory}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': '>=1.30.0 <2'
+      zod: ^3.23.8
 
   '@rollup/rollup-android-arm-eabi@4.62.4':
     resolution: {integrity: sha512-RrPokAb7dmbxFoeO3TloqHyOjgye8RkBhSqmp4aJMIex4c9r46ZstPnleDQOq1t46VOVjwIuwNogIqbodV1Vvg==}
@@ -1241,6 +1251,11 @@ snapshots:
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
+
+  '@rolists/mcp-core@file:../mcp-core(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(zod@3.25.76)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
+      zod: 3.25.76
 
   '@rollup/rollup-android-arm-eabi@4.62.4':
     optional: true

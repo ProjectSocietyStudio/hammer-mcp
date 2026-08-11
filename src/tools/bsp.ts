@@ -45,6 +45,26 @@ export const readBspInfo = defineTool({
       .default(false)
       .describe("Include empty lumps (default: only lumps with content)."),
   },
+  outputSchema: {
+    path: z.string(),
+    ident: z.string(),
+    version: z.number(),
+    mapRevision: z
+      .number()
+      .describe("Copy this into a .lmp patch for this map, or the engine ignores it."),
+    fileSize: z.number(),
+    lumpCount: z.number(),
+    lumps: z.array(
+      z.object({
+        index: z.number(),
+        name: z.string().nullable(),
+        offset: z.number(),
+        length: z.number(),
+        megabytes: z.number(),
+        version: z.number(),
+      }),
+    ),
+  },
   handler: (args, ctx) => {
     const header = readHeader(resolveInput(args.path, ctx.config));
     const lumps = args.allLumps ? header.lumps : header.lumps.filter((l) => l.length > 0);
@@ -84,6 +104,39 @@ export const readBspEntities = defineTool({
       .default(false)
       .describe("Return only the classname histogram and counts."),
   },
+  outputSchema: {
+    path: z.string(),
+    mapRevision: z.number(),
+    lumpBytes: z.number(),
+    nulTerminated: z.boolean(),
+    total: z.number(),
+    matched: z.number(),
+    histogram: z.record(z.number()),
+    // Absent when histogramOnly is set: the caller asked for counts, not entities.
+    returned: z.number().optional(),
+    truncated: z.boolean().optional(),
+    entities: z
+      .array(
+        z.object({
+          index: z.number(),
+          classname: z.string(),
+          targetname: z.string().nullable(),
+          origin: VEC3.nullable(),
+          angles: VEC3.nullable(),
+          keyvalues: z.record(z.string()),
+        }),
+      )
+      .optional(),
+  },
+  /**
+   * The entity list is the product here, not an accident, so it is worth raising the
+   * client's inline-result ceiling for it rather than having a 200-entity page spilled
+   * to a file the agent then has to go read.
+   *
+   * Client-specific and unverified from here: an unrecognised key is ignored in silence.
+   * Pagination stays the real defence -- `limit` caps at 2000 whatever the client does.
+   */
+  meta: { "anthropic/maxResultSizeChars": 200_000 },
   handler: (args, ctx) => {
     const lump = readEntityLump(resolveInput(args.path, ctx.config));
     const all = lump.entities;
