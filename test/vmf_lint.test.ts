@@ -157,6 +157,42 @@ describe("read_vmf_lint finds faults that were put there on purpose", () => {
   }, 60_000);
 });
 
+describe("the Hammer++ compilers' own FGD", () => {
+  const hasPlusFgd = existsSync(join(config.gmodBin, "win64/toolsplusplus.fgd"));
+
+  it.skipIf(!ready)("says which schemas a verdict was reached against", async () => {
+    // Reported rather than assumed. A lint that quietly widens its schema is a lint that
+    // quietly stops catching things, and nothing in the output would show it.
+    const r = (await readVmfLint.handler({ path: PROBE_VMF, limit: 5 }, ctx)) as {
+      fgdsLoaded: string[];
+    };
+    expect(r.fgdsLoaded[0]).toBe("garrysmod.fgd");
+    expect(r.fgdsLoaded.includes("win64/toolsplusplus.fgd")).toBe(hasPlusFgd);
+  }, 60_000);
+
+  it.skipIf(!ready || !hasPlusFgd)("knows the classes only Hammer++ declares", async () => {
+    // func_detail_illusionary is not in garrysmod.fgd. Before this, a map built in
+    // Hammer++ collected one unknown-classname per use of it -- the same false positive
+    // the repo's Lua entities used to produce, from a different missing source.
+    const path = broken("hpp-class", (s) =>
+      s.replace('"classname" "info_player_start"', '"classname" "func_detail_illusionary"'),
+    );
+    const r = await lint(path);
+    expect(r.byRule["unknown-classname"]).toBeUndefined();
+  }, 60_000);
+
+  it.skipIf(!ready)("still refuses a class no FGD declares", async () => {
+    // The other half, and the one that matters: merging a second schema must not turn
+    // the rule off. Without this, "no unknown-classname" above would be satisfied by a
+    // lint that had simply stopped checking.
+    const path = broken("hpp-typo", (s) =>
+      s.replace('"classname" "info_player_start"', '"classname" "func_detail_illusory"'),
+    );
+    const r = await lint(path);
+    expect(r.byRule["unknown-classname"]).toBe(1);
+  }, 60_000);
+});
+
 describe("read_vmf_lint on a real Hammer-written map", () => {
   it.skipIf(!ready || !hasTtt)("does not accuse the Lua entities it now knows", async () => {
     // Before the repo's Lua classes were fed in, this map produced 11 unknown-classname
