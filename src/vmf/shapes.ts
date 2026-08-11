@@ -239,6 +239,16 @@ function arch(spec: ArchSpec): Expansion {
   if (spec.innerRadius >= spec.outerRadius) {
     throw new VmfBuildError("an arch's inner radius must be smaller than its outer radius");
   }
+  // These three are refused here rather than downstream. buildSolidText already catches
+  // them -- a degenerate shape has collinear points and it says so -- but "a face of this
+  // shape has three collinear points" does not tell a caller that their arch spans zero
+  // degrees. A refusal is worth as much as the input it names.
+  if (spec.arcDegrees === 0) {
+    throw new VmfBuildError("an arch of zero degrees spans nothing");
+  }
+  if (spec.height <= 0) {
+    throw new VmfBuildError(`an arch needs a positive height, not ${spec.height}`);
+  }
   const start = ((spec.startDegrees ?? 0) * Math.PI) / 180;
   const sweep = (spec.arcDegrees * Math.PI) / 180;
   const step = sweep / spec.segments;
@@ -299,6 +309,9 @@ function sphere(spec: SphereSpec): Expansion {
   if (!Number.isInteger(spec.stacks) || spec.stacks < 2 || spec.stacks > 32) {
     throw new VmfBuildError(`a sphere needs between 2 and 32 stacks, not ${spec.stacks}`);
   }
+  if (spec.radius <= 0) {
+    throw new VmfBuildError(`a sphere needs a positive radius, not ${spec.radius}`);
+  }
   const [cx, cy, cz] = spec.centre;
   const specs: SolidSpec[] = [];
 
@@ -350,6 +363,9 @@ function torus(spec: TorusSpec): Expansion {
   }
   if (!Number.isInteger(spec.minorSides) || spec.minorSides < 3 || spec.minorSides > 32) {
     throw new VmfBuildError(`a torus tube needs between 3 and 32 sides, not ${spec.minorSides}`);
+  }
+  if (spec.minorRadius <= 0) {
+    throw new VmfBuildError(`a torus needs a tube with a radius, not ${spec.minorRadius}`);
   }
   if (spec.minorRadius >= spec.majorRadius) {
     throw new VmfBuildError(

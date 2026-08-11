@@ -239,6 +239,54 @@ describe("arch", () => {
   });
 });
 
+describe("shapes that name the input they refuse", () => {
+  /**
+   * These are all caught downstream anyway -- a degenerate shape has collinear points and
+   * buildSolidText says so -- so nothing bad was ever written. What was missing is the
+   * diagnosis: "a face of this shape has three collinear points" does not tell a caller
+   * that their arch spans zero degrees. Found by auditing this file for the class of fault
+   * Codex kept finding: a refusal written in one direction only.
+   */
+  const refusals: Array<[string, CompoundSpec, RegExp]> = [
+    [
+      "an arch of no width",
+      { shape: "arch", centre: [0, 0, 0], innerRadius: 64, outerRadius: 128, height: 32, arcDegrees: 0, segments: 1 },
+      /zero degrees/,
+    ],
+    [
+      "an arch of no height",
+      { shape: "arch", centre: [0, 0, 0], innerRadius: 64, outerRadius: 128, height: 0, arcDegrees: 90, segments: 1 },
+      /positive height/,
+    ],
+    [
+      "an arch below the ground",
+      { shape: "arch", centre: [0, 0, 0], innerRadius: 64, outerRadius: 128, height: -32, arcDegrees: 90, segments: 1 },
+      /positive height/,
+    ],
+    [
+      "a torus with no tube",
+      { shape: "torus", centre: [0, 0, 0], majorRadius: 128, minorRadius: 0, majorSegments: 8, minorSides: 8 },
+      /a radius/,
+    ],
+    [
+      "a sphere of no size",
+      { shape: "sphere", centre: [0, 0, 0], radius: 0, sides: 8, stacks: 4 },
+      /positive radius/,
+    ],
+    [
+      "a sphere of negative size",
+      { shape: "sphere", centre: [0, 0, 0], radius: -64, sides: 8, stacks: 4 },
+      /positive radius/,
+    ],
+  ];
+
+  for (const [name, spec, message] of refusals) {
+    it(`refuses ${name}, and says which number is wrong`, () => {
+      expect(() => expandShape(spec)).toThrow(message);
+    });
+  }
+});
+
 describe("sphere", () => {
   it("is one brush per stack, and every one is valid", () => {
     const { solids } = build({
