@@ -19,11 +19,12 @@ dans `gmod-mcp`, pas ici.
 |---|---|
 | BSP (`read_bsp_info`, `read_bsp_entities`) | **prouvé** — jalon 1 ci-dessous |
 | Patch de lump (`read_lump_patch`, `write_lump_patch`, `read_lump_patch_status`) | codec prouvé ; **effet en jeu non prouvé** (porte B) |
-| VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée |
-| Compile (`run_compile`, `read_compile_log`, `read_leak`, `run_pack`) | **prouvé** — fuite provoquée puis localisée |
+| VMF (`read_vmf`, `read_vmf_lint`, `read_fgd_class`) | **prouvé** — chaque règle vérifiée par une faute injectée ; `func_instance` dépliés |
+| Compile (`run_compile`, `read_compile_log`, `read_leak`, `run_pack`) | **prouvé** — fuite provoquée puis localisée, sur les deux chaînes |
 | Audit | à écrire |
 | Données de l'ancienne prod | à écrire |
 | Sidecar Python (srctools) | **installé et prouvé** — voir ci-dessous |
+| Chaîne Hammer++ | **prouvée** — porte C ; `cull` mesuré, deux flags écartés faute d'oracle |
 | Mesure (`read_map_extents`, `read_map_geometry`, `read_prop_survey`) | **prouvé** — recoupe trois mesures indépendantes |
 
 ## Les portes de faisabilité
