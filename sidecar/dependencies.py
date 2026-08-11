@@ -89,6 +89,16 @@ def _engine_owned(key: str, map_name: str) -> bool:
     if map_name and key.startswith(f"materials/maps/{map_name}/"):
         # Cubemaps (`c<x>_<y>_<z>.vtf`) and the patched materials vbsp writes beside them.
         return True
+    if map_name and key in {
+        # Both are loaded from the map's own name and referenced by nothing. That is the
+        # same mechanism that lets a misspelled .ain ship unnoticed -- so a correctly
+        # named one must not then be reported as dead weight.
+        f"maps/graphs/{map_name}.ain",
+        f"maps/{map_name}.nav",
+        f"maps/{map_name}_level_sounds.txt",
+        f"maps/{map_name}_particles.txt",
+    }:
+        return True
     return False
 
 
@@ -338,6 +348,15 @@ def map_dependencies(req: dict[str, Any]) -> dict[str, Any]:
     if sky:
         for side in ("rt", "lf", "bk", "ft", "up", "dn"):
             _walk_material(f"skybox/{sky}{side}", resolver, seen, found, missing)
+            # The HDR set is optional -- an LDR-only map legitimately ships without it, so
+            # a probe that reported these as missing would fire on most maps. Recorded when
+            # present so they are not counted as dead weight instead.
+            hdr = _under_materials(f"skybox/{sky}{side}_hdr", ".vmt")
+            if hdr not in seen:
+                spot_hdr = resolver.where(hdr)
+                if spot_hdr is not None:
+                    seen.add(hdr)
+                    _walk_material(f"skybox/{sky}{side}_hdr", resolver, seen, found, missing)
 
     # The nodegraph is named after the map, and nothing checks that when it is packed.
     for packed_name in list(resolver.packed):

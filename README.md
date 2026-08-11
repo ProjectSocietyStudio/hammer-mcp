@@ -150,11 +150,26 @@ warns about this at compile time, because nothing checks that a packed file's na
 the map it was packed into.
 
 ⚠️ **"Unreferenced" is not "safe to delete", and the tool refuses to blur the two.** The same
-map packs 4260 files the *engine* references and no file names — 3983 `.vhv` (vrad's per-prop
-vertex lighting) and the built cubemaps. A naive walk calls those dead weight; deleting them
-flattens the lighting on every static prop. They are counted separately, as are the 251 files
-under `sound/`, `scripts/` and `particles/`, which this walk does not follow. What is left —
-255 on that map — is the only number that means anything, and it is still not a delete list.
+map packs 4261 files the *engine* references and no file names:
+
+- 3983 `.vhv` — vrad's per-prop vertex lighting. Delete these and every static prop in the
+  map goes flat.
+- the built cubemaps under `materials/maps/<mapname>/`.
+- everything the engine finds by **naming convention** rather than by reference: the
+  skybox's six sides derived from `skyname`, the detail sprite material and its `.vbsp`
+  config, `maps/<mapname>.nav`, `maps/graphs/<mapname>.ain`, the level sounds list.
+
+That last group is the same mechanism that let the misspelled `.ain` ship: a file the engine
+locates by deriving its name is invisible to a dependency walk *and* to the compiler. Getting
+it right in both directions matters — miss it and the tool reports a dozen essential files as
+dead weight.
+
+Counted separately again: the 251 files under `sound/`, `scripts/` and `particles/`, which
+this walk does not follow. A soundscape is named by a string defined in a manifest, and
+`info_particle_system` names an *effect*, not a file.
+
+What is left — 254 on that map — is the only number that means anything, and it is **still
+not a delete list.**
 
 And **`game` is not the same answer as `packed`**: an asset resolved from Counter-Strike's
 content is fine on a machine with CS:S mounted and a checkerboard on one without.

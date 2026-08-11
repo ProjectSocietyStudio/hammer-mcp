@@ -74,6 +74,15 @@ describe.skipIf(!has.sidecar)("read_map_dependencies", () => {
       expect(out.notWalked.every((p: string) => /^(sound|scripts|particles|resource|scenes)\//.test(p))).toBe(
         true,
       );
+
+      // Everything the engine finds by naming convention rather than by reference: the
+      // skybox's six sides, the detail sprite config, the level sounds list. Each one is
+      // a file no material and no model names, and each would otherwise read as dead
+      // weight -- the same mechanism that let the misspelled .ain ship unnoticed.
+      const left = out.packedUnreferenced;
+      expect(left.some((p: string) => p.startsWith("materials/skybox/"))).toBe(false);
+      expect(left.some((p: string) => p.endsWith(".vbsp"))).toBe(false);
+      expect(left.some((p: string) => p.endsWith("_level_sounds.txt"))).toBe(false);
     },
     600_000,
   );
