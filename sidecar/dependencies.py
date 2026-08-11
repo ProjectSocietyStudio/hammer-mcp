@@ -137,16 +137,58 @@ class Resolver:
                 self.packed[_norm(name)] = name
 
     def where(self, rel: str) -> str | None:
-        """`packed`, `game`, or None."""
+        """`packed`, `game-vpk`, `game-loose`, or None.
+
+        A file inside a VPK is base game content: every player who owns the game has it,
+        and packing it wastes space. A file sitting **loose** in the content tree usually
+        is not -- it resolves at home because it is on that disk, and it is a checkerboard
+        for everyone else. That is the commonest way a map ships broken.
+
+        "Usually", and the exception is measured rather than assumed: Garry's Mod ships
+        `detail.vbsp` loose in its own root, so a loose file is a *candidate* for packing,
+        not a certainty. No rule separates the two cleanly -- a mapper's own materials sit
+        under the same install as the game's. The asymmetry is what makes that acceptable:
+        packing a stock file wastes a few kilobytes, while missing a custom one ships a
+        broken map, so the candidate list errs toward including.
+        """
         key = _norm(rel)
         if key in self.packed:
             return "packed"
         if self.game_fs is not None:
             try:
-                self.game_fs[key]
-                return "game"
+                found = self.game_fs[key]
             except (KeyError, FileNotFoundError):
                 return None
+            return "game-vpk" if self._is_archive(found) else "game-loose"
+        return None
+
+    def _is_archive(self, found: Any) -> bool:
+        try:
+            from srctools.filesys import RawFileSystem
+
+            owner = self.game_fs.get_system(found)
+            return not isinstance(owner, RawFileSystem)
+        except Exception:  # noqa: BLE001
+            # Unknown provenance is reported as an archive: the cost of guessing wrong
+            # that way is a file left unpacked that was already there, while the other
+            # way is a packing list full of Valve's own content.
+            return True
+
+    def disk_path(self, rel: str) -> str | None:
+        """Where a loose file actually is, so a packing list can name it."""
+        if self.game_fs is None:
+            return None
+        try:
+            from srctools.filesys import RawFileSystem
+
+            found = self.game_fs[_norm(rel)]
+            owner = self.game_fs.get_system(found)
+            if isinstance(owner, RawFileSystem):
+                import os
+
+                return os.path.join(str(owner.path), _norm(rel))
+        except Exception:  # noqa: BLE001
+            return None
         return None
 
     def read(self, rel: str) -> bytes | None:
@@ -394,8 +436,13 @@ def map_dependencies(req: dict[str, Any]) -> dict[str, Any]:
     for spot in found.values():
         by_source[spot] = by_source.get(spot, 0) + 1
 
+    loose = sorted(k for k, v in found.items() if v == "game-loose")
     return {
         "path": path,
+        "looseCount": len(loose),
+        "loose": [
+            {"path": k, "diskPath": resolver.disk_path(k)} for k in loose[:limit]
+        ],
         "materialCount": len(materials),
         "modelCount": len(set(models)),
         "staticPropModelCount": len(static_props),

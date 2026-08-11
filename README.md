@@ -171,8 +171,14 @@ this walk does not follow. A soundscape is named by a string defined in a manife
 What is left — 254 on that map — is the only number that means anything, and it is **still
 not a delete list.**
 
-And **`game` is not the same answer as `packed`**: an asset resolved from Counter-Strike's
-content is fine on a machine with CS:S mounted and a checkerboard on one without.
+And **where in the game it was found matters as much as whether**. An asset inside a VPK is
+base content: every player who owns that game has it. An asset sitting **loose** in the
+content tree usually is not — it resolves at home because it is on that disk, and it is a
+checkerboard for everyone else.
+
+⚠️ Loose is a **candidate**, not a certainty, and that is measured rather than assumed:
+Garry's Mod ships `detail.vbsp` loose in its own root. No rule separates a mapper's work from
+a game's loose files — they live under the same install.
 
 ## Where the lighting budget goes
 
