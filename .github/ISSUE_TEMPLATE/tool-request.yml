@@ -1,0 +1,32 @@
+name: Tool request
+description: Something a mapper needs that no tool here does.
+labels: ["tool-request"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to find out, or change?
+      description: Describe the task, not the tool. "I need to know which assets my map depends on" beats "add read_map_assets".
+    validations:
+      required: true
+
+  - type: textarea
+    id: oracle
+    attributes:
+      label: How would you check the answer is right?
+      description: |
+        **This is the deciding question**, not a formality. Nothing ships here without an
+        independent way to verify what it returns — another tool, the compiler's own output,
+        a count taken in game, a file you can read by hand.
+
+        Several gaps in this repository are documented rather than filled precisely because
+        no oracle could be built for them. If you can name one, the tool is probably
+        buildable. If you cannot, say so — that is useful too, and honest.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you do it today?
+      description: A GUI, a script, by hand, not at all.
