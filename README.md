@@ -56,7 +56,7 @@ flowchart LR
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
 | **Optimise** | `func_detail`, hint brushes including diagonal ones, per-face lightmap scale — the decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
-| **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
+| **Ship** | resolve every asset a map references and find what will be missing, pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
 
 ## Knowing when you are done
@@ -121,6 +121,58 @@ And because two programs written on the same afternoon agreeing proves less than
 **a six-brush room built entirely by this tool is compiled by vbsp for real, and seals.**
 Remove one wall and it leaks. Without that second half, a writer that emitted nothing at all
 would pass the first test just as happily.
+
+## The checkerboard, before a player finds it
+
+A missing asset is the only failure on this page a mapper never sees at home — they have the
+files. `read_map_dependencies` resolves every asset a compiled map references and says where
+each will come from: **packed** inside the map, found in the **game**'s own content, or
+**missing**.
+
+The walk is recursive because a one-level walk gives a short, plausible, wrong answer. It
+follows VMT `patch` and `include` chains, `$bottommaterial` and `$fallbackmaterial`, a
+model's own material list, the skybox's six sides, and the detail sprite config.
+
+On the production map — 11/08/2026:
+
+```
+  10 520 assets resolved   (10 493 packed · 27 from the game)
+       5 faults
+
+  nodegraph-name-mismatch   maps/graphs/rp_nyc1ty_day.ain
+  texture ×4                referenced by model materials, present nowhere
+```
+
+That first line is a real defect in a map that has shipped and runs daily: the packed
+nodegraph is `rp_nyc1ty_day.ain`, with a digit `1` where an `i` belongs. The engine loads
+`maps/graphs/<mapname>.ain`, will never find it, and the NPCs navigate without it. Nothing
+warns about this at compile time, because nothing checks that a packed file's name matches
+the map it was packed into.
+
+⚠️ **"Unreferenced" is not "safe to delete", and the tool refuses to blur the two.** The same
+map packs 4261 files the *engine* references and no file names:
+
+- 3983 `.vhv` — vrad's per-prop vertex lighting. Delete these and every static prop in the
+  map goes flat.
+- the built cubemaps under `materials/maps/<mapname>/`.
+- everything the engine finds by **naming convention** rather than by reference: the
+  skybox's six sides derived from `skyname`, the detail sprite material and its `.vbsp`
+  config, `maps/<mapname>.nav`, `maps/graphs/<mapname>.ain`, the level sounds list.
+
+That last group is the same mechanism that let the misspelled `.ain` ship: a file the engine
+locates by deriving its name is invisible to a dependency walk *and* to the compiler. Getting
+it right in both directions matters — miss it and the tool reports a dozen essential files as
+dead weight.
+
+Counted separately again: the 251 files under `sound/`, `scripts/` and `particles/`, which
+this walk does not follow. A soundscape is named by a string defined in a manifest, and
+`info_particle_system` names an *effect*, not a file.
+
+What is left — 254 on that map — is the only number that means anything, and it is **still
+not a delete list.**
+
+And **`game` is not the same answer as `packed`**: an asset resolved from Counter-Strike's
+content is fine on a machine with CS:S mounted and a checkerboard on one without.
 
 ## Where the lighting budget goes
 
@@ -368,6 +420,7 @@ from and whether a file was read; `health` reports it. See
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
 | `read_leak` | `map` | | Turns `**** leaked ****` into a position and a named entity |
+| `read_map_dependencies` | `map` | | Every asset a map references, and whether each will be there: packed, from the game, or missing |
 | `run_pack` | `local` | ● | Packs files into a `.bsp` via bspzip, and verifies by re-reading |
 | `read_nav` | `map` | | Says whether a nav mesh still matches its map |
 | `read_lump_patch` | `map` | | Decodes a `.lmp` and its entities |
