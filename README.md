@@ -56,7 +56,7 @@ flowchart LR
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
 | **Optimise** | `func_detail`, hint brushes including diagonal ones, per-face lightmap scale — the decisions a compiled map no longer contains |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
-| **Ship** | resolve every asset a map references and find what will be missing, pack files into a `.bsp`, check a nav mesh still matches its map |
+| **Ship** | resolve every asset a map references and find what will be missing, pack them into a `.bsp` — by hand or derived from the map — check a nav mesh still matches |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
 
 ## Knowing when you are done
@@ -179,6 +179,11 @@ checkerboard for everyone else.
 ⚠️ Loose is a **candidate**, not a certainty, and that is measured rather than assumed:
 Garry's Mod ships `detail.vbsp` loose in its own root. No rule separates a mapper's work from
 a game's loose files — they live under the same install.
+
+`run_pack` with `auto: true` packs exactly the loose ones, deriving the list from the map and
+returning it so what was packed is visible rather than inferred. It never packs VPK content.
+The asymmetry is what makes erring toward inclusion right: packing a stock file wastes
+kilobytes, missing a custom one ships a broken map. `exclude` drops the ones you recognise.
 
 ## Where the lighting budget goes
 
@@ -427,7 +432,7 @@ from and whether a file was read; `health` reports it. See
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
 | `read_leak` | `map` | | Turns `**** leaked ****` into a position and a named entity |
 | `read_map_dependencies` | `map` | | Every asset a map references, and whether each will be there: packed, from the game, or missing |
-| `run_pack` | `local` | ● | Packs files into a `.bsp` via bspzip, and verifies by re-reading |
+| `run_pack` | `local` | ● | Packs files into a `.bsp` via bspzip. `auto` derives the list from the map itself |
 | `read_nav` | `map` | | Says whether a nav mesh still matches its map |
 | `read_lump_patch` | `map` | | Decodes a `.lmp` and its entities |
 | `write_lump_patch` | `map` | ● | Builds an entity patch from add/update/remove operations |
