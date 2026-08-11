@@ -20,9 +20,15 @@
  * drop them or reformat them. So keyvalue edits splice **individual pairs**, and new pairs
  * are inserted just before the first sub-block, which is where Hammer puts them.
  *
- * Brush geometry is out of scope on purpose. Creating a brush means choosing planes and
- * texture axes, and a tool that does that without a visual oracle produces maps that
- * compile and are wrong.
+ * Brush geometry is not handled here, and the reason has changed. It used to be a refusal:
+ * creating a brush means choosing planes and texture axes, and a tool that does that
+ * without an oracle produces maps that compile and are wrong. That argument is still
+ * correct -- it is the conclusion that is out of date, because the oracles now exist.
+ * `./solid.ts` rebuilds a brush's volume from its planes and runs the check in the
+ * opposite direction from the writer; vbsp refuses what it cannot bound; a sealed room
+ * either boots or does not. So brush creation moved to `./build.ts`, with those checks
+ * wired in front of the write rather than left to the caller. This file keeps the entity
+ * and keyvalue half of the write path.
  */
 import { children, get, pairs, parse } from "../kv/parse.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";

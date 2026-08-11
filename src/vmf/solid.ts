@@ -424,11 +424,14 @@ export function checkSolid(
   }
 
   const axes = [0, 1, 2] as const;
+  // `+ 0` collapses negative zero, which Math.min produces whenever a corner sits exactly
+  // on an axis. It prints as "0" and compares equal to 0 under ==, so it survives every
+  // casual check and then fails an Object.is comparison in a caller's test.
   const mins: Vec3 = vertices.length
-    ? (axes.map((a) => Math.min(...vertices.map((v) => v[a]))) as unknown as Vec3)
+    ? (axes.map((a) => Math.min(...vertices.map((v) => v[a])) + 0) as unknown as Vec3)
     : [0, 0, 0];
   const maxs: Vec3 = vertices.length
-    ? (axes.map((a) => Math.max(...vertices.map((v) => v[a]))) as unknown as Vec3)
+    ? (axes.map((a) => Math.max(...vertices.map((v) => v[a])) + 0) as unknown as Vec3)
     : [0, 0, 0];
 
   // Divergence theorem: for a closed convex hull, 3V = sum over faces of (n . p) * area,

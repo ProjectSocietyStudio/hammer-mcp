@@ -53,6 +53,7 @@ flowchart LR
 | **Judge** | the same measurements against a budget profile, as a verdict per criterion — so a caller knows when it is done, not just where it stands |
 | **Read and lint** | entities, outputs and brush counts of a `.vmf`; every finding checked against the FGD the game itself declares |
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
+| **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
 | **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
 | **Ship** | pack files into a `.bsp`, check a nav mesh still matches its map |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
@@ -90,6 +91,34 @@ Two things this design refuses to do:
   uncalibrated, so it reports `skipped` and says so. A confident verdict about nothing is
   worse than an admitted gap, and the same goes for the overall verdict: a run that judged
   nothing comes back `skipped`, never `pass`.
+
+## Building brushes, and why that was refused until now
+
+`edit_vmf` used to say it outright: creating a brush means choosing planes and texture axes,
+and a tool that does that without an oracle produces maps that compile and are wrong. The
+argument was right. What changed is that the oracles exist now, so the conclusion expired
+rather than the reasoning.
+
+`write_vmf_solid` takes a shape — `box`, `wedge` for a ramp, `cylinder` for an n-sided
+prism, or `convex` for a hull given face by face — and two things it gets right by
+construction rather than by care:
+
+- **Winding.** Every face is wound against the solid's own centroid, so a normal that points
+  inward is turned around before it is written. A new shape cannot introduce a winding bug.
+- **Texture axes.** Not invented: vbsp's own base-axis table. Four of its six branches are
+  reproduced exactly by `gen_probe.py`, which was written by hand and has been through a
+  real compile and a real boot. The other two are only reachable from slopes, which no
+  hand-written fixture covers — so the answer there is that this is the compiler's own
+  algorithm, not an extrapolation from the box case.
+
+Nothing is written until the result has been read back by `read_vmf_solids` and passed. The
+writer goes volume → planes and the checker goes planes → volume, so neither hides the
+other's sign error, and a solid that does not close is refused rather than reported.
+
+And because two programs written on the same afternoon agreeing proves less than it looks:
+**a six-brush room built entirely by this tool is compiled by vbsp for real, and seals.**
+Remove one wall and it leaks. Without that second half, a writer that emitted nothing at all
+would pass the first test just as happily.
 
 ## Reading brushes backwards
 
@@ -140,7 +169,8 @@ measurement in [`docs/`](docs/), or it says it is not.
 | BSP reading | **proven** — cross-checked against three independent witnesses |
 | Measurement | **proven** — same |
 | VMF reading and lint | **proven** — every rule verified by a fault injected on purpose |
-| VMF writing (`edit_vmf`) | **proven** — comments, blank lines and indentation survive; no brush geometry |
+| VMF writing (`edit_vmf`) | **proven** — comments, blank lines and indentation survive |
+| Brush creation (`write_vmf_solid`) | **proven** — a room built entirely by it compiles sealed, and leaks when one wall is removed |
 | Compiling, both toolchains | **proven** — a leak caused, then located, on stock and Hammer++ |
 | Python sidecar (srctools) | **proven** |
 | Game discovery | **proven for Garry's Mod only** — the readers are generic Source, but one game has been run here |
@@ -203,6 +233,7 @@ from and whether a file was read; `health` reports it. See
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
+| `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, or a hull face by face — checked before the file is touched |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |

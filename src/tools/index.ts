@@ -1,5 +1,6 @@
 import type { AnyToolDef } from "../mcp/registry.js";
 import { bspTools } from "./bsp.js";
+import { buildTools } from "./build.js";
 import { compileTools } from "./compile.js";
 import { gameTools } from "./games.js";
 import { healthTools } from "./health.js";
@@ -24,6 +25,7 @@ export const allTools: AnyToolDef[] = [
   ...reportTools,
   ...vmfTools,
   ...solidTools,
+  ...buildTools,
   ...vmfEditTools,
   ...compileTools,
   ...lmpTools,
