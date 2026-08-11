@@ -3,6 +3,7 @@ import { bspTools } from "./bsp.js";
 import { compileTools } from "./compile.js";
 import { gameTools } from "./games.js";
 import { healthTools } from "./health.js";
+import { lightmapTools } from "./lightmap.js";
 import { lmpTools } from "./lmp.js";
 import { materialsTools } from "./materials.js";
 import { measureTools } from "./measure.js";
@@ -15,6 +16,7 @@ export const allTools: AnyToolDef[] = [
   ...bspTools,
   ...measureTools,
   ...materialsTools,
+  ...lightmapTools,
   ...vmfTools,
   ...vmfEditTools,
   ...compileTools,
