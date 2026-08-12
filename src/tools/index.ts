@@ -18,6 +18,7 @@ import { measureTools } from "./measure.js";
 import { modifyTools } from "./modify.js";
 import { optimiseTools } from "./optimise.js";
 import { organiseTools } from "./organise.js";
+import { renderTools } from "./render.js";
 import { reportTools } from "./report.js";
 import { solidTools } from "./solids.js";
 import { spaceTools } from "./space.js";
@@ -40,6 +41,7 @@ export const allTools: AnyToolDef[] = [
   ...contentTools,
   ...solidTools,
   ...spaceTools,
+  ...renderTools,
   ...displacementTools,
   ...buildTools,
   ...modifyTools,

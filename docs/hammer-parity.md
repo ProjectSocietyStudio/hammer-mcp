@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **60 tools**.
+Last checked against the tool list on 12/08/2026: **61 tools**.
 
 ## Blocks and geometry
 
@@ -118,7 +118,7 @@ Last checked against the tool list on 12/08/2026: **60 tools**.
 
 | | Why |
 |---|---|
-| The 2D and 3D views | The mouse. Placing something by eye is not a thing a tool call is |
+| The 2D and 3D views | The mouse. Placing something by eye is not a thing a tool call is. **Looking** is now partly covered: `render_vmf_view` draws the map from any camera, without the game and without a compile. What it cannot be is a viewport you drag things in |
 | Judging whether a map looks right | Aesthetic judgement does not have a number. A tool that produced one would be producing a false one |
 | Carve | Covered by `clip_solids`; see above |
 | VIS/RAD preview in the editor | The running engine |
@@ -135,7 +135,7 @@ whole of the gap, and naming them is the point of the table.
 
 ## Beyond Hammer
 
-Twenty-three of the tools here answer questions Hammer never asked. They are not parity and
+Twenty-four of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -150,6 +150,7 @@ map and looking, or by not happening at all.
 | `read_prop_survey` | nothing |
 | `read_pakfile` | nothing |
 | `read_sightlines` | the eye, standing in the map |
+| `render_vmf_view` | the 3D viewport, which needs a person at a mouse |
 | `read_vmf_nearest_surface` | nothing: how near a wall a point is has no readout at all |
 | `read_brush_volumes` | nothing |
 | `read_materials` | nothing, for a compiled map |

@@ -125,8 +125,72 @@ the map is solid to vbsp and empty to a `.vmf`, so every ray starts inside the s
 Brush entities are separate models and `readTree` reads only model 0, so the scene is
 restricted to `world` and `func_detail`. Displacements are dropped on both sides.
 
+# Looking at the map
+
+`docs/PIEGES.md:47` records what happens without a picture: a visual diagnosis built from the
+code alone, **entirely wrong** — it accused draw density, and the real faults were a missing
+blur, icons that never arrived and a paperdoll four times too small. The rule written down
+that day was *no diagnosis of appearance before there is an image*. `render_vmf_view` is the
+first image this server can produce, and it needs no game.
+
+## What it shows
+
+Flat colour per face, one directional light, no textures, no lightmaps, no fog, no props. It
+shows **form and occlusion** — what stands where, what hides what, how much room there is at
+eye height. It does not show atmosphere, and no amount of work here would; that is what a
+capture from the running game is for. Every call says so in its own output, because a
+flat-shaded rendering looks enough like a game frame to be read as one.
+
+A face's colour is a **stable hash** of its material name, shaded half-Lambert. Stability is
+the point: the same wall is the same colour in two renderings taken an edit apart, so the two
+can be compared. A palette handed out in draw order would make every rendering incomparable
+with every other one, while looking perfectly sensible.
+
+Half-Lambert rather than Lambert, so a face turned away is dark rather than black — in a
+flat-shaded picture a black face reads as a hole, and a hole is what a leak looks like. The
+background is dark blue-grey for the same reason.
+
+## The camera is Source's, not ours
+
+**+x forward, +y left, +z up**; `angles` is pitch, yaw, roll in degrees; **positive pitch
+looks down**; `fov` is the **horizontal** field of view, so the vertical one follows from the
+aspect ratio. That is what gmod-mcp's `read_view` reports for a player's eye, so a rendering
+and a `capture_screen` from the same numbers frame the same thing and can be laid over each
+other.
+
+This costs nothing to honour now and cannot be retrofitted: changing it later invalidates
+every rendering anyone has looked at. A vertical `fov` would give a picture that is right at
+4:3 and subtly wrong at every other shape — the kind of error nobody sees and everybody
+measures against.
+
+## How a picture is checked
+
+The rasteriser fills an `Int32` **id buffer** alongside the pixels: the brush visible at each
+one. That is not a debugging extra, it is the oracle. For a sample of pixels the test rebuilds
+the primary ray and asks `src/space/trace.ts` what it hits, then demands the same brush.
+Scan-conversion with a z-buffer and a BVH descent share the camera and nothing else — and the
+ray side is itself cross-checked against the engine's own tracer. **The chain of oracles ends
+at the game.**
+
+| Claim | Witness |
+|---|---|
+| The picture shows what is there | 2 000 pixels, id buffer against a traced ray, **over 99 %** agreement (measured: 100 % on the probe; the allowance is for silhouette pixels) |
+| The camera is right | the near face of a 256-unit cube seen from 1024 away at 90° lands where the arithmetic says, to **0.001 px** |
+| The PNG is a PNG | encoded, then inflated back and compared with the framebuffer byte for byte, at a width that is a multiple of nothing |
+
+The third one exists because of the filter byte. Every PNG scanline is prefixed with one, and
+`0` means no filtering. Omit it and the file is still valid, deflate still compresses, the CRC
+still checks out — and every row shears one byte further than the last. Only reading the bytes
+back shows it.
+
+## What is deliberately not in the picture
+
+No text. A banner with the position and angles was planned and dropped: the JSON beside the
+image already carries them, and a second copy in pixels is the duplication this repository
+treats as a regression — the two would eventually disagree and the pixels would be believed.
+
 ## What this does not do
 
 It does not know what a **room** is, where a **door** is, or how wide a **pavement** is. It
-answers about points, rays and boxes. The layer that turns those into places is the scene
-graph, and it is not written yet.
+answers about points, rays, boxes and pixels. The layer that turns those into places is the
+scene graph, and it is not written yet.
