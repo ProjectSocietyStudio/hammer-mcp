@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **61 tools**.
+Last checked against the tool list on 12/08/2026: **64 tools**.
 
 ## Blocks and geometry
 
@@ -106,7 +106,8 @@ Last checked against the tool list on 12/08/2026: **61 tools**.
 |---|---|---|
 | Run map | `run_compile` | vbsp, vvis, vrad under Wine. Hammer++ toolchain too |
 | Read the compile log | `read_compile_log` | Turns each message into what it actually means |
-| Find the leak | `read_leak` | A position and the entity that caused it |
+| Find the leak | `read_leak` | A position and the entity that caused it, from a compile that already ran |
+| Find the leak **before** compiling | `read_vmf_leak` | Hammer cannot. vbsp is the only thing that answers this today, and it costs a toolchain and minutes |
 | Pack content | `run_pack` | `auto:true` derives the list from the map |
 | Check what is missing | `read_map_dependencies` | The end of "purple checkerboard for the player, fine for me" |
 | Budgets | `read_map_report` | A verdict per criterion rather than another number |
@@ -135,7 +136,7 @@ whole of the gap, and naming them is the point of the table.
 
 ## Beyond Hammer
 
-Twenty-four of the tools here answer questions Hammer never asked. They are not parity and
+Twenty-six of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -150,6 +151,8 @@ map and looking, or by not happening at all.
 | `read_prop_survey` | nothing |
 | `read_pakfile` | nothing |
 | `read_sightlines` | the eye, standing in the map |
+| `read_vmf_rooms` | nothing: Hammer has no idea what a room is |
+| `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |
 | `render_vmf_view` | the 3D viewport, which needs a person at a mouse |
 | `read_vmf_nearest_surface` | nothing: how near a wall a point is has no readout at all |
 | `read_brush_volumes` | nothing |

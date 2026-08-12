@@ -189,8 +189,118 @@ No text. A banner with the position and angles was planned and dropped: the JSON
 image already carries them, and a second copy in pixels is the duplication this repository
 treats as a regression — the two would eventually disagree and the pixels would be believed.
 
+# Places, not coordinates
+
+Everything above answers about points, rays, boxes and pixels. This layer answers about
+**places** — is this map sealed, how many rooms has it, how wide is that doorway, which of
+these faces is a floor somebody walks on.
+
+## Three layers, and only the third is a guess
+
+**Facts.** Brushes, faces, materials. Nothing inferred.
+
+**Surfaces.** A face is a floor when its normal's z is at least **0.7** — roughly cos(45.6°),
+the slope past which Source stops letting a player stand, and the same threshold
+`FaceSelector.facing` already used. Whether a face is *real* is decided by probing: sample it
+on a 16-unit grid, step one unit along its own normal, ask whether that point is inside
+anything. A map is boxes pushed against each other, so most of what a `.vmf` contains is
+buried — the underside of every slab, the back of every wall — and counting those doubles a
+building's floor area in a number that reads perfectly ordinary.
+
+The sampling pays for itself twice: when a probe lands *inside* a brush, that brush is the
+neighbour, and the map's **brush adjacency graph** falls out of the same pass. Nothing here
+knew it before.
+
+*"Exposed" means open space in front, and that includes the outside of the map.* A ceiling
+slab's upper face is an exposed floor, because it is the roof. Deciding what is *inside* is
+not a property of a face.
+
+**Rooms.** Heuristic, and every answer says so along with the parameters that produced it.
+
+## Sealed, without compiling
+
+Today the only thing that can say a map leaks is vbsp — a toolchain, minutes, and a refusal
+to run vvis afterwards. A flood fill from a point inside either stays inside or it does not,
+and where it got out is the leak. `read_vmf_leak` returns the path in the same shape as the
+`.lin` pointfile, for the same reason: something to follow.
+
+Seeds come from the map's own `info_player_start`. That is the one point an author has
+guaranteed is inside — a map that spawns players in the void does not work at all. Falling
+back to the middle of the extents is a guess, and the answer says so.
+
+**16-unit cells, 6-connected, and a cell is free only when its whole interior is.** Each of
+those is load-bearing:
+
+- *16* is the coarsest grid that still resolves a 32-unit doorway, and it is a Hammer grid
+  size, so nothing lands between cells for reasons of arithmetic.
+- *6-connected* because a 26-connected flood steps diagonally across the line where two
+  brushes merely touch — through a join no player can pass.
+- *The whole interior* because testing the centre point lets a wall thinner than the grid fall
+  between two centres, and the flood walks through a sealed map. Over-blocking loses a little
+  space and can **miss** a leak; under-blocking **invents** leaks in maps that are fine. Only
+  one of those cries wolf, so the resolution is reported and the limitation stated.
+
+A cell is *standable* when it is free, has solid directly under it, and has 72 units of room
+above. Both halves matter: without the ceiling test a ventilation duct is a room; without the
+floor test the air above a courtyard is.
+
+## Rooms: watershed, not components
+
+The obvious method is connected components of the open space. In a sealed map that returns
+**one** — which is what sealed means. Correct, and useless.
+
+So the split has to come from shape. `clearance(c)` is the distance from a standable cell to
+the nearest place a person cannot stand. A room is somewhere **locally wide**: the field peaks
+in the middle of a room and saddles in a doorway. Growing regions from the local maxima in
+order of decreasing clearance puts every boundary at a narrow place — so **the doorways are
+not searched for, they are what is left over**.
+
+Three details, each of which was wrong first and each of which produced a plausible answer:
+
+| Detail | What it fixes |
+|---|---|
+| Walking is **four directions**, with a step of one cell up or down absorbed into each | Written as twelve offsets, a flat floor's every cell had a non-standable neighbour one cell up, so every cell was a boundary and **the clearance field was 1 everywhere**. The watershed still returned rooms of roughly the right size |
+| Ridges are grouped **8-connected** | The field is a BFS distance, so it is Manhattan, and a Manhattan ridge runs diagonally. Grouped 4-connected it breaks into isolated cells, one seed each, and a 512-unit room comes back as eight |
+| **A portal that narrows nothing is not a doorway** | Each doorway mouth raises the corridor's clearance by a cell, which is a local maximum, which splits the corridor there. The fixture's 2048-unit corridor came back as five rooms joined by portals 256 units wide — its own width |
+
+The last one is a statement about the map rather than a threshold tuned until the fixture
+passed: a doorway is a *constriction*, and if an opening is as wide as the narrower of the two
+spaces it joins, they are one space.
+
+## How it is proven
+
+`test/support/rooms.ts` builds a map whose dimensions **are** the expected answers: two rooms
+512 across, a corridor 256 wide, two doorways of 96, and a variant with a 64-unit hole in one
+wall. Every expectation is a number from that file, never one recorded from a previous run.
+
+| Claim | Witness |
+|---|---|
+| Three rooms, two doorways | the fixture's own plan |
+| Doorway width | **exactly 96 units**, and nothing in the algorithm was told that |
+| Room half-width | **exactly 256**, for rooms built 512 across |
+| The graph | one space touches both others; they do not touch each other |
+| Leak found | the path out ends inside the 64-unit hole, and starts at the seed |
+| Sealed reads sealed | `hmcp_probe.vmf`, which compiles clean and boots |
+
+Six sabotages redden it: 26-connected flood, no headroom test, no ridge grouping, no
+portal-narrowing merge, and the two clearance faults above. Two of them needed **scenes of
+their own** — the three-room fixture cannot tell a 26-connected flood from a 6-connected one,
+because its walls are thicker than a cell and the whole-interior test already blocks the
+diagonal. The scene that does show it has two blocks meeting at a cell *boundary* inside a
+sealed shell, and both of those properties had to be right before the test could distinguish
+anything.
+
+## What is still a guess
+
+The watershed can split a hall that has a pillar in the middle, and it can swallow an alcove.
+Nothing here has been checked against an independent implementation — the plan's oracle, a
+recomputation from mutual visibility on the compiled map, is not written. Until it is, the
+room count is **partly proven**: exact on a fixture that states its own answer, unjudged on a
+real map.
+
 ## What this does not do
 
-It does not know what a **room** is, where a **door** is, or how wide a **pavement** is. It
-answers about points, rays, boxes and pixels. The layer that turns those into places is the
-scene graph, and it is not written yet.
+It does not know what a **street** is, or a **pavement**, or a **shop front**. Those are not
+derivable from geometry: `outdoor` is (a ray up from a standable cell meets the skybox), and
+the rest needs the map to say. That is what the per-map rules file is for, and it is not
+written yet.
