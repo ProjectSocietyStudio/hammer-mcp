@@ -298,6 +298,65 @@ recomputation from mutual visibility on the compiled map, is not written. Until 
 room count is **partly proven**: exact on a fixture that states its own answer, unjudged on a
 real map.
 
+# The plan
+
+The perspective view says what a place looks like from somewhere. A plan says **where things
+are**, and it is the drawing you can measure with. Both are wanted and neither replaces the
+other: an agent with only the perspective is back to judging by eye.
+
+## One drawing, two back ends
+
+A plan is wanted in three forms that pull in different directions — a raster to **look** at, a
+text form to **keep**, and numbers to **assert** on. Three drawings would mean three chances
+to disagree, and the one nobody looks at would be the one under test.
+
+So there is one **display list** — polygons, lines and labels in page coordinates — and two
+back ends. `svg.ts` writes text, `paint.ts` writes pixels, and neither decides anything: every
+coordinate, colour and string is already in the list. The tests assert on the list, which is
+the only one of the three where *"room 2's label is inside room 2's outline"* is a statement
+about numbers rather than about ink.
+
+**The y flip happens exactly once**, in `fitPage`. Hammer's +y is north; every raster format
+counts rows from the top. A sign that changes in two places eventually changes differently.
+
+## The section, and why there is no second hull routine
+
+A brush's section at `z = k` is the intersection of its half-spaces with `z <= k` and
+`z >= k`. So it is `hullFromPlanes` again with two planes added — the routine
+`read_vmf_solids` is already checked by — rather than a polygon clipper written for this file
+and wrong in some other way.
+
+The cut is taken **48 units above the lowest standable floor**, not above the map's minimum:
+the map's minimum is the bottom of the floor slab, and a cut there is solid everywhere. At
+that height a doorway reads as a gap and a waist-high obstacle reads as solid. Anything
+entirely above or below is not on the drawing at all, so the cut height is always reported.
+
+## What makes it a plan rather than a picture
+
+A scale bar in round units, a grid you can count, a north arrow, and **the width written on
+every doorway**. Without the numbers you can see that a doorway is narrower than a corridor
+and cannot say by how much, which is the question.
+
+Legibility is checked, not hoped for: two labels that overlap are not two numbers, so
+overlapping ones are dropped and the drop is reported — the caller can ask for a bigger page
+instead of quietly getting less.
+
+## How it is proven
+
+| Claim | Witness |
+|---|---|
+| The drawing is the geometry | the polygons' area, measured **on the page** and converted back, equals the sections' own area |
+| It draws sections, not bounding boxes | a 24-sided prism comes out between the inscribed and circumscribed areas for 24 sides — 21 % under its own bounding box |
+| Labels are where they belong | every room label falls inside that room's outline |
+| Labels are readable | no two label boxes overlap, at any page size |
+| Both back ends draw the same thing | one SVG element per list item, every `data-role` preserved |
+
+Four sabotages redden it, and **two of them needed new cases**. Drawing bounding boxes instead
+of sections passed everything, because every brush in the rooms fixture is an axis-aligned box
+whose section *is* its bounding box. Removing the label-overlap check passed too, because at a
+comfortable page size nothing collides — the page has to be squeezed before the check has
+anything to do.
+
 ## What this does not do
 
 It does not know what a **street** is, or a **pavement**, or a **shop front**. Those are not
