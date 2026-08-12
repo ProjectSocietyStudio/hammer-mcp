@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **57 tools**.
+Last checked against the tool list on 12/08/2026: **60 tools**.
 
 ## Blocks and geometry
 
@@ -110,6 +110,7 @@ Last checked against the tool list on 12/08/2026: **57 tools**.
 | Pack content | `run_pack` | `auto:true` derives the list from the map |
 | Check what is missing | `read_map_dependencies` | The end of "purple checkerboard for the player, fine for me" |
 | Budgets | `read_map_report` | A verdict per criterion rather than another number |
+| Walking the map to check it | `read_vmf_trace`, `read_vmf_visibility` | Hammer has no answer at all: you compile and go and look. These trace the `.vmf` itself |
 | Build cubemaps | *the running engine* | `buildcubemaps` needs the game. That is `gmod-mcp` |
 | Generate a nav mesh | *the running engine* | Same. `read_nav` says whether one still matches its map |
 
@@ -134,7 +135,7 @@ whole of the gap, and naming them is the point of the table.
 
 ## Beyond Hammer
 
-Twenty-two of the tools here answer questions Hammer never asked. They are not parity and
+Twenty-three of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -149,6 +150,7 @@ map and looking, or by not happening at all.
 | `read_prop_survey` | nothing |
 | `read_pakfile` | nothing |
 | `read_sightlines` | the eye, standing in the map |
+| `read_vmf_nearest_surface` | nothing: how near a wall a point is has no readout at all |
 | `read_brush_volumes` | nothing |
 | `read_materials` | nothing, for a compiled map |
 | `read_lightmap_budget` | nothing: where a map's luxels went |
