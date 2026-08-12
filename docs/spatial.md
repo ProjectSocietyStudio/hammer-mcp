@@ -357,6 +357,78 @@ whose section *is* its bounding box. Removing the label-overlap check passed too
 comfortable page size nothing collides — the page has to be squeezed before the check has
 anything to do.
 
+# Measuring
+
+Every number in this layer follows one rule, and the rule is what makes it exact:
+
+> **The voxel localises. The swept hull measures.**
+
+The clearance field says *where* the narrow point of a corridor is, to within a cell —
+sixteen units, which is plenty to find a place and useless as an answer. The swept box then
+measures *there*, against the real planes.
+
+Skipping the second half is the failure this exists to avoid. The fixture's 96-unit doorway
+is six cells wide, so `6 × 16` gives 96 **by luck**. Build it 100 units instead and the voxel
+answer is still 96 — and nothing about it looks approximate. A test asserts exactly that case.
+
+Skipping the first half is worse: without somewhere to measure, "how wide is this corridor"
+has no defined answer, because a corridor is wide one way and long the other.
+
+## Every measurement has an operative definition
+
+Not an intention. *"Enough room to get past"* is an intention. *"The distance a 32×32×72 box
+travels from this point along this axis before it touches something"* is a measurement, and
+two people who run it get the same number.
+
+| Measurement | Definition |
+|---|---|
+| Free width | two swept-hull probes in opposite directions, **plus the box's own footprint** |
+| Narrowest width | the smallest of those over 16 horizontal directions, 11.25° apart |
+| Headroom | the same measurement turned on its side, with a flat probe box |
+| Clearance in front | swept from the entity's origin, **lifted to standing height above the floor beneath it**, along its yaw |
+| Nearest obstacle | exact closest point on the polytope, not a sample |
+
+Three of those rows are corrections to an obvious wrong version:
+
+**The box's own footprint.** A 32-wide hull that travels 32 units each way is standing in a
+96-unit gap, not a 64-unit one. Omitting the term under-reports every width by exactly one
+player — the width most likely to be the one that matters.
+
+**Sixteen directions.** A corridor measured along y when it runs diagonally reports the
+diagonal's projection, which is wider than the gap.
+
+**The lift.** An entity's origin sits at its base. A sweep from there goes through the floor
+slab and returns zero, which reads as "completely blocked" for every entity in the map.
+
+## The epsilon that had to come back
+
+The tracer backs every contact off by `DIST_EPSILON` so a point left there is outside the
+brush. That is right for a tracer and **wrong for a measurement**: it makes every distance
+short, and a width — two sweeps — short by twice that. The 256-unit corridor measured
+255.9375, which is close enough to read as rounding and is in fact a systematic bias.
+
+The correction is `DIST_EPSILON / |n · d|`, not a flat epsilon: the nudge is along the plane's
+normal, so its cost along the direction of travel grows for a glancing hit. Adding back a flat
+value fixes the axis-aligned case and leaves every oblique one wrong.
+
+`headroom` is written as `widthAcross` turned on its side for the same reason. Its first
+version read the contact *point* and was 0.0625 short while the widths beside it were exact.
+One measurement path, one place for the correction to live.
+
+## How it is proven
+
+| Claim | Witness |
+|---|---|
+| A corridor built 256 wide | measures **256** |
+| A doorway built 96 | measures **96**, and the room pass independently found where it is |
+| A doorway built **100** | measures **100**, where the voxel estimate would still say 96 |
+| A ceiling 256 up | measures **256**, and 128 when beams hang at 128 |
+| A 32-wide gap | crossed by a crouching hull, refused to a standing one |
+
+Five sabotages redden it: measuring with a point instead of a hull, dropping the footprint
+term, dropping the epsilon correction, not lifting off the floor, and taking the first
+direction instead of the narrowest.
+
 ## What this does not do
 
 It does not know what a **street** is, or a **pavement**, or a **shop front**. Those are not
