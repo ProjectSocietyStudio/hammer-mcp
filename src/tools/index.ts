@@ -20,6 +20,7 @@ import { optimiseTools } from "./optimise.js";
 import { organiseTools } from "./organise.js";
 import { renderTools } from "./render.js";
 import { reportTools } from "./report.js";
+import { sceneTools } from "./scene.js";
 import { solidTools } from "./solids.js";
 import { spaceTools } from "./space.js";
 import { vertexTools } from "./vertex.js";
@@ -41,6 +42,7 @@ export const allTools: AnyToolDef[] = [
   ...contentTools,
   ...solidTools,
   ...spaceTools,
+  ...sceneTools,
   ...renderTools,
   ...displacementTools,
   ...buildTools,

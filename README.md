@@ -399,6 +399,8 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Texture alignment | **proven** — aligning to world reproduces, on all 36 faces, the six axis pairs `gen_probe.py` states by hand |
 | Tracing an uncompiled `.vmf` | **proven** — 5000 rays agree with the compiled map's own tracer to under half a unit, and the broadphase agrees with brute force bit for bit |
 | Rendering a `.vmf` | **proven** — the id buffer agrees with a traced ray at 2000 pixels, and the PNG inflates back to the framebuffer byte for byte |
+| Finding a leak without compiling | **proven** — a hole cut in a sealed fixture is found, and the path out ends at it; the probe map, which compiles clean and boots, reads as sealed |
+| Rooms and doorways | **partly proven** — a fixture stating its own dimensions returns three rooms and two doorways of exactly 96 units. The method is a heuristic and says so; no independent implementation has judged it yet |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
 | `read_vprof` | **not written**: no real sample to calibrate it against |
@@ -491,6 +493,9 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_visibility` | `map` | | Whether named pairs of points can see each other, and the brush that blocks the ones that cannot |
 | `read_vmf_nearest_surface` | `map` | | Exact distance from a point to the nearest surface, and which face it belongs to |
 | `render_vmf_view` | `map` | | Renders an **uncompiled** `.vmf` from a camera and returns the picture: form and occlusion, no textures |
+| `read_vmf_leak` | `map` | | Whether a `.vmf` seals, **without compiling it**, with the path out |
+| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect |
+| `read_vmf_surfaces` | `map` | | Faces sorted into floor, wall, ceiling — and which of them a person could touch |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
