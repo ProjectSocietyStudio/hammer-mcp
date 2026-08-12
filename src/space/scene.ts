@@ -33,7 +33,7 @@
  */
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock } from "../kv/parse.js";
-import { checkSolid, ON_EPSILON } from "../vmf/solid.js";
+import { checkSolid, ON_EPSILON, orderedLoop } from "../vmf/solid.js";
 import type { Plane, SolidCheck, Vec3 } from "../vmf/solid.js";
 import { buildBvh } from "./bvh.js";
 import type { Bvh } from "./bvh.js";
@@ -104,7 +104,17 @@ export interface SceneFace {
   sideId: number | null;
   material: string;
   plane: Plane;
-  /** Hull corners lying on this plane, ordered around it. Empty when the side bounds nothing. */
+  /**
+   * Hull corners lying on this plane, **ordered around it**, counter-clockwise seen from
+   * outside.
+   *
+   * The ordering is done here, once, and it is not optional. `SolidCheck.sides[].vertices`
+   * is a *filter* of the hull's corners -- the ones near this plane -- and comes out in hull
+   * order, which around a face is arbitrary. `polygonArea` and `pointsFromPlane` both call
+   * `orderedLoop` before using it, and anything that forgets gets a zigzag instead of a
+   * polygon. That failure is quiet: the shape still has the right corners, still has the
+   * right bounding box, and still fills about two thirds of its own area when rasterised.
+   */
   loop: Vec3[];
   area: number;
 }
@@ -249,7 +259,7 @@ export function buildScene(path: string, source: string, options: SceneOptions =
           sideId: s.id,
           material: s.material,
           plane: s.plane!,
-          loop: s.vertices,
+          loop: orderedLoop(s.vertices, s.plane!.normal),
           area: s.area,
         })),
       mins: c.mins,

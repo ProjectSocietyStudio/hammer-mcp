@@ -398,6 +398,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Clipping | **proven** — a room whose every wall was cut diagonally compiles sealed; the two halves sum to the original volume |
 | Texture alignment | **proven** — aligning to world reproduces, on all 36 faces, the six axis pairs `gen_probe.py` states by hand |
 | Tracing an uncompiled `.vmf` | **proven** — 5000 rays agree with the compiled map's own tracer to under half a unit, and the broadphase agrees with brute force bit for bit |
+| Rendering a `.vmf` | **proven** — the id buffer agrees with a traced ray at 2000 pixels, and the PNG inflates back to the framebuffer byte for byte |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
 | `read_vprof` | **not written**: no real sample to calibrate it against |
@@ -489,6 +490,7 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_trace` | `map` | | Traces a ray or a swept player hull through an **uncompiled** `.vmf`: what is in the way, how far, which face |
 | `read_vmf_visibility` | `map` | | Whether named pairs of points can see each other, and the brush that blocks the ones that cannot |
 | `read_vmf_nearest_surface` | `map` | | Exact distance from a point to the nearest surface, and which face it belongs to |
+| `render_vmf_view` | `map` | | Renders an **uncompiled** `.vmf` from a camera and returns the picture: form and occlusion, no textures |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
