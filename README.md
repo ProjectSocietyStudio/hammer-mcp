@@ -402,6 +402,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Finding a leak without compiling | **proven** — a hole cut in a sealed fixture is found, and the path out ends at it; the probe map, which compiles clean and boots, reads as sealed |
 | Rooms and doorways | **partly proven** — a fixture stating its own dimensions returns three rooms and two doorways of exactly 96 units. The method is a heuristic and says so; no independent implementation has judged it yet |
 | The floor plan | **proven** — the drawn area equals the sections' own area from the page geometry alone, every room label falls inside its room, and no two labels overlap |
+| Measuring a place | **proven** — a corridor built 256 wide measures 256, a doorway built 96 measures 96, and one built 100 measures 100 where the voxel estimate would still say 96 |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
 | `read_vprof` | **not written**: no real sample to calibrate it against |
@@ -498,6 +499,9 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect |
 | `read_vmf_surfaces` | `map` | | Faces sorted into floor, wall, ceiling — and which of them a person could touch |
 | `render_vmf_plan` | `map` | | A **dimensioned floor plan**: rooms, areas, doorway widths, grid, scale bar, north |
+| `measure_vmf_clearance` | `map` | | Free width and headroom at a point, measured with a **swept player hull**, not a ray |
+| `measure_vmf_approach` | `map` | | How much clear room a person has in front of each entity — the door that opens into a wall |
+| `read_vmf_sightlines` | `map` | | Longest clear sight lines in an **uncompiled** `.vmf`, sampled where a person can stand |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |

@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **65 tools**.
+Last checked against the tool list on 12/08/2026: **68 tools**.
 
 ## Blocks and geometry
 
@@ -136,7 +136,7 @@ whole of the gap, and naming them is the point of the table.
 
 ## Beyond Hammer
 
-Twenty-seven of the tools here answer questions Hammer never asked. They are not parity and
+Thirty of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -155,6 +155,9 @@ map and looking, or by not happening at all.
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |
 | `render_vmf_view` | the 3D viewport, which needs a person at a mouse |
 | `render_vmf_plan` | the 2D view, which has no dimensions on it and no idea what a room is |
+| `measure_vmf_clearance` | the tape measure tool, which measures between two points you pick — not the free width at a place |
+| `measure_vmf_approach` | nothing: no editor asks whether a person fits in front of a door |
+| `read_vmf_sightlines` | the eye again, and only after a compile |
 | `read_vmf_nearest_surface` | nothing: how near a wall a point is has no readout at all |
 | `read_brush_volumes` | nothing |
 | `read_materials` | nothing, for a compiled map |

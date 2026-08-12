@@ -15,6 +15,7 @@ import { lightmapTools } from "./lightmap.js";
 import { lmpTools } from "./lmp.js";
 import { materialsTools } from "./materials.js";
 import { measureTools } from "./measure.js";
+import { measureTools2 } from "./measurespace.js";
 import { modifyTools } from "./modify.js";
 import { optimiseTools } from "./optimise.js";
 import { organiseTools } from "./organise.js";
@@ -44,6 +45,7 @@ export const allTools: AnyToolDef[] = [
   ...solidTools,
   ...spaceTools,
   ...sceneTools,
+  ...measureTools2,
   ...renderTools,
   ...planTools,
   ...displacementTools,
