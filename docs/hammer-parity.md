@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **64 tools**.
+Last checked against the tool list on 12/08/2026: **65 tools**.
 
 ## Blocks and geometry
 
@@ -119,7 +119,7 @@ Last checked against the tool list on 12/08/2026: **64 tools**.
 
 | | Why |
 |---|---|
-| The 2D and 3D views | The mouse. Placing something by eye is not a thing a tool call is. **Looking** is now partly covered: `render_vmf_view` draws the map from any camera, without the game and without a compile. What it cannot be is a viewport you drag things in |
+| The 2D and 3D views | The mouse. Placing something by eye is not a thing a tool call is. **Looking** is now covered from both sides: `render_vmf_view` draws the map from any camera and `render_vmf_plan` draws it as a dimensioned plan, both without the game and without a compile. What neither can be is a viewport you drag things in |
 | Judging whether a map looks right | Aesthetic judgement does not have a number. A tool that produced one would be producing a false one |
 | Carve | Covered by `clip_solids`; see above |
 | VIS/RAD preview in the editor | The running engine |
@@ -136,7 +136,7 @@ whole of the gap, and naming them is the point of the table.
 
 ## Beyond Hammer
 
-Twenty-six of the tools here answer questions Hammer never asked. They are not parity and
+Twenty-seven of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -154,6 +154,7 @@ map and looking, or by not happening at all.
 | `read_vmf_rooms` | nothing: Hammer has no idea what a room is |
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |
 | `render_vmf_view` | the 3D viewport, which needs a person at a mouse |
+| `render_vmf_plan` | the 2D view, which has no dimensions on it and no idea what a room is |
 | `read_vmf_nearest_surface` | nothing: how near a wall a point is has no readout at all |
 | `read_brush_volumes` | nothing |
 | `read_materials` | nothing, for a compiled map |
