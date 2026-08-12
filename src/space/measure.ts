@@ -97,6 +97,25 @@ export function sweep(
   };
 }
 
+/**
+ * The point a person's body occupies when standing at a place.
+ *
+ * A place is given as a spot on the floor -- a room's widest cell, a doorway's col, an
+ * entity's origin -- and all three sit at or near ground level. A hull centred there extends
+ * half its height *below* the floor, so it starts inside the slab and every measurement from
+ * it returns zero. The width of a 256-unit corridor came back as 32, which is the hull's own
+ * footprint and nothing else: a plausible-looking number produced by measuring nothing.
+ *
+ * So the point is dropped to the floor beneath it and raised by half the hull. Every
+ * measurement that takes a *place* rather than a *body position* has to do this, which is
+ * why it is one function rather than a line repeated at each call site.
+ */
+export function standingAt(scene: Scene, at: Vec3, half: Vec3 = HULL_STANDING): Vec3 {
+  const down = traceRay(scene, at, [at[0], at[1], at[2] - REACH], MASK_SOLID);
+  const floorZ = down.hit && !down.startSolid ? down.point[2] : at[2];
+  return [at[0], at[1], floorZ + half[2] + 0.5];
+}
+
 export interface WidthMeasurement {
   /** Free width across, in units: the two sweeps plus the box's own width. */
   widthUnits: number;
@@ -238,10 +257,7 @@ export function clearanceInFront(
   const rad = (yawDegrees * Math.PI) / 180;
   const facing: Vec3 = [Math.cos(rad), Math.sin(rad), 0];
 
-  const down = traceRay(scene, origin, [origin[0], origin[1], origin[2] - REACH], MASK_SOLID);
-  const floorZ = down.hit && !down.startSolid ? down.point[2] : origin[2];
-  const from: Vec3 = [origin[0], origin[1], floorZ + half[2] + 0.5];
-
+  const from = standingAt(scene, origin, half);
   const s = sweep(scene, from, facing, half, mask);
   return {
     clearUnits: s.distance,

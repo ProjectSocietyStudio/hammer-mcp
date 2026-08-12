@@ -403,6 +403,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Rooms and doorways | **partly proven** — a fixture stating its own dimensions returns three rooms and two doorways of exactly 96 units. The method is a heuristic and says so; no independent implementation has judged it yet |
 | The floor plan | **proven** — the drawn area equals the sections' own area from the page geometry alone, every room label falls inside its room, and no two labels overlap |
 | Measuring a place | **proven** — a corridor built 256 wide measures 256, a doorway built 96 measures 96, and one built 100 measures 100 where the voxel estimate would still say 96 |
+| Per-map rules | **proven** — a corridor built 256 passes a 192 bar and fails a 320 one with both numbers; a rule that cannot fail is refused at load; and a write goes through on a map that violates every rule it has |
 | The write guard | **proven** — each of the five VMF writers is called for real on a map inside `srcds/` and must refuse |
 | Entity-lump patching | codec **proven**; **its effect in game is not** — see [gate B](docs/gates.md#gate-b) |
 | `read_vprof` | **not written**: no real sample to calibrate it against |
@@ -502,6 +503,7 @@ from and whether a file was read; `health` reports it. See
 | `measure_vmf_clearance` | `map` | | Free width and headroom at a point, measured with a **swept player hull**, not a ray |
 | `measure_vmf_approach` | `map` | | How much clear room a person has in front of each entity — the door that opens into a wall |
 | `read_vmf_sightlines` | `map` | | Longest clear sight lines in an **uncompiled** `.vmf`, sampled where a person can stand |
+| `check_vmf_rules` | `map` | | Checks a map against **its own** `<map>.rules.json`. Reports; never refuses |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
