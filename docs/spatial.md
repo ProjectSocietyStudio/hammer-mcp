@@ -429,9 +429,99 @@ Five sabotages redden it: measuring with a point instead of a hull, dropping the
 term, dropping the epsilon correction, not lifting off the floor, and taking the first
 direction instead of the narrowest.
 
+# The map's own rules
+
+*"Four metres of pavement, no entrance obstructed, the view from the lobby preserved"* is a
+design brief, and until this layer it had no form anything here could check.
+`<map>.rules.json` gives it one.
+
+## Per map, never global
+
+The file is a **sibling** of the `.vmf`. No walking up the directory tree, no defaults, no
+built-in bar. A residential street and a warehouse have different right answers for every
+number in it, and a shared default would be wrong for both **while looking authoritative**.
+
+No rules file means *no checking*, not *checking against something reasonable*. The tool says
+so explicitly rather than returning a clean report.
+
+## It reports; it never refuses
+
+The writing tools do not consult it and must not. A mapper may want a narrow alley, and
+turning a design choice into a write error is how a tool stops being usable.
+
+This is the exact opposite of the geometry checks, which *do* refuse — and the difference is
+the point: **a non-planar face is not a choice, and 96 units of corridor is.** A test writes a
+map that violates every rule it has and asserts the edit goes through.
+
+## A rule that cannot fail is refused at load
+
+Three shapes are rejected rather than ignored, because each would sit in the file reading as
+enforcement while passing on every map:
+
+- a bound-less rule (`min` and `max` both absent);
+- a selector that matches nothing syntactically (no `select` at all);
+- a `sightline` missing one of its ends.
+
+Two rules with the same `id` are refused too: an id names a rule in its violations, and a
+duplicate makes a finding impossible to trace back.
+
+A rule that matches nothing *at runtime* — a rule about a room the map does not have — is
+reported as a finding about the rules, not counted as a pass.
+
+## The loop closes
+
+Every violation carries **the worst point**. `render_vmf_view` and `render_vmf_plan` both take
+a position, so:
+
+> measure → locate → look
+
+and none of it needs a compiler.
+
+```json
+{ "version": 1,
+  "rules": [
+    { "id": "door-clearance", "what": "clearance_in_front",
+      "select": { "classname": "prop_door" }, "min": 192, "severity": "error",
+      "note": "A person has to be able to stand in front of a door and open it." },
+    { "id": "corridors", "what": "circulation_width",
+      "select": { "room": "*" }, "min": 96, "severity": "warning" },
+    { "id": "lobby-view", "what": "sightline",
+      "from": { "entity": "spawn_lobby" }, "to": { "entity": "reception" }, "mustBe": "clear" }
+  ] }
+```
+
+## The fault this layer found in the layer below
+
+A room's widest cell, a doorway's col and an entity's origin are all **places on the floor**,
+not body positions. A hull centred there extends half its height below the floor, starts
+inside the slab, and every sweep returns zero — so the 256-unit corridor measured **32**,
+which is the hull's own footprint and nothing else. A plausible number produced by measuring
+nothing.
+
+`standingAt` is now one function rather than a line repeated at each call site, and
+`clearanceInFront` — which had the lift already — uses it too.
+
+## How it is proven
+
+| Claim | Witness |
+|---|---|
+| The bar is the map's | a corridor built 256 passes a 192 rule and fails a 320 one, quoting both numbers |
+| Doorways are measured as doorways | both come back at **96**, against a 128 bar |
+| The door into a wall is found | **112** units in front, which no compiler mentions |
+| A broken view is named | the sight line reports the brush in the way |
+| It never refuses | an edit goes through on a map violating every rule it has |
+
+Six sabotages redden it: a global default bar, searching up the tree, accepting a rule that
+cannot fail, skipping the lift, counting a rule that matched nothing as a pass, and dropping
+the point to look at.
+
 ## What this does not do
 
-It does not know what a **street** is, or a **pavement**, or a **shop front**. Those are not
-derivable from geometry: `outdoor` is (a ray up from a standable cell meets the skybox), and
-the rest needs the map to say. That is what the per-map rules file is for, and it is not
-written yet.
+It does not know what a **street** is, or a **pavement**, or a **shop front** — and now it
+does not need to. Those are not derivable from geometry; they are what the rules file names.
+`outdoor` is derivable (a ray up from a standable cell meets the skybox) and is the one such
+concept the code owns.
+
+Nor does it judge whether a map is *good*. "Sealed, 96 units wide, clear from the spawn" is
+not "beautiful", "legible" or "in the right place". The stack does not make that judgement
+possible; it removes the excuse of confusing it with a measurement nobody took.

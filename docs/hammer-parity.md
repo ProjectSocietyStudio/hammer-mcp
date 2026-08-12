@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **68 tools**.
+Last checked against the tool list on 12/08/2026: **69 tools**.
 
 ## Blocks and geometry
 
@@ -136,7 +136,7 @@ whole of the gap, and naming them is the point of the table.
 
 ## Beyond Hammer
 
-Thirty of the tools here answer questions Hammer never asked. They are not parity and
+Thirty-one of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -158,6 +158,7 @@ map and looking, or by not happening at all.
 | `measure_vmf_clearance` | the tape measure tool, which measures between two points you pick — not the free width at a place |
 | `measure_vmf_approach` | nothing: no editor asks whether a person fits in front of a door |
 | `read_vmf_sightlines` | the eye again, and only after a compile |
+| `check_vmf_rules` | nothing at all: a design brief has never had a checkable form |
 | `read_vmf_nearest_surface` | nothing: how near a wall a point is has no readout at all |
 | `read_brush_volumes` | nothing |
 | `read_materials` | nothing, for a compiled map |

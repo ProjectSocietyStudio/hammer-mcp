@@ -22,6 +22,7 @@ import { organiseTools } from "./organise.js";
 import { planTools } from "./plan.js";
 import { renderTools } from "./render.js";
 import { reportTools } from "./report.js";
+import { rulesTools } from "./rules.js";
 import { sceneTools } from "./scene.js";
 import { solidTools } from "./solids.js";
 import { spaceTools } from "./space.js";
@@ -46,6 +47,7 @@ export const allTools: AnyToolDef[] = [
   ...spaceTools,
   ...sceneTools,
   ...measureTools2,
+  ...rulesTools,
   ...renderTools,
   ...planTools,
   ...displacementTools,
