@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 13/08/2026: **70 tools**.
+Last checked against the tool list on 13/08/2026: **71 tools**.
 
 ## The file itself
 
@@ -158,7 +158,7 @@ with these tools and nothing else.
 
 ## Beyond Hammer
 
-Thirty-one of the tools here answer questions Hammer never asked. They are not parity and
+Thirty-two of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -189,6 +189,7 @@ map and looking, or by not happening at all.
 | `read_fgd_class` | the entity dialog, one class at a time |
 | `read_vmf_solids` | the red "invalid solid" outline, and no reason |
 | `read_vmf_lint` | nothing |
+| `write_vmf_fitting` | prefabs, which are a saved lump of geometry at whatever size somebody once drew it. Nothing in Hammer knows how tall a counter is |
 | `write_hint_brush` | a brush you texture yourself and hope |
 | `read_gma` | nothing: a Workshop archive is opaque |
 | `run_gma_extract` | nothing |

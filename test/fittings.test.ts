@@ -12,7 +12,13 @@
  * floats two units clear of it, which is precisely the failure that looks perfect in a
  * report and wrong on screen.
  */
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import type { ToolContext } from "../src/mcp/registry.js";
+import { writeVmfFittingTool } from "../src/tools/build.js";
+import { ctx as sharedCtx, FIXTURES } from "./support/env.js";
 import { COUNTER, DOOR, TRIM } from "../src/vmf/fittings/dimensions.js";
 import { expandFitting } from "../src/vmf/fittings/index.js";
 import type { FittingSpec } from "../src/vmf/fittings/index.js";
@@ -275,5 +281,79 @@ describe("skirting", () => {
     expect(() =>
       expandFitting({ ...spec, omit: ["-x", "+x", "-y", "+y"] } as FittingSpec),
     ).toThrow(/no skirting to build/);
+  });
+});
+
+/**
+ * Through the tool, on a real file, with the same oracle every other writer answers to.
+ *
+ * The assertions above run on the geometry alone, which is the right place for them and is
+ * not enough on its own: `write_vmf_fitting` shares its write path with `write_vmf_solid`,
+ * and the point of sharing it is that a fitting is passed back through `read_vmf_solids`
+ * before the file is touched, exactly as a box is. That only gets proved by writing.
+ */
+describe("write_vmf_fitting, end to end", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "hammer-fitting-"));
+  afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+  const ctx = sharedCtx as unknown as ToolContext;
+
+  const place = (fittings: unknown[], name: string) => {
+    const path = join(scratch, `${name}.vmf`);
+    writeFileSync(path, readFileSync(join(FIXTURES, "hmcp_probe.vmf"), "utf8"));
+    return writeVmfFittingTool.handler({ path, fittings, confirm: true } as never, ctx) as unknown as {
+      written: boolean;
+      solidIds: number[];
+      verified: { valid: boolean; volume: number }[];
+      built: { fitting: string; brushes: number; depth: number; parts: string[] }[];
+      notes: string[];
+    };
+  };
+
+  it("writes a counter as three valid solids the checker recovers volume for", () => {
+    const r = place(
+      [{ fitting: "counter", mins: [0, 0, 0], maxs: [128, 24, 56], facing: "+y" }],
+      "counter",
+    );
+    expect(r.written).toBe(true);
+    expect(r.solidIds).toHaveLength(3);
+    expect(r.verified.every((v) => v.valid)).toBe(true);
+    expect(r.verified.every((v) => v.volume > 0)).toBe(true);
+  });
+
+  it("reports what it built, per fitting, in the order asked for", () => {
+    const r = place(
+      [
+        { fitting: "counter", mins: [0, 0, 0], maxs: [128, 24, 56], facing: "+y" },
+        { fitting: "skirting", mins: [200, 200, 0], maxs: [456, 392, 128] },
+      ],
+      "two",
+    );
+    expect(r.built.map((b) => b.fitting)).toEqual(["counter", "skirting"]);
+    expect(r.built.map((b) => b.brushes)).toEqual([3, 4]);
+    expect(r.solidIds).toHaveLength(7);
+  });
+
+  /**
+   * The refusal is at expansion, before the write path is entered at all, so a broken
+   * fitting cannot leave half an assembly in somebody's only copy of a map.
+   */
+  it("writes nothing at all when one fitting of several is impossible", () => {
+    const path = join(scratch, "refused.vmf");
+    const original = readFileSync(join(FIXTURES, "hmcp_probe.vmf"), "utf8");
+    writeFileSync(path, original);
+    expect(() =>
+      writeVmfFittingTool.handler(
+        {
+          path,
+          confirm: true,
+          fittings: [
+            { fitting: "counter", mins: [0, 0, 0], maxs: [128, 24, 56], facing: "+y" },
+            { fitting: "door_frame", mins: [0, 0, 0], maxs: [48, 48, 112] },
+          ],
+        } as never,
+        ctx,
+      ),
+    ).toThrow(/which way the wall runs/);
+    expect(readFileSync(path, "utf8")).toBe(original);
   });
 });
