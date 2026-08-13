@@ -146,3 +146,29 @@ export function rayThrough(
     camera.origin[2] + (dir[2] / len) * distance,
   ];
 }
+
+/**
+ * The angles that point a camera at a place, which is what a caller actually knows.
+ *
+ * Nothing here could do this, and the cost was measured rather than guessed: over three
+ * sessions in which cold agents built a map end to end, `render_vmf_view` was called once
+ * between them. Standing somewhere is easy -- `fromEntity` has always taken a targetname --
+ * but *facing* something meant working out a yaw and a pitch by hand, in a convention where
+ * positive pitch looks down, before you could see anything at all.
+ *
+ * Roll is zero: a rolled camera is a stylistic choice and never the answer to "what does it
+ * look like from here".
+ */
+export function anglesTowards(from: Vec3, to: Vec3): Vec3 {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const dz = to[2] - from[2];
+  const flat = Math.hypot(dx, dy);
+  // Straight up or straight down: any yaw frames the same thing, so keep the caller's zero
+  // rather than let atan2(0, 0) decide it.
+  const yaw = flat < 1e-9 ? 0 : (Math.atan2(dy, dx) * 180) / Math.PI;
+  // `+ 0` for the same reason shapes.ts rounds that way: -atan2(0, n) is negative zero, and
+  // a camera reported as pitch -0 reads as a bug in every output that carries it.
+  const pitch = (-Math.atan2(dz, flat) * 180) / Math.PI + 0;
+  return [pitch, yaw + 0, 0];
+}
