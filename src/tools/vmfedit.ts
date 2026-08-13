@@ -4,6 +4,7 @@ import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { applyVmfOps } from "../vmf/edit.js";
 import type { VmfOp } from "../vmf/edit.js";
+import { DEFAULT_GRID, DEFAULT_SKYNAME, emptyVmf } from "../vmf/skeleton.js";
 import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
 
 const MATCH = z
@@ -150,4 +151,74 @@ export const editVmf = defineTool({
   },
 });
 
-export const vmfEditTools = [editVmf];
+export const writeVmf = defineTool({
+  name: "write_vmf",
+  description:
+    "Creates an empty .vmf: Hammer's File > New. The map every other writer here assumes " +
+    "already exists -- write_vmf_solid reads its target before writing and refuses a file " +
+    "with no `world` block, so neither an absent nor an empty file is a place to start. " +
+    "Writes worldspawn with a skyname, because a map without one renders whatever sky the " +
+    "engine loaded last. REFUSES to overwrite: a map is hours of work and this tool's whole " +
+    "job is the first second of it.",
+  realm: "map",
+  guarded: true,
+  inputSchema: {
+    path: z.string().describe("Where to create the .vmf, absolute or relative to the repo root."),
+    skyname: z
+      .string()
+      .default(DEFAULT_SKYNAME)
+      .describe("worldspawn's skyname. read_game_content lists what the game has."),
+    gridSpacing: z
+      .number()
+      .int()
+      .min(1)
+      .max(1024)
+      .default(DEFAULT_GRID)
+      .describe("The grid an editor opens the file showing. Cosmetic; nothing compiles from it."),
+    dryRun: DRY_RUN,
+    confirm: CONFIRM,
+  },
+  outputSchema: {
+    path: z.string(),
+    dryRun: z.boolean(),
+    written: z.boolean(),
+    bytes: z.number(),
+    skyname: z.string(),
+    note: z.string(),
+  },
+  handler: (args, ctx) => {
+    const path = resolveInput(args.path, ctx.config);
+    // Refused rather than backed up. `edit_vmf` backs up because it is editing something
+    // it was pointed at on purpose; this one would be replacing a map with an empty one,
+    // and no flag makes that a thing a caller meant.
+    if (existsSync(path)) {
+      throw new Error(
+        `${path} already exists. write_vmf only creates: delete the file yourself if you ` +
+          `really mean to start over, or use edit_vmf and the geometry writers to change it.`,
+      );
+    }
+
+    const text = emptyVmf({ skyname: args.skyname, gridSpacing: args.gridSpacing });
+    const write = writeGuarded(path, text, ctx.config, { dryRun: args.dryRun });
+
+    ctx.audit.record({
+      kind: "file_write",
+      data: { path, bytes: Buffer.byteLength(text), written: write.written, created: true },
+    });
+
+    return {
+      path,
+      dryRun: args.dryRun ?? false,
+      written: write.written,
+      bytes: Buffer.byteLength(text),
+      skyname: args.skyname,
+      note:
+        "Empty: no geometry, no entities, and therefore not sealed. write_vmf_solid adds " +
+        "brushes, edit_vmf adds entities, read_vmf_leak says when it holds. A map with no " +
+        "info_player_start has no seed for the room pass, so read_vmf_rooms and the room " +
+        "rules will report that they checked nothing.",
+    };
+  },
+});
+
+export const vmfEditTools = [editVmf, writeVmf];

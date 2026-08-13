@@ -18,7 +18,21 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/08/2026: **69 tools**.
+Last checked against the tool list on 13/08/2026: **70 tools**.
+
+## The file itself
+
+This section exists because the table did not have it, and a table cannot notice a command
+it never listed. `File > New` was missing from every row below, and nothing here created a
+`.vmf` — which was found by trying to build a map with these tools and nothing else, and
+getting `ENOENT` on the first call.
+
+| Hammer | Here | Notes |
+|---|---|---|
+| File > New | `write_vmf` | worldspawn with a `skyname`, and the five blocks Hammer writes. Refuses to overwrite |
+| File > Open | `read_vmf` | |
+| File > Save | *every writer* | Each tool writes its own change by splicing. There is no document held open to save |
+| File > Export to .map | *not covered* | The old format. Nothing here reads or writes it, and nothing has asked |
 
 ## Blocks and geometry
 
@@ -130,9 +144,17 @@ Last checked against the tool list on 12/08/2026: **69 tools**.
 Everything a mapper *builds* is reachable. Everything a mapper *checks* is reachable, and a
 few things Hammer never checked are too — the wiring, the seams, the packing list.
 
-Two rows say "not covered" rather than "not applicable": **displacement subdivision** and
-**copying a face's alignment**. Neither is hard; both are simply not written. They are the
-whole of the gap, and naming them is the point of the table.
+Three rows say "not covered" rather than "not applicable": **displacement subdivision**,
+**copying a face's alignment**, and **exporting to `.map`**. None is hard; all three are
+simply not written. They are the whole of the gap, and naming them is the point of the table.
+
+It is worth saying what this document got wrong, because it bears on how much the rest of it
+is worth. Until 13/08/2026 there was no `File` section at all, so the table claimed near-total
+parity while nothing here could **create a map**. No test caught it: `parity.test.ts` checks
+that every tool named is real and that the count has not moved, which is exactly the wrong
+direction for a missing row. A table of commands can only be as complete as the list of
+commands somebody thought to write down, and the thing that found this one was building a map
+with these tools and nothing else.
 
 ## Beyond Hammer
 

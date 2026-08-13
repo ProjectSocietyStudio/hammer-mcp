@@ -512,6 +512,7 @@ from and whether a file was read; `health` reports it. See
 | `measure_vmf_approach` | `map` | | How much clear room a person has in front of each entity — the door that opens into a wall |
 | `read_vmf_sightlines` | `map` | | Longest clear sight lines in an **uncompiled** `.vmf`, sampled where a person can stand |
 | `check_vmf_rules` | `map` | | Checks a map against **its own** `<map>.rules.json`. Reports; never refuses. A run where a rule matched nothing is `skipped`, never `pass` |
+| `write_vmf` | `map` | ● | Creates an empty `.vmf` — Hammer's File > New. Refuses to overwrite |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
