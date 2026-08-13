@@ -56,6 +56,20 @@ describe("read_vmf_leak", () => {
     expect(r.notes.join(" ")).not.toMatch(/No spawn entity/);
   });
 
+  /**
+   * The lift is right -- a spawn rests on the floor and the flood needs a point in the air
+   * above it -- but for a while the output reported the moved point as though it were the
+   * one given, so a reader comparing their entity's origin with `seeds` saw a number they
+   * had not written and no reason for it. On a map with a low mezzanine, 16 units is the
+   * difference between seeding the space you meant and the one above it (issue #58).
+   */
+  it("says that it lifted the spawn, and by how much", () => {
+    const r = leak(SEALED) as { seeds: number[][]; notes: string[] };
+    const note = r.notes.join(" ");
+    expect(note).toMatch(/lifted 16 units/);
+    expect(note).toMatch(/spawn sits on the floor/);
+  });
+
   it("says when it had to guess where inside was", () => {
     // A guessed seed outside the sealed part describes the void, and every number after it
     // is about the void. That has to be visible in the answer, not in the source.

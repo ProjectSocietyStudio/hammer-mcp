@@ -11,6 +11,9 @@ import { readEntities } from "../vmf/edit.js";
 import type { Vec3 } from "../vmf/solid.js";
 import { resolveInput } from "./paths.js";
 
+/** How far a spawn entity's origin is lifted to find the air above the floor it sits on. */
+const SPAWN_LIFT = 16;
+
 const cache = new Map<string, { source: string; scene: Scene }>();
 
 function sceneFor(path: string): { scene: Scene; source: string } {
@@ -44,10 +47,24 @@ function seedsFor(source: string, scene: Scene, given?: number[][]): { seeds: Ve
     const parts = pair.value.trim().split(/\s+/).map(Number);
     if (parts.length === 3 && parts.every(Number.isFinite)) {
       // Lifted clear of the floor the entity is usually sitting on.
-      spawns.push([parts[0]!, parts[1]!, parts[2]! + 16]);
+      spawns.push([parts[0]!, parts[1]!, parts[2]! + SPAWN_LIFT]);
     }
   }
-  if (spawns.length > 0) return { seeds: spawns, note: null };
+  if (spawns.length > 0) {
+    // Said rather than done quietly. The lift is right -- a spawn sits on the floor and
+    // the flood needs a point in the air above it -- but the output reported the moved
+    // point as though it were the given one, so a reader comparing the two saw a number
+    // they did not write and no reason for it. On a map with a low mezzanine that 16 units
+    // is the difference between seeding the space you meant and the one above it
+    // (issue #58).
+    return {
+      seeds: spawns,
+      note:
+        `Flooded from ${spawns.length} spawn entit${spawns.length === 1 ? "y" : "ies"}, each ` +
+        `lifted ${SPAWN_LIFT} units above its origin: a spawn sits on the floor and the ` +
+        `flood needs a point in the air. Pass 'seeds' to place them yourself.`,
+    };
+  }
 
   const middle: Vec3 = [
     (scene.mins[0] + scene.maxs[0]) / 2,
