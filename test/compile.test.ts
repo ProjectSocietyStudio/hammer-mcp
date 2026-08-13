@@ -117,6 +117,44 @@ describe("pointfile correlation", () => {
   it("says a missing pointfile probably means no leak", () => {
     expect(() => readPointfile(join(scratch, "absent.lin"))).toThrow(/did not leak/);
   });
+
+  /**
+   * The reader above is right to throw -- it was handed a path and the file is not there.
+   * The *tool* is a different question, and it used to pass that throw straight on, so
+   * confirming a map was sealed came back as `read_leak failed: … does not exist`. An
+   * agent that treats tool errors as failures reads *this map is sealed* as *this step
+   * broke*, which is what happened while building hmcp_bodega.
+   */
+  describe("read_leak on a map that did not leak", () => {
+    it("answers, rather than failing, when a .bsp is there and no pointfile is", async () => {
+      const map = join(scratch, "clean.vmf");
+      writeFileSync(map, "");
+      writeFileSync(join(scratch, "clean.bsp"), "");
+
+      const r = (await readLeak.handler({ path: map, limit: 5 }, ctx)) as {
+        leaked: boolean;
+        compiled: boolean;
+        note: string;
+      };
+      expect(r.leaked).toBe(false);
+      expect(r.compiled).toBe(true);
+      // No hedge: a .bsp beside no pointfile is evidence, not a guess.
+      expect(r.note).not.toMatch(/usually|probably/i);
+    });
+
+    it("says nothing has compiled the map, rather than that it did not leak", async () => {
+      const map = join(scratch, "never-built.vmf");
+      writeFileSync(map, "");
+
+      const r = (await readLeak.handler({ path: map, limit: 5 }, ctx)) as {
+        leaked: boolean;
+        compiled: boolean;
+        note: string;
+      };
+      expect(r.compiled).toBe(false);
+      expect(r.note).toMatch(/nothing here has compiled/i);
+    });
+  });
 });
 
 describe("the Hammer++ compilers say the same things", () => {

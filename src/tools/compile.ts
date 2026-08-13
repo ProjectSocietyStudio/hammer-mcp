@@ -237,7 +237,9 @@ export const readLeak = defineTool({
     "beside the map: this reads it and names the entities nearest to where the path " +
     "starts, which is the entity that can see the void. Pass the .lin, or the .vmf or " +
     ".bsp beside it. Both ends of the path are correlated, because vbsp does not " +
-    "guarantee which end holds the entity -- on a two-point pointfile it was the last.",
+    "guarantee which end holds the entity -- on a two-point pointfile it was the last. " +
+    "No pointfile is an ANSWER, not an error: it returns leaked:false, and `compiled` " +
+    "tells a map that did not leak from one nothing has compiled here.",
   realm: "map",
   inputSchema: {
     path: z.string().describe("The .lin pointfile, or the .vmf/.bsp it sits beside."),
@@ -245,11 +247,23 @@ export const readLeak = defineTool({
   },
   outputSchema: {
     pointfile: z.string(),
-    pointCount: z.number(),
-    start: z.array(z.number()),
-    end: z.array(z.number()),
-    spanUnits: z.number(),
-    correlatedAgainst: z.string().nullable(),
+    /**
+     * False when there is no pointfile, which is the answer and not a failure.
+     *
+     * This tool used to pass `readPointfile`'s throw straight through, so confirming that
+     * a map was sealed came back as `read_leak failed: <map>.lin does not exist`. A caller
+     * that treats a tool error as a broken step reads a sealed map as a broken step, and
+     * one did, while building `hmcp_bodega` on 13/08/2026.
+     */
+    leaked: z.boolean(),
+    /** Whether anything compiled this map here at all -- what tells the two no-leaks apart. */
+    compiled: z.boolean(),
+    note: z.string(),
+    pointCount: z.number().optional(),
+    start: z.array(z.number()).optional(),
+    end: z.array(z.number()).optional(),
+    spanUnits: z.number().optional(),
+    correlatedAgainst: z.string().nullable().optional(),
     nearestToStart: z.array(
       z.object({
         index: z.number(),
@@ -259,7 +273,7 @@ export const readLeak = defineTool({
         origin: z.array(z.number()),
         distanceUnits: z.number(),
       }),
-    ),
+    ).optional(),
     nearestToEnd: z.array(
       z.object({
         index: z.number(),
@@ -269,7 +283,7 @@ export const readLeak = defineTool({
         origin: z.array(z.number()),
         distanceUnits: z.number(),
       }),
-    ),
+    ).optional(),
     leakingEntity: z
       .object({
         index: z.number(),
@@ -280,19 +294,45 @@ export const readLeak = defineTool({
         distanceUnits: z.number(),
         atEnd: z.boolean(),
       })
-      .nullable(),
-    points: z.array(z.object({ point: z.array(z.number()), index: z.number() })),
+      .nullable()
+      .optional(),
+    points: z.array(z.object({ point: z.array(z.number()), index: z.number() })).optional(),
   },
   handler: async (args, ctx) => {
     const given = resolveInput(args.path, ctx.config);
     const stem = join(dirname(given), basename(given, extname(given)));
     const pointfile = extname(given).toLowerCase() === ".lin" ? given : `${stem}.lin`;
+    const bsp = `${stem}.bsp`;
+    const vmf = `${stem}.vmf`;
+
+    // No pointfile is an answer, not a failure. vbsp writes one when it leaks and not
+    // otherwise, so what is missing here is the leak -- and a caller asking "did this
+    // leak?" should be told no, rather than handed an error to interpret.
+    //
+    // The .bsp is what removes the hedge this message used to carry. A compile that
+    // produced a .bsp and no pointfile did not leak; nothing beside the map at all means
+    // nothing has compiled it here, which is a different answer and used to read as the
+    // same one.
+    if (!existsSync(pointfile)) {
+      const compiled = existsSync(bsp);
+      return {
+        pointfile,
+        leaked: false,
+        compiled,
+        note: compiled
+          ? `No pointfile beside this map, and ${bsp} is there. vbsp writes a .lin when it ` +
+            `leaks and does not otherwise, so the compile that produced that .bsp did not leak.`
+          : `No pointfile and no .bsp beside this map: nothing here has compiled it, so there ` +
+            `is nothing to say about whether it leaks. run_compile with stages ["vbsp"] ` +
+            `answers that, and read_vmf_leak answers it without a compiler at all.`,
+        leakingEntity: null,
+      };
+    }
+
     const points = readPointfile(pointfile);
 
     // Entities come from whichever companion file exists: the .bsp if the map compiled
     // far enough to produce one, otherwise the .vmf through the sidecar.
-    const bsp = `${stem}.bsp`;
-    const vmf = `${stem}.vmf`;
     let entities;
     let correlatedAgainst: string | null = null;
 
@@ -329,7 +369,14 @@ export const readLeak = defineTool({
 
     return {
       ...locateLeak(pointfile, points, entities, args.limit),
+      leaked: true,
+      compiled: existsSync(bsp),
       correlatedAgainst,
+      note:
+        `${pointfile} is there, so the last compile leaked. The path runs from an entity ` +
+        `that can see the void to the void itself; leakingEntity is this toolkit's best ` +
+        `guess at which end holds the entity, and both ends are reported because vbsp does ` +
+        `not guarantee it.`,
     };
   },
 });
