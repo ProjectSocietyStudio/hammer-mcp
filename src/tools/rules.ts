@@ -30,7 +30,8 @@ export const checkVmfRulesTool = defineTool({
     "rules file means NO checking, not checking against something reasonable. It REPORTS: " +
     "the writing tools do not consult it and must not, because a mapper may want a narrow " +
     "alley. Every violation carries the worst point, so render_vmf_view or render_vmf_plan " +
-    "can be pointed straight at it.",
+    "can be pointed straight at it. Read `overall`, not `errorCount`: a run in which some " +
+    "rule matched nothing comes back 'skipped', never 'pass'.",
   realm: "map",
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
@@ -53,6 +54,16 @@ export const checkVmfRulesTool = defineTool({
   outputSchema: {
     path: z.string(),
     rulesPath: z.string(),
+    /**
+     * One word for the whole run, in `read_map_report`'s vocabulary.
+     *
+     * `errorCount: 0` means three different things -- every rule checked and passed, no
+     * rules file at all, or some rules that matched nothing -- and a caller reading the
+     * count alone cannot tell them apart. One did not: on 13/08/2026 an agent building a
+     * map read zero errors on a run where one rule in seven had checked nothing, and
+     * took it for compliance.
+     */
+    overall: z.enum(["pass", "warn", "fail", "skipped"]),
     rulesFound: z.boolean(),
     rulesChecked: z.number(),
     matchedNothing: z.array(z.string()),
@@ -84,6 +95,7 @@ export const checkVmfRulesTool = defineTool({
       return {
         path,
         rulesPath,
+        overall: "skipped" as const,
         rulesFound: false,
         rulesChecked: 0,
         matchedNothing: [],
@@ -117,9 +129,23 @@ export const checkVmfRulesTool = defineTool({
           );
     const sorted = [...wanted].sort((a, b) => order[a.severity] - order[b.severity]);
 
+    // `skipped` outranks `warn` on purpose. A warning is a finding this run stands
+    // behind; an unmatched rule is a hole in the run itself, and a caller told "warn"
+    // would believe everything else had been judged. `fail` outranks both: a violation
+    // that stands is the answer whatever else was incomplete.
+    const overall =
+      report.errorCount > 0
+        ? ("fail" as const)
+        : report.matchedNothing.length > 0 || report.checked === 0
+          ? ("skipped" as const)
+          : report.warningCount > 0
+            ? ("warn" as const)
+            : ("pass" as const);
+
     return {
       path,
       rulesPath,
+      overall,
       rulesFound: true,
       rulesChecked: report.checked,
       matchedNothing: report.matchedNothing,

@@ -41,6 +41,7 @@ const writeRules = (name: string, rules: unknown): string => {
 };
 
 interface Report {
+  overall: "pass" | "warn" | "fail" | "skipped";
   rulesFound: boolean;
   rulesChecked: number;
   errorCount: number;
@@ -229,6 +230,66 @@ describe("checking a map against its rules", () => {
     ]));
     expect(r.matchedNothing).toEqual(["ghost"]);
     expect(r.notes.join(" ")).toMatch(/matched nothing/);
+  });
+
+  /**
+   * The three ways a run ends with no errors are not the same answer, and for one session
+   * of real map building they were indistinguishable: a cold agent read `errorCount: 0`
+   * on a map where one rule in seven had matched nothing, and took it for compliance.
+   *
+   * `read_map_report` already refuses this -- "a run that judged nothing comes back
+   * skipped, never pass". These give the same discipline to the rules check.
+   */
+  describe("the overall verdict", () => {
+    it("is pass only when every rule was checked and none failed", () => {
+      const r = check(writeRules("all-good.json", [
+        { id: "easy", what: "circulation_width", select: { room: "*" }, min: 1 },
+      ]));
+      expect(r.errorCount).toBe(0);
+      expect(r.matchedNothing).toEqual([]);
+      expect(r.overall).toBe("pass");
+    });
+
+    it("is skipped, not pass, when a rule matched nothing", () => {
+      const r = check(writeRules("half.json", [
+        { id: "easy", what: "circulation_width", select: { room: "*" }, min: 1 },
+        { id: "ghost", what: "headroom", select: { classname: "func_nonexistent" }, min: 96 },
+      ]));
+      expect(r.errorCount).toBe(0);
+      expect(r.matchedNothing).toEqual(["ghost"]);
+      expect(r.overall).toBe("skipped");
+    });
+
+    it("is skipped when there is no rules file at all", () => {
+      const r = check(join(dir, "absent.json"));
+      expect(r.rulesFound).toBe(false);
+      expect(r.overall).toBe("skipped");
+    });
+
+    it("is warn when the only findings are warnings", () => {
+      const r = check(writeRules("only-warn.json", [
+        {
+          id: "narrow",
+          what: "circulation_width",
+          select: { room: "*" },
+          min: 9999,
+          severity: "warning",
+        },
+      ]));
+      expect(r.errorCount).toBe(0);
+      expect(r.warningCount).toBeGreaterThan(0);
+      expect(r.overall).toBe("warn");
+    });
+
+    it("is fail as soon as one error violation stands, unmatched rules or not", () => {
+      const r = check(writeRules("bad.json", [
+        { id: "impossible", what: "circulation_width", select: { room: "*" }, min: 9999 },
+        { id: "ghost", what: "headroom", select: { classname: "func_nonexistent" }, min: 96 },
+      ]));
+      expect(r.errorCount).toBeGreaterThan(0);
+      expect(r.matchedNothing).toEqual(["ghost"]);
+      expect(r.overall).toBe("fail");
+    });
   });
 
   it("sorts errors before warnings and can filter to errors alone", () => {
