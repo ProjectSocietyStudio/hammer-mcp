@@ -420,6 +420,14 @@ node dist/index.js install  # declares the server in <repoRoot>/.mcp.json
 **Nothing throws when a prerequisite is missing** — run `health` and it says exactly what is
 absent and what that costs you.
 
+⚠️ **After pulling, rebuild *and* reconnect.** `.mcp.json` points at `dist/`, which is
+gitignored, so a checkout that has not been built serves the tool list of whatever was built
+last — silently, with no error and no warning. Reconnecting matters just as much: a client
+holds the tool list it was handed when it connected. `health` reports both halves under
+`tools`: how many tools this server is serving, and whether its build is older than the
+source. On 13/08/2026 this cost twelve tools and forty minutes —
+[the finding](docs/dogfood/2026-08-13-bodega/findings.md#1--the-server-was-serving-a-build-twelve-tools-old-and-nothing-said-so).
+
 | | Needed for | If missing |
 |---|---|---|
 | Node ≥ 20 | everything | nothing starts |
@@ -447,7 +455,7 @@ from and whether a file was read; `health` reports it. See
 
 | Tool | Realm | Guarded | What it does |
 |---|---|---|---|
-| `health` | `local` | | State of the toolchain: game profile, binaries, FGDs, Wine, sidecar |
+| `health` | `local` | | State of the toolchain: game profile, binaries, FGDs, Wine, sidecar — and how many tools this build serves, and whether it is older than the source |
 | `read_source_games` | `local` | | Source games installed here, read from Steam and from `gameinfo.txt` |
 | `read_bsp_info` | `map` | | Header of a `.bsp`: ident, version, mapRevision, all 64 lumps, and whether vrad produced HDR |
 | `read_bsp_entities` | `map` | | Entities of lump 0, filtered and paginated, with a classname histogram |

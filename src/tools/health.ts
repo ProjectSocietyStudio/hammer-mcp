@@ -1,11 +1,24 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { toolchainDir } from "../compile/wine.js";
 import { allGames, gameFor } from "../games/resolve.js";
 import { defineTool } from "../mcp/registry.js";
 import { run } from "../proc/run.js";
 import { probeSidecar } from "../sidecar/client.js";
-import { VERSION } from "../version.js";
+import { buildFreshness, VERSION } from "../version.js";
+
+/**
+ * Where this file is running from, and the source tree that should sit beside it.
+ *
+ * Compiled, this module is `dist/tools/health.js`, so the build root is two levels up and
+ * `src/` is its sibling. Run from source under tsx the same arithmetic lands on a `src/src`
+ * that does not exist, and `buildFreshness` reports that nothing was compared -- which is
+ * the honest answer for a tree with no build to be stale.
+ */
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILD_DIR = join(HERE, "..");
+const SRC_DIR = join(BUILD_DIR, "..", "src");
 
 /** The Source tools this server drives, all of them Windows binaries. */
 const BINARIES = ["hammer.exe", "vbsp.exe", "vvis.exe", "vrad.exe", "vbspinfo.exe"];
@@ -34,7 +47,9 @@ export const health = defineTool({
     "State of the toolchain this server depends on: repo root, the GMod bin directory " +
     "(which ships with the client, not with srcds), which compilers and .fgd files are " +
     "present, whether the Wine or Proton backend can be executed, and whether the Python " +
-    "sidecar (srctools) is installed. Start here when a tool reports something missing.",
+    "sidecar (srctools) is installed. Also how many tools this server is serving and " +
+    "whether its build is older than the source -- a stale build silently offers fewer " +
+    "tools. Start here when a tool reports something missing, or is missing itself.",
   realm: "local",
   inputSchema: {},
   handler: async (_args, ctx) => {
@@ -65,6 +80,15 @@ export const health = defineTool({
 
     return {
       version: VERSION,
+      // How many tools this server is actually serving, and whether the build it is
+      // serving them from is older than the source. A stale build is silent: it does not
+      // throw, it just offers fewer tools, and every symptom reads as a missing feature.
+      tools: {
+        // Null rather than 0 when no registry was handed in: a caller reading zero would
+        // conclude the server serves nothing, which is a different and wrong diagnosis.
+        count: ctx.registry?.list().length ?? null,
+        build: buildFreshness(BUILD_DIR, SRC_DIR),
+      },
       repoRoot: config.repoRoot,
       stateDir: config.stateDir,
       auditLog: ctx.audit.path,
