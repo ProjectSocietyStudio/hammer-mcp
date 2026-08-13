@@ -399,3 +399,106 @@ somebody gets it right.
 That is the shape of this whole exercise in one finding: using the thing surfaced something
 no amount of reading the code would have, and the honest account of it is worth more than a
 green test bought by asserting the wrong answer.
+
+---
+
+# Round 2 — the same brief, the fixed toolkit
+
+Same brief, byte for byte. Same instructions. **The skills were deliberately left untouched**,
+still a wave behind, so that this round measures the tool changes and nothing else.
+
+## What it cost
+
+| | Round 1 | Round 2 |
+|---|---|---|
+| MCP calls | 53 | **51** |
+| logged failures | 2 | **1** |
+| hand-edits forced | **1** | **0** |
+| worst repeated identical call | **9×** `read_vmf_rooms` | 2× |
+| `read_vmf_rooms` calls | 12 | 11 |
+| brushes · entities | 18 · 8 | 14 · 8 |
+
+The call count barely moved, and that is the honest headline. What moved is the *shape* of the
+session.
+
+**The forced hand-edit is gone.** `write_vmf` was called once, worked, and the map was built
+end to end through tools alone — the exercise's central rule held for the first time. The one
+logged failure is not the old gap: it is an `ENOENT` from a path the builder mistyped
+(`project-société`, with an accent it invented). Which is its own small finding — a mistyped
+path and a missing file return the same raw errno, and neither says which.
+
+**The nine identical calls are gone.** In round 1 `read_vmf_rooms` was called nine times with
+byte-identical arguments: the same question, over and over, because the answer never said why.
+In round 2 nothing repeats more than twice, and the builder used `merges` to reason with
+rather than re-asking. That is the clearest evidence that reporting the merges was worth
+doing.
+
+**Every fix was exercised, and each behaved as designed.** `write_vmf` created the map.
+`read_leak` answered `leaked: false` rather than erroring. `check_vmf_rules` returned
+`overall: "skipped"` rather than a false pass — and the builder read it correctly and refused
+to claim a green the default arguments do not produce. `read_vmf_rooms` reported its merges
+with both numbers.
+
+## The finding that replaces the old one
+
+Round 1's most expensive obstacle was that two rooms read as one and nothing said why. Round 2
+hit the same wall for a completely different reason, and this one is worse.
+
+**The room pass finds the map's two rooms at exactly one cell size, and it is not the
+default.** Measured on the round 2 map, 13/08/2026:
+
+| `step` | rooms | portals |
+|---|---|---|
+| 8 | 1 | 0 |
+| **16** (the default) | **1** | **0** |
+| **32** | **2** | **1** |
+| 64 | 1 | 0 |
+
+The response is **not monotone**. There is a single working value with lower and higher
+neighbours that both fail, so no amount of "try finer" or "try coarser" converges — and the
+parameter's own description points the wrong way: *"16 is the coarsest that resolves a 32-unit
+doorway"* reads as an argument for going finer, which here makes it worse (`mergeCount` climbs
+from 10 to 17 as the field fragments).
+
+The builder rebuilt the geometry four times chasing this — divider 32 → 64 → 96 units,
+shelving moved, storeroom deepened, doorway narrowed and re-aligned — before finding that none
+of it was necessary and one parameter was. In its own words: *"all of the geometry churn it
+caused was wasted work"*.
+
+So the room finder cost two thirds of both sessions, for two different reasons, and the second
+is a sharper statement of the same underlying defect as [#48](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/48):
+**the segmentation is a fact about the grid rather than about the map.** Round 1 showed it
+varies with cell *order*; round 2 shows it varies with cell *size*, non-monotonically. Neither
+is a property a reader can reason about.
+
+## The new findings
+
+| | Class | Where |
+|---|---|---|
+| 10 · the room pass segments at one cell size, non-monotonically | **bug** | [#53](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/53) |
+| 11 · `check_vmf_rules` does not say what segmentation it used | **ergonomics** | [#54](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/54) |
+| 12 · `measure_vmf_clearance` returns a confident wrong number for a point the hull cannot occupy | **bug** | [#55](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/55) |
+| 13 · a sightline violation does not say what height it traced at | **ergonomics** | [#56](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/56) |
+| 14 · `write_vmf_solid` gives every face of a brush the same material | **gap** | [#57](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/57) |
+| 15 · a seed point is silently moved, and the output does not say why | **ergonomics** | [#58](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/58) |
+
+Finding 12 is the one the builder itself flagged as most wanting a fix: measuring at a height
+where the standing hull is buried in the floor returned `widthUnits: 32` — exactly the hull's
+own footprint — with `insideSolid: false` and a bound naming no brush at distance 0. A
+confident wrong number, indistinguishable from a real narrow passage. It is the same class of
+error as the `standingAt` bug that `check_vmf_rules` was built on top of, in a tool that
+does not go through `standingAt`.
+
+## What the exercise is worth, after two rounds
+
+Nine findings in round one, six more in round two, of which eleven are fixed. The two rounds
+cost about the same number of calls, which is the least interesting number on this page: what
+changed is that round 2's session was spent on the map's real problem rather than on the
+toolkit's, and that its remaining obstacle is a single, sharply stated defect rather than a
+fog.
+
+The measurement also justified its own method twice over. The audit log caught the nine
+identical calls, which no friction log would have recorded as remarkable — a builder does not
+notice it is repeating itself. And the friction log caught the round-2 `step` finding, which
+the audit log shows only as eleven `read_vmf_rooms` calls with varying arguments and no
+indication that ten of them were wasted.
