@@ -7,6 +7,19 @@ import { ctx as sharedCtx, has } from "./support/env.js";
 const ctx = sharedCtx as unknown as ToolContext;
 const ready = has.sidecar && has.gameContent;
 
+/**
+ * These search the game's own VPKs through the Python sidecar, and one of them does it
+ * three times. Vitest's default 5 s does not describe that work: on an idle machine the
+ * file takes 16 s across fourteen tests, and under any load at all -- a `pnpm build` in the
+ * same shell was enough -- the three-search case crossed the line at 5013 ms and went red.
+ *
+ * A flake nobody wrote down becomes a mystery, and a suite that fails for a reason unrelated
+ * to the change under test is worse than a slow one. So the bound is stated, and it is
+ * generous on purpose: it exists to catch a hang, not to police a duration nothing here
+ * promises.
+ */
+const VPK_SEARCH_TIMEOUT = 30_000;
+
 interface SearchReply {
   mounted: boolean;
   total: number;
@@ -45,7 +58,7 @@ describe("read_game_content", () => {
     expect(r.mounted).toBe(true);
     expect(r.total).toBeGreaterThan(0);
     expect(r.results.map((x) => x.path)).toContain("materials/brick/brickwall001a.vmt");
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("returns the name in the form a .vmf stores, not the path", async () => {
     // The whole point of the tool: what comes out here goes straight into
@@ -53,7 +66,7 @@ describe("read_game_content", () => {
     const r = await search({ pattern: "brickwall001a" });
     const hit = r.results.find((x) => x.path === "materials/brick/brickwall001a.vmt")!;
     expect(hit.name).toBe("BRICK/BRICKWALL001A");
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("treats a bare word as a substring and a starred one as a glob", async () => {
     // The glob must actually find something. Asserting only that it finds fewer than the
@@ -69,7 +82,7 @@ describe("read_game_content", () => {
     // `brickwall00?a` finds 001a and 003a, and no path contains that literal text.
     const middle = await search({ pattern: "brickwall00?a" });
     expect(middle.total).toBeGreaterThan(1);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("says how many it found, not only how many it returned", async () => {
     // A truncated list that reports its own length as the total is how a caller concludes
@@ -79,7 +92,7 @@ describe("read_game_content", () => {
     expect(r.shown).toBe(2);
     expect(r.total).toBeGreaterThan(2);
     expect(r.truncated).toBe(true);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("reads the shader only when asked, and marks tool textures", async () => {
     const plain = await search({ pattern: "brickwall001a" });
@@ -91,19 +104,19 @@ describe("read_game_content", () => {
 
     const tool = await search({ pattern: "tools/toolsnodraw", details: true });
     expect(tool.results[0]!.toolTexture).toBe(true);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("finds models as well as materials", async () => {
     const r = await search({ pattern: "props_c17/oildrum001", kind: "model" });
     expect(r.results.map((x) => x.path)).toContain("models/props_c17/oildrum001.mdl");
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("returns nothing, and says nothing is there, for a name that is not", async () => {
     const r = await search({ pattern: "no_such_material_anywhere_12345" });
     expect(r.mounted).toBe(true);
     expect(r.total).toBe(0);
     expect(r.results).toEqual([]);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 });
 
 describe("a game profile that is not installed", () => {
@@ -139,32 +152,32 @@ describe("read_model_info", () => {
     expect(r.size![2]).toBeCloseTo(45.562, 2);
     expect(r.mins![2]).toBeLessThan(0);
     expect(r.maxs![2]).toBeGreaterThan(0);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("adds the prefix and the suffix a caller left off", async () => {
     const bare = await info("props_c17/oildrum001");
     const full = await info("models/props_c17/oildrum001.mdl");
     expect(bare.model).toBe("models/props_c17/oildrum001.mdl");
     expect(bare.size).toEqual(full.size);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("lists the skins and materials a mapper chooses between", async () => {
     const r = await info("props_c17/oildrum001");
     expect(r.skinCount).toBe(6);
     expect(r.materials!.length).toBeGreaterThan(0);
     expect(r.materials![0]).toMatch(/^materials\/models\//);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("names its sequences rather than dumping their internals", async () => {
     // srctools reprs a Sequence with its bounding box and its event list, a few hundred
     // characters each, answering a question nobody asked.
     const r = await info("props_c17/oildrum001");
     expect(r.sequences).toEqual(["idle"]);
-  });
+  }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("says a model is absent instead of failing", async () => {
     const r = await info("models/nope/nope.mdl");
     expect(r.found).toBe(false);
     expect(r.size ?? null).toBeNull();
-  });
+  }, VPK_SEARCH_TIMEOUT);
 });
