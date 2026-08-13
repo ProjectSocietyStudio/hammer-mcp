@@ -300,7 +300,7 @@ tool that *judges* against it can never be run at the same settings.
 
 ## 9 — The audit log cannot see the failure of finding 2
 
-**Class: gap**, in the instrumentation · [**#52**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/52) — **fixed in `mcp-core`, not yet here**
+**Class: gap**, in the instrumentation · [**#52**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/52) — **fixed**
 
 The round-1 window of `.hammer-mcp/logs/audit.jsonl` records `edit_vmf` three times, **zero
 errors** — while the builder was hitting a hard MCP error on one of those calls. The handler
@@ -365,9 +365,17 @@ which the skills describe. Round 2, on updated skills, is what will actually tes
 | 6 · a counter top is a room | bug | fixed — a place no walk reaches is reported apart from the rooms |
 | 7 · `read_leak` answering through the error channel | ergonomics | fixed — and the hedge replaced with evidence |
 | 8 · the two room tools could not agree | ergonomics | fixed — they share `minRoomArea` |
-| 9 · the audit log could not see finding 2 | gap | fixed in `mcp-core`; reaches this repo at its next release |
+| 9 · the audit log could not see finding 2 | gap | fixed in `mcp-core` 0.2.0, released and consumed here |
 
-Six fixed here, one fixed upstream, one half open. The suite went from 847 tests to 875.
+Six fixed here, one fixed upstream and since released, one half open. The suite went from 847
+tests to 889.
+
+The instrumentation fix is worth one more line, because it closes the loop this exercise
+opened. Proved on a live server rather than in a unit test: a handler that succeeds and then
+fails its own output schema is now recorded `ok: false`, `handlerRan: true`, with the duration
+and a message that says not to retry. The round-1 log said `edit_vmf`, three calls, zero
+errors, while the builder was staring at a hard protocol error on one of them. It no longer
+can.
 
 ## The one that is still open, and why it is the interesting one
 

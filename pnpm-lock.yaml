@@ -12,8 +12,8 @@ importers:
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
       '@projectsociety/mcp-core':
-        specifier: ^0.1.0
-        version: 0.1.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(zod@3.25.76)
+        specifier: ^0.2.0
+        version: 0.2.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(zod@3.25.76)
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -353,8 +353,8 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  '@projectsociety/mcp-core@0.1.0':
-    resolution: {integrity: sha512-hva7uJCCbP+fdnUPnjd97W+/V5eNqruDpGi0MyrkLEe+DE3Zz1V386XOeSkBqI8aq5z3Ms7PeNDWVBAthDBx5Q==}
+  '@projectsociety/mcp-core@0.2.0':
+    resolution: {integrity: sha512-aEF8VOHxjP4Evp8eyypWEw8aW2PB/avb9pgqzqCkTA6Ul1xCMYnzmR/sUOverEGn/GFJ5lub1HE4ULwmHXmYDw==}
     engines: {node: '>=20'}
     peerDependencies:
       '@modelcontextprotocol/sdk': '>=1.30.0 <2'
@@ -1252,7 +1252,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@projectsociety/mcp-core@0.1.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(zod@3.25.76)':
+  '@projectsociety/mcp-core@0.2.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(zod@3.25.76)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
       zod: 3.25.76
