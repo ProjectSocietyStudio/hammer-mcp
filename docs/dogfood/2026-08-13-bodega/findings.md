@@ -211,3 +211,141 @@ The tool description now says to read `overall` rather than `errorCount`.
 Sabotage, each killing its own test alone: making `matchedNothing` stop demoting the verdict
 killed *is skipped, not pass, when a rule matched nothing*; making errors stop forcing `fail`
 killed *is fail as soon as one error violation stands*.
+
+---
+
+## 4 — Nothing creates a `.vmf`, so a pure-MCP workflow cannot start
+
+**Class: gap** · the one rule of the exercise that had to be broken · **filed**
+
+`write_vmf_solid` on a path that does not exist:
+
+```
+write_vmf_solid failed: ENOENT: no such file or directory, open '…/hmcp_bodega.vmf'
+```
+
+A raw Node errno, and nothing about what to do next. `src/tools/build.ts:140` reads the file
+unconditionally, and `insertSolids` refuses a file with no `world` block — so even an empty
+file would not serve. All sixty-nine tools were enumerated: **none creates a `.vmf`.**
+
+The builder broke the no-hand-edit rule exactly once, to write a skeleton of `versioninfo`,
+`visgroups`, `viewsettings`, an empty `world`, `cameras` and `cordons`, with no solids and no
+entities. Everything after that went through a tool. It flagged the breach rather than hiding
+it, which is the right call — but the exercise's central constraint could not be honoured,
+and that is a finding about the toolkit, not about the builder.
+
+This is the highest-value gap on the page: every other finding cost time, and this one makes
+the advertised workflow impossible to complete without a text editor.
+
+## 5 — Two rooms read as one, and no output says why
+
+**Class: gap** · the single most expensive obstacle of the session · **filed**
+
+A 64-wide doorway between two 384-wide rooms, and `read_vmf_rooms` returned
+`{"roomCount": 1, "portals": []}` — so `{"room": "*"}` matched one thing and
+`{"portal": "*"}` matched nothing.
+
+The cause, found by reading `src/space/rooms.ts:345-367` rather than by any output: regions
+merge when the clearance across their boundary reaches the smaller of their two peaks, and
+`peak` is indexed by the union-find root, which is `min(index)`. So a **dead-end nook with a
+low cell index**, once absorbed into a large room, keeps its own tiny peak for the rest of the
+pass — and then bridges through the doorway to the next room. A free-standing shelf island did
+it. So did a counter stopping 32 units short of a wall, leaving a 32 × 32 corner.
+
+Which means: **the shop's furniture layout was dictated by a watershed implementation detail.**
+Shelving flush to the west wall, counter run all the way to the south wall — not design
+decisions, concessions, and none of them discoverable from any tool's output.
+
+What would have collapsed four hours into one call, in the builder's own words: for each pair
+of regions it merged, `read_vmf_rooms` reporting the reason and the cell —
+`merged region 3 into 0: through=2 >= min(peak)=2 at [368,16]`. The algorithm has that in
+hand at the moment it decides; it simply does not say it.
+
+## 6 — A counter top is a room, and no rule can ever pass on it
+
+**Class: bug** · **filed**
+
+A 40-unit counter produced `room 1: headroom is 104 units` and
+`room 1: room area is 6912 square units`, both at `[304,48,48]` — the top of the counter. It
+reports `connectsTo: []`, so the `minRoomArea` merge can never absorb it, and shrinking the
+counter below the 4096 threshold did not stop it being reported. A counter top is 104 units of
+headroom and 4 m² by construction: **no room rule can pass on it, ever.**
+
+Worked around by reading `src/space/voxel.ts:41` — `STANDING_CELLS = ceil(72 / step)` — and
+making every piece of furniture 80 units tall so that only 64 remain to the ceiling and no top
+is standable at step 16 or step 8. A real constraint dressed as a style choice.
+
+## 7 — `read_leak` delivers the good news through the error channel
+
+**Class: ergonomics** · **filed**
+
+Confirming on the compiled `.bsp` that vbsp agreed the map was sealed:
+
+```
+read_leak failed: …/hmcp_bodega.lin does not exist. vbsp writes it beside the map when
+it leaks, so no pointfile usually means the last compile did not leak.
+```
+
+The sentence is right and it is the answer. But it arrives as a tool failure, so a caller that
+treats errors as failures reads *this map is sealed* as *this step broke* — and "usually"
+hedges the one thing being confirmed.
+
+## 8 — `read_vmf_rooms` and `check_vmf_rules` cannot be made to agree
+
+**Class: ergonomics** · **filed**
+
+`read_vmf_rooms` exposes `minRoomArea`; `check_vmf_rules`, which calls it, does not — it takes
+`step`, `maxCells` and `seeds` only. So the tool used to *diagnose* a segmentation and the
+tool that *judges* against it can never be run at the same settings.
+
+## 9 — The audit log cannot see the failure of finding 2
+
+**Class: gap**, in the instrumentation · **filed**
+
+The round-1 window of `.hammer-mcp/logs/audit.jsonl` records `edit_vmf` three times, **zero
+errors** — while the builder was hitting a hard MCP error on one of those calls. The handler
+succeeded, so `tool_result` was recorded `ok: true`; the SDK's output-schema validation then
+turned the result into an error, downstream of anything the log sees.
+
+The method for this exercise said the instrumentation would not be touched before round 1, and
+that if the reading suffered for it that would be the first *measured* defect. It did, and this
+is it: the objective half of the measurement missed the session's most dangerous bug entirely,
+and only the builder's own log caught it.
+
+---
+
+## The round-1 numbers
+
+The baseline round 2 will be compared against. From the audit window, 53 MCP calls:
+
+| Tool | Calls | Logged failures |
+|---|---|---|
+| `write_vmf_solid` | 14 | 1 |
+| `read_vmf_rooms` | 12 | |
+| `delete_solids` | 5 | |
+| `read_game_content` | 4 | |
+| `edit_vmf` | 3 | 0 *(see finding 9)* |
+| `check_vmf_rules` | 3 | |
+| `read_vmf`, `read_vmf_leak`, `transform_solids` | 2 each | |
+| `health`, `set_solid_class`, `read_vmf_lint`, `run_compile`, `render_vmf_plan` | 1 each | |
+| `read_leak` | 1 | 1 *(see finding 7)* |
+
+**53 calls · 2 logged failures · one hand-edit forced.** The twelve `read_vmf_rooms` calls
+against one `render_vmf_plan` are finding 5 in one line: a third of the session spent asking
+the same question because the answer never said why.
+
+The map reached all three greens: sealed by `read_vmf_leak` and by the compiler, 7/7 rules with
+nothing unmatched, and vbsp/vvis/vrad all exiting 0. 18 brushes, 8 entities, 416 × 576 × 176
+units.
+
+## What the prediction was worth
+
+Round 0 predicted that the builder would use none of the tools missing from the skills. It used
+`read_vmf_leak`, `check_vmf_rules`, `read_vmf_rooms` and `render_vmf_plan` — so the prediction
+is refuted, and it deserved to be: **the brief named three of those tools by name** in its "Done"
+section. The prediction was untestable as written, and stating it that way was the error.
+
+What survives is narrower and still worth having: the builder used `render_vmf_plan` **once**,
+never called `render_vmf_view`, and reached for none of `measure_vmf_clearance`,
+`measure_vmf_approach` or `read_vmf_surfaces` — none of which the brief mentions and none of
+which the skills describe. Round 2, on updated skills, is what will actually test it.
