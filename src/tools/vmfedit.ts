@@ -126,7 +126,13 @@ export const editVmf = defineTool({
 
     return {
       path,
-      dryRun: args.dryRun,
+      // `?? false`, and not for tidiness. `dryRun` is optional with no default, so a
+      // caller who simply leaves it out hands the handler `undefined` -- while this
+      // tool's output schema declares `dryRun` a required boolean. The SDK validates
+      // the result and turns the whole call into `Output validation error: Required at
+      // dryRun`, *after* the file has been written. The error is survivable; the retry
+      // it invites is not, because it applies every operation a second time.
+      dryRun: args.dryRun ?? false,
       written: shouldWrite,
       backupPath,
       unchanged: result.unchanged,

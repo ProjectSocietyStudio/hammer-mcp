@@ -1,3 +1,5 @@
+import { copyFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -62,6 +64,51 @@ describe("declared output schemas match what the handlers return", () => {
     );
     expect(() => z.object(def.outputSchema!).parse(result)).not.toThrow();
     expect(result).not.toHaveProperty("entities");
+  });
+
+  /**
+   * The gap the tests above still leave: they hand the handler arguments directly, so
+   * every optional input is always supplied. In production the SDK parses the caller's
+   * arguments through the declared input schema first, and an optional key with no
+   * default arrives as `undefined`. A tool that echoes such a key into an output it
+   * declares *required* then fails validation on a call that fully succeeded -- the file
+   * is written, and the caller is told the call errored.
+   *
+   * That is not hypothetical: `edit_vmf` did exactly this on 13/08/2026, and the danger
+   * was never the error. It was that a caller retrying what looked like a failure would
+   * have applied every operation twice.
+   *
+   * A purely static version of this check was tried first -- "no output key may be
+   * required when the input key of the same name is optional with no default" -- and
+   * abandoned: it flagged eighteen pairs of which seventeen were correct. `game`,
+   * `profile` and `seeds` are optional inputs that the handler *resolves* and reports
+   * back, which is the useful thing for them to do. Only a call tells a key that is
+   * echoed from one that is resolved, so this calls.
+   *
+   * It covers one tool, which is the honest scope: the general guard would be a helper
+   * that parses arguments through the declared input schema before invoking a handler,
+   * and retrofitting the twenty call sites that bypass it is its own piece of work.
+   */
+  it("edit_vmf survives a caller who omits every optional argument", async () => {
+    const def = tool("edit_vmf");
+    const path = join(mkdtempSync(join(tmpdir(), "hmcp-schema-")), "probe.vmf");
+    copyFileSync(join(FIXTURES, "hmcp_probe.vmf"), path);
+
+    // The production path, and the whole point of this test: the SDK parses the caller's
+    // arguments through the declared input schema before the handler ever sees them.
+    const args = z
+      .object(def.inputSchema as Record<string, z.ZodTypeAny>)
+      .parse({
+        path,
+        ops: [
+          { op: "add", keyvalues: { classname: "info_target", origin: "0 0 32" } },
+        ],
+        confirm: true,
+      });
+
+    const result = await def.handler(args, ctx);
+    expect(() => z.object(def.outputSchema!).parse(result)).not.toThrow();
+    expect((result as { written: boolean }).written).toBe(true);
   });
 
   it("catches a handler that drifts from its declared shape", async () => {
