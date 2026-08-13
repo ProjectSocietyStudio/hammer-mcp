@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { parseRules, RulesError, rulesPathFor } from "../src/rules/schema.js";
 import { checkVmfRulesTool } from "../src/tools/rules.js";
+import { readVmfRoomsTool } from "../src/tools/scene.js";
 import { editVmf } from "../src/tools/vmfedit.js";
 import { applyVmfOps } from "../src/vmf/edit.js";
 import { ctx as sharedCtx } from "./support/env.js";
@@ -290,6 +291,36 @@ describe("checking a map against its rules", () => {
       expect(r.matchedNothing).toEqual(["ghost"]);
       expect(r.overall).toBe("fail");
     });
+  });
+
+  /**
+   * `read_vmf_rooms` is what a caller uses to work out *why* a segmentation came out the
+   * way it did, and this is what judges against it. Until they shared `minRoomArea` the
+   * two could not be run at the same settings, so every diagnosis was about a slightly
+   * different segmentation from the verdict it was meant to explain.
+   */
+  it("segments the map the same way read_vmf_rooms does, at the same minRoomArea", () => {
+    // A bar no room can clear, so the check reports exactly one violation per room and
+    // its count is directly comparable with the room finder's own.
+    const rules = writeRules("every-room.json", [
+      { id: "impossible", what: "room_area", select: { room: "*" }, min: 1e12 },
+    ]);
+
+    const roomsAt = (minRoomArea: number): number =>
+      (
+        readVmfRoomsTool.handler(
+          { path: MAP, step: 16, maxCells: 4_000_000, minRoomArea } as never,
+          ctx,
+        ) as unknown as { roomCount: number }
+      ).roomCount;
+
+    for (const minRoomArea of [0, 4096, 500_000]) {
+      expect(check(rules, { minRoomArea }).violations.length).toBe(roomsAt(minRoomArea));
+    }
+
+    // And the knob has to actually move something, or the equality above is vacuous.
+    // Measured on this fixture: three rooms up to 100 000, one at 500 000.
+    expect(roomsAt(0)).not.toBe(roomsAt(500_000));
   });
 
   it("sorts errors before warnings and can filter to errors alone", () => {

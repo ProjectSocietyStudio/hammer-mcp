@@ -47,6 +47,15 @@ export const checkVmfRulesTool = defineTool({
       .array(z.array(z.number()).length(3))
       .optional()
       .describe("Points inside the map, for rules about rooms. Default: the spawn entities."),
+    minRoomArea: z
+      .number()
+      .min(0)
+      .default(4096)
+      .describe(
+        "Below this floor area, in square units, a region is merged into its largest " +
+          "neighbour. The same knob read_vmf_rooms takes: pass both the same value, or a " +
+          "diagnosis and the verdict it explains are about different segmentations.",
+      ),
     step: z.number().int().min(4).max(128).default(16),
     maxCells: z.number().int().min(1000).max(64_000_000).default(4_000_000),
     limit: z.number().int().min(1).max(500).default(100),
@@ -116,6 +125,7 @@ export const checkVmfRulesTool = defineTool({
     const { scene, source } = sceneFor(path);
     const report = checkRules(scene, source, file, {
       step: args.step,
+      minRoomArea: args.minRoomArea,
       maxCells: args.maxCells,
       seeds: args.seeds as Vec3[] | undefined,
     });

@@ -124,6 +124,15 @@ function outOfBounds(rule: Rule, value: number): boolean {
 }
 
 export interface CheckOptions {
+  /**
+   * The offcut threshold the room pass merges below, in square units.
+   *
+   * It is here because `read_vmf_rooms` exposes it and this did not, so the tool a caller
+   * uses to *diagnose* a segmentation and the tool that *judges* against it could never be
+   * run at the same settings -- every diagnosis was at slightly different parameters from
+   * the verdict it was meant to explain.
+   */
+  minRoomArea?: number;
   /** Height above a floor or origin at which a sight line is taken. Source's own eye. */
   eyeHeight?: number;
   step?: number;
@@ -166,7 +175,7 @@ export function checkRules(
       );
     } else {
       grid = voxelise(scene, seeds, { step: options.step, maxCells: options.maxCells });
-      rooms = findRooms(grid);
+      rooms = findRooms(grid, options.minRoomArea === undefined ? {} : { minRoomArea: options.minRoomArea });
       if (grid.leaked) {
         notes.push(
           "This map is not sealed, so the room pass also filled the outside. read_vmf_leak " +
