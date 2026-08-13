@@ -101,6 +101,14 @@ export interface Merge {
 export interface RoomsResult {
   rooms: Room[];
   portals: Portal[];
+  /**
+   * Standable regions no walk reaches from a spawn: a counter top, a ledge, a roof.
+   *
+   * Reported apart from `rooms` rather than dropped, because they are real space and a
+   * caller may want them -- but a rule about headroom or floor area is about a place a
+   * person can be, and a counter top fails every such rule by construction.
+   */
+  unreachable: Room[];
   /** Every merge, in the order it happened. What turns a surprising count into a reason. */
   merges: Merge[];
   /** Region id per cell, or -1. */
@@ -243,7 +251,7 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
       `no standable space was found, so there are no rooms to report. A map with no floor a ` +
         `person can stand on is usually a map whose seed was wrong, not a map with no rooms.`,
     );
-    return { rooms: [], portals: [], merges: [], regionOf, method: "watershed-clearance", parameters: { minRoomArea: minArea, step: grid.step }, notes };
+    return { rooms: [], unreachable: [], portals: [], merges: [], regionOf, method: "watershed-clearance", parameters: { minRoomArea: minArea, step: grid.step }, notes };
   }
 
   const at3 = (at: number): [number, number, number] => [
@@ -527,6 +535,64 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
   }
   for (const room of rooms) room.neighbours = [...new Set(room.neighbours)].sort((p, q) => p - q);
 
+  // ## A place you cannot walk to is not a room
+  //
+  // The flood fills air, and the air above a counter sits on a surface -- so the top of a
+  // 40-unit counter is "standable", becomes its own region, and is then judged by rules
+  // written about rooms. It fails all of them by construction: 104 units of headroom and
+  // about 4 square metres, at every counter, forever. An agent building a shop hit this and
+  // could only escape it by making every piece of furniture 80 units tall so that no top
+  // was standable at all -- a constraint from the voxeliser, dressed as a style choice
+  // (issue #49).
+  //
+  // The tell was in the output the whole time: `connectsTo: []`. A walk steps one cell, and
+  // a counter top is five cells up, so nothing walks there. The test is therefore not "is
+  // it small" or "is it high" -- both of which are thresholds -- but whether any sequence
+  // of walks reaches it from where a person starts. That is the same question the map's own
+  // spawn already answers.
+  const seededRegions = new Set<number>();
+  for (const seed of grid.seeds) {
+    const sx = Math.round((seed[0] - grid.origin[0]) / grid.step);
+    const sy = Math.round((seed[1] - grid.origin[1]) / grid.step);
+    let sz = Math.round((seed[2] - grid.origin[2]) / grid.step);
+    if (sx < 0 || sy < 0 || sx >= grid.dims[0] || sy >= grid.dims[1]) continue;
+    // A spawn hangs in the air; a person falls to the floor. Walk down to the first cell
+    // that belongs to a region -- that is the one they are standing in.
+    if (sz >= grid.dims[2]) sz = grid.dims[2] - 1;
+    for (let z = sz; z >= 0; z--) {
+      const r = regionOf[cellIndex(grid, sx, sy, z)]!;
+      if (r >= 0) {
+        seededRegions.add(remap.get(r) ?? r);
+        break;
+      }
+    }
+  }
+
+  const reachable = new Set<number>(seededRegions);
+  const queue = [...seededRegions];
+  for (let head = 0; head < queue.length; head++) {
+    for (const n of rooms[queue[head]!]?.neighbours ?? []) {
+      if (reachable.has(n)) continue;
+      reachable.add(n);
+      queue.push(n);
+    }
+  }
+
+  // No seed landed anywhere -- a map with no spawn, or a seed outside it. Every region
+  // stays, because the alternative is dropping the whole map on the strength of a question
+  // that was never answered.
+  const unreachable: Room[] =
+    seededRegions.size === 0 ? [] : rooms.filter((r) => !reachable.has(r.id));
+  const walkable = seededRegions.size === 0 ? rooms : rooms.filter((r) => reachable.has(r.id));
+  if (unreachable.length > 0) {
+    notes.push(
+      `${unreachable.length} region(s) are standable but no walk reaches them from a spawn ` +
+        `-- the top of a counter, a ledge, a roof. They are reported under 'unreachable' ` +
+        `rather than as rooms, because a rule about headroom or floor area is about a place ` +
+        `a person can be, and no counter top has ever passed one.`,
+    );
+  }
+
   notes.push(
     `Rooms come from a watershed on the clearance field, not from connected components -- a ` +
       `sealed map has exactly one of those. This is a heuristic: it can split a hall with a ` +
@@ -555,7 +621,8 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
   for (const m of merged1) m.into = remap.get(m.into) ?? m.into;
 
   return {
-    rooms,
+    rooms: walkable,
+    unreachable,
     portals,
     merges: merged1,
     regionOf,

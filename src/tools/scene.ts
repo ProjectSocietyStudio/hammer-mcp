@@ -179,6 +179,24 @@ export const readVmfRoomsTool = defineTool({
         connectsTo: z.array(z.number()),
       }),
     ),
+    /**
+     * Standable regions no walk reaches from a spawn: a counter top, a ledge, a roof.
+     *
+     * Apart from `rooms` rather than dropped, because they are real space -- but a rule
+     * about headroom or floor area is about a place a person can be, and a counter top
+     * fails every such rule by construction rather than by fault.
+     */
+    unreachable: z.array(
+      z.object({
+        id: z.number(),
+        floorAreaUnits: z.number(),
+        floorAreaSquareMetres: z.number(),
+        widestPoint: z.array(z.number()),
+        halfWidthUnits: z.number(),
+        mins: z.array(z.number()),
+        maxs: z.array(z.number()),
+      }),
+    ),
     portals: z.array(
       z.object({
         between: z.array(z.number()),
@@ -237,6 +255,15 @@ export const readVmfRoomsTool = defineTool({
         mins: [...r.mins],
         maxs: [...r.maxs],
         connectsTo: r.neighbours,
+      })),
+      unreachable: result.unreachable.map((r) => ({
+        id: r.id,
+        floorAreaUnits: r.floorArea,
+        floorAreaSquareMetres: r.floorAreaSquareMetres,
+        widestPoint: [...r.centre],
+        halfWidthUnits: r.maxClearance,
+        mins: [...r.mins],
+        maxs: [...r.maxs],
       })),
       portals: result.portals.map((p) => ({
         between: [...p.between],

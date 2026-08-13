@@ -400,7 +400,7 @@ measurement in [`docs/`](docs/), or it says it is not.
 | Tracing an uncompiled `.vmf` | **proven** — 5000 rays agree with the compiled map's own tracer to under half a unit, and the broadphase agrees with brute force bit for bit |
 | Rendering a `.vmf` | **proven** — the id buffer agrees with a traced ray at 2000 pixels, and the PNG inflates back to the framebuffer byte for byte |
 | Finding a leak without compiling | **proven** — a hole cut in a sealed fixture is found, and the path out ends at it; the probe map, which compiles clean and boots, reads as sealed |
-| Rooms and doorways | **partly proven** — a fixture stating its own dimensions returns three rooms and two doorways of exactly 96 units. The method is a heuristic and says so; no independent implementation has judged it yet |
+| Rooms and doorways | **partly proven** — a fixture stating its own dimensions returns three rooms and two doorways of exactly 96 units, a 40-unit counter top is reported as unreachable rather than as a room, and every merge is reported with the comparison that decided it. The method is a heuristic and says so; it is also **sensitive to cell scan order**, reproduced in `test/watershed.test.ts` and open as [#48](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/48) |
 | The floor plan | **proven** — the drawn area equals the sections' own area from the page geometry alone, every room label falls inside its room, and no two labels overlap |
 | Measuring a place | **proven** — a corridor built 256 wide measures 256, a doorway built 96 measures 96, and one built 100 measures 100 where the voxel estimate would still say 96 |
 | Per-map rules | **proven** — a corridor built 256 passes a 192 bar and fails a 320 one with both numbers; a rule that cannot fail is refused at load; and a write goes through on a map that violates every rule it has |
@@ -505,7 +505,7 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_nearest_surface` | `map` | | Exact distance from a point to the nearest surface, and which face it belongs to |
 | `render_vmf_view` | `map` | | Renders an **uncompiled** `.vmf` from a camera and returns the picture: form and occlusion, no textures |
 | `read_vmf_leak` | `map` | | Whether a `.vmf` seals, **without compiling it**, with the path out |
-| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect — and every merge it made, with the reason |
+| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect — every merge it made with the reason, and the standable places no walk reaches |
 | `read_vmf_surfaces` | `map` | | Faces sorted into floor, wall, ceiling — and which of them a person could touch |
 | `render_vmf_plan` | `map` | | A **dimensioned floor plan**: rooms, areas, doorway widths, grid, scale bar, north |
 | `measure_vmf_clearance` | `map` | | Free width and headroom at a point, measured with a **swept player hull**, not a ray |

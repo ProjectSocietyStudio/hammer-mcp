@@ -207,7 +207,59 @@ describe("clearanceField", () => {
   });
 });
 
+/**
+ * The top of a counter is standable, and it is not a room.
+ *
+ * The flood fills air, and the air above a counter rests on a surface -- so a 40-unit
+ * counter grows its own region, which is then judged by rules written about rooms. It
+ * fails all of them by construction: about 4 square metres and 104 units of headroom, at
+ * every counter, forever. An agent building a shop escaped it only by making every piece
+ * of furniture 80 units tall so that no top was standable at all, which is a constraint
+ * from the voxeliser wearing the clothes of a style choice (issue #49).
+ *
+ * The tell was in the output all along: `connectsTo: []`. A walk steps one cell; a counter
+ * top is two or more cells up, so nothing walks there.
+ */
+describe("a place you cannot walk to", () => {
+  // In a corner rather than mid-floor: a block in the middle of a room splits the room
+  // around itself, which is the watershed doing its job and a different subject.
+  const bare = findRooms(voxelise(buildScene("bare.vmf", roomsVmf()), [SEED]));
+  const withCounter = buildScene(
+    "counter.vmf",
+    insertSolids(roomsVmf(), [
+      { shape: "box", mins: [-1024, -128, 0], maxs: [-896, 0, 40] },
+    ]).text,
+  );
+  const result = findRooms(voxelise(withCounter, [SEED]));
+
+  it("is reported apart from the rooms, not as one of them", () => {
+    expect(bare.unreachable).toHaveLength(0);
+    expect(result.unreachable.length).toBeGreaterThan(0);
+
+    // Above the floor every room stands on, which is the whole of what makes it
+    // unwalkable. The floor's own cells sit at the first cell centre, not at zero.
+    const floor = Math.min(...result.rooms.map((r) => r.mins[2]));
+    const top = result.unreachable.find((r) => r.mins[2] > floor);
+    expect(top).toBeDefined();
+    // A 40-unit counter, so its top sits a counter's height above the floor cells.
+    expect(top!.mins[2] - floor).toBeGreaterThanOrEqual(32);
+  });
+
+  it("keeps every room it does report walk-connected to the rest", () => {
+    // The property the counter top violated and that `connectsTo: []` was announcing.
+    // A single-room map is the one case where having no neighbour is not a fault.
+    if (result.rooms.length > 1) {
+      for (const room of result.rooms) expect(room.neighbours.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("says so in its notes, rather than silently dropping space", () => {
+    expect(result.notes.join(" ")).toMatch(/no walk reaches them from a spawn/);
+  });
+});
+
 describe("findRooms", () => {
+
   it("finds the three spaces the fixture is made of, and no more", () => {
     expect(sealedRooms.rooms).toHaveLength(3);
   });
