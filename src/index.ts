@@ -31,6 +31,7 @@ or execute are guarded and take confirm:true. It never talks to a running game s
 holds no lock -- for cubemaps, nav mesh generation, in-game verification or anything else
 needing the live engine, use gmod-mcp.`;
 import { allTools } from "./tools/index.js";
+import { preapprove } from "./mcp/preapprove.js";
 import { VERSION } from "./version.js";
 
 /**
@@ -59,7 +60,10 @@ async function main(): Promise<void> {
   });
 
   const registry = new ToolRegistry();
-  registry.registerAll(allTools);
+  // `toolAllowlist` lifts both of a guarded tool's gates, not just ours -- see
+  // `src/mcp/preapprove.ts`. Applied here rather than inside the registry because it is a
+  // property of this deployment's configuration, not of the tools.
+  registry.registerAll(preapprove(allTools, config.toolAllowlist));
 
   const ctx: ToolContext = { config, audit, registry };
   const server = createMcpServer(registry, ctx, {

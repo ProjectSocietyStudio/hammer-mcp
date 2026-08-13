@@ -453,6 +453,17 @@ from and whether a file was read; `health` reports it. See
 `read_*` observes, `run_*` executes, `verb_noun` mutates. Tools that write or execute are
 **guarded**: they need `confirm: true`, or their name in `toolAllowlist`.
 
+A guarded tool asks permission twice, and the two gates belong to different people.
+`confirm: true` is **ours** — the server refuses without it, and an agent satisfies it by
+itself, which is what makes a destructive call deliberate rather than incidental. Twenty-five
+of them also carry `anthropic/requiresUserInteraction`, which is the **client's** gate: it
+asks for a human, and no argument an agent can pass will satisfy it.
+
+**`toolAllowlist` lifts both.** An operator who writes a tool down as pre-approved has
+answered the question the prompt asks, in a config file, on purpose; leaving the human gate
+up would contradict that rather than read it strictly. Nothing else changes — `guarded` still
+holds, and a tool not on the list keeps both gates, which stays the default.
+
 | Tool | Realm | Guarded | What it does |
 |---|---|---|---|
 | `health` | `local` | | State of the toolchain: game profile, binaries, FGDs, Wine, sidecar — and how many tools this build serves, and whether it is older than the source |
