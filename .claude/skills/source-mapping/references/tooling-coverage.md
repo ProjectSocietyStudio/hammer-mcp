@@ -20,7 +20,7 @@ Three statuses, and only one is comfortable:
 | Class or keyvalue unknown to the FGD ([entities](entities.md)) | `read_vmf_lint`, `read_fgd_class` | offline |
 | Output aimed at a target that does not exist ([entities](entities.md)) | `read_vmf_lint` | offline |
 | Entity inventory and positions ([entities](entities.md)) | `read_bsp_entities`, `read_vmf` | offline |
-| Map sealed, hunting a leak ([compiling](compiling.md)) | `read_leak` on the pointfile, `read_compile_log` | offline |
+| Map sealed, hunting a leak ([compiling](compiling.md)) | `read_vmf_leak` **without compiling**, or `read_leak` on the pointfile after a compile | offline |
 | What a compiler message really means ([compiling](compiling.md)) | `read_compile_log` | offline |
 | Sightline lengths ([visibility](visibility.md)) | `read_sightlines` | offline |
 | Is a brush closed, convex, inside the world, on grid ([brushwork](brushwork.md)) | `read_vmf_solids` | offline |
@@ -36,6 +36,15 @@ Three statuses, and only one is comfortable:
 | Nav mesh still valid after a compile ([gmod](gmod.md)) | `read_nav` | offline |
 | What a Workshop archive holds, and getting one file out ([gmod](gmod.md)) | `read_gma`, `run_gma_extract` | offline |
 | Toolchain, FGD, game profile available ([compiling](compiling.md)) | `health`, `read_source_games` | offline |
+| Which build of the tooling am I actually talking to | `health` → `tools.count`, `tools.build.stale` | offline |
+| What rooms a place has, what joins them, and **why** the count is that ([level-design](level-design.md)) | `read_vmf_rooms`, and its `merges` | offline |
+| Free width and headroom at a place, by a **swept player hull** ([level-design](level-design.md)) | `measure_vmf_clearance` | offline |
+| Whether a person fits in front of a door ([entities](entities.md)) | `measure_vmf_approach` | offline |
+| Whether this can see that, on an **uncompiled** map ([visibility](visibility.md)) | `read_vmf_visibility`, `read_vmf_sightlines` | offline |
+| What is in the way and how far ([brushwork](brushwork.md)) | `read_vmf_trace`, `read_vmf_nearest_surface` | offline |
+| Which faces are floor, wall, ceiling, and touchable ([brushwork](brushwork.md)) | `read_vmf_surfaces` | offline |
+| **What the map looks like**, without the game ([level-design](level-design.md)) | `render_vmf_view` from a camera, `render_vmf_plan` as a dimensioned plan | offline |
+| Whether a map meets **its own stated brief** ([level-design](level-design.md)) | `check_vmf_rules` against `<map>.rules.json` | offline |
 | The real visleaf split ([visibility](visibility.md)) | `mat_leafvis`, `r_lockpvs`, **client console** | in game |
 | What is actually drawn ([performance](performance.md)) | `mat_wireframe`, `+showbudget`, **client console** | in game |
 | Server cost under load ([performance](performance.md)) | `read_runtime`, `read_players`, `read_entities` | in game |
@@ -110,6 +119,16 @@ they are independent:
 Consequence for this skill: **the "human" column has not shrunk.** What changed is that an agent
 can now *act* on what it diagnoses — place a `func_detail`, a hint, a volume — instead of only
 naming it. Deciding **where** to place them stays a judgement.
+
+One thing did move, and it is worth naming precisely because it is easy to overstate. A judgement
+that has been **stated as a number** is now checkable: "four metres of pavement, no entrance
+obstructed, the view from the till preserved" goes into `<map>.rules.json` and
+`check_vmf_rules` judges the map against it. What that automates is the *checking*, never the
+*deciding* — the numbers are still somebody's opinion, and the tool reports rather than refuses
+precisely because a mapper may want a narrow alley.
+
+And the eye is cheaper than it was. `render_vmf_view` and `render_vmf_plan` draw an uncompiled
+`.vmf`, so "go and look" no longer costs a compile and a boot. It still costs somebody looking.
 
 ⚠️ Do not conclude that a tool-built map is good. The four oracles answer "closed, convex, inside
 the world, sealed". None answers "beautiful", "readable", or "in the right place".

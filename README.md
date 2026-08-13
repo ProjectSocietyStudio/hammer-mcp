@@ -340,7 +340,7 @@ this server, because this is where map work belongs:
 
 | Skill | What it holds |
 |---|---|
-| [`source-map`](.claude/skills/source-map/SKILL.md) | **driving the tooling** — which tool answers which question, in what order, and what each one cannot tell you |
+| [`source-map`](.claude/skills/source-map/SKILL.md) | **driving the tooling** — which tool answers which question, in what order, and what each one cannot tell you. [`building.md`](.claude/skills/source-map/references/building.md) is the order to build a map in, written from two real builds rather than from the tool list |
 | [`source-mapping`](.claude/skills/source-mapping/SKILL.md) | **the craft** — brushwork and grid, visibility, lighting, displacements, entities, performance, scale and composition, materials, atmosphere, and the myths |
 
 They reference each other and neither copies the other. Every rule in `source-mapping` carries

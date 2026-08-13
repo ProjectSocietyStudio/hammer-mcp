@@ -33,6 +33,13 @@ the tool.
 | Can it still grow? | `read_map_geometry` |
 | What does it ship with? | `read_pakfile` |
 | What is inside it? | `read_bsp_entities`, `read_prop_survey` |
+| **Is my server the build I think it is?** | `health` again — `tools.count` against the number [`docs/hammer-parity.md`](https://github.com/ProjectSocietyStudio/hammer-mcp/blob/main/docs/hammer-parity.md) states, and `tools.build.stale` |
+
+⚠️ **A stale build is silent.** `.mcp.json` points at `dist/`, which is gitignored, so a checkout
+that has not been built serves the tool list of whatever was built last — no error, no warning,
+just fewer tools, and a missing tool is indistinguishable from one that was never written. That
+cost twelve tools and forty minutes on 13/08/2026. `pnpm build` **and reconnect the client**: a
+client holds the tool list it was handed when it connected.
 
 On `rp_nycity_day`, the answer to "can it grow" is **no**: `TEXINFO` at 96%, `VERTEXES` at 95%, and
 `MODELS` **past its ceiling** (1218 against 1024). That last point does not mean the map is broken —
@@ -60,6 +67,51 @@ survives a recompile, hot-reloads.
 ⚠️ **Gate B has not been passed.** Nothing yet proves the current Garry's Mod branch reads `.lmp`
 files at all. The verification protocol, negative control included, is in `docs/gates.md`, in this repository.
 Do not present a lump patch as working before then.
+
+## Building a map from nothing
+
+Detail in [references/building.md](references/building.md), which is written from two real
+builds of the same brief rather than from the tool list. The shape of it:
+
+**`write_vmf` creates the file** — nothing else can, and `write_vmf_solid` refuses a file with
+no `world` block, so an absent or empty one is not a starting point.
+
+Then: shell → `read_vmf_leak` → openings → spawn and markers → `read_vmf_rooms` →
+`check_vmf_rules` → furniture → compile. Steps 3, 6 and 7 are seconds rather than minutes,
+which is the whole reason to work offline; run them after every structural change.
+
+**Done is three greens**: `read_vmf_leak` sealed, `check_vmf_rules` with `overall: "pass"`, and
+`run_compile` clean — then `read_leak` on the `.bsp`, which answers the seal question a second
+time by a different method.
+
+Read `overall`, never `errorCount`: zero errors is also what a run returns when a rule matched
+nothing, and when there is no rules file at all. Both come back `skipped`.
+
+⚠️ **The room pass splits space at one cell size and it is not the default, and the response is
+not monotone.** When a rule about doorways matches nothing, vary `step` — try 32 — before
+touching geometry. `check_vmf_rules` reports the `segmentation` it used and says so.
+[`building.md`](references/building.md) has the measured table and the rest of the traps.
+
+## Asking what a place is, without compiling it
+
+These answer questions Hammer never asked, and all of them work on an **uncompiled** `.vmf`:
+
+| Question | The tool |
+|---|---|
+| Does it seal? | `read_vmf_leak` — with the path out, in seconds, no compiler |
+| What rooms are there, and what joins them? | `read_vmf_rooms` — and `merges`, which says *why* the count is what it is |
+| Is this place wide enough to stand and pass in? | `measure_vmf_clearance` — a swept hull, not a ray |
+| Can a person stand in front of that door? | `measure_vmf_approach` |
+| Can this see that? | `read_vmf_visibility`, `read_vmf_sightlines` |
+| What is in the way, and how far? | `read_vmf_trace`, `read_vmf_nearest_surface` |
+| Which faces are floor, wall, ceiling — and touchable? | `read_vmf_surfaces` |
+| **What does it look like?** | `render_vmf_view` from a camera, `render_vmf_plan` as a dimensioned floor plan |
+| Does it meet its own brief? | `check_vmf_rules` against `<map>.rules.json` |
+
+A brief is checkable: `<map>.rules.json` beside the `.vmf` states widths, headroom, floor areas
+and sight lines, and `check_vmf_rules` judges them. It **reports and never refuses** — a mapper
+may want a narrow alley, and turning a design choice into a write error is how a tool stops
+being usable.
 
 ## Writing or changing a VMF
 
@@ -126,6 +178,16 @@ To be said rather than worked around:
   here or anywhere.
 - **Judge.** Which wall is structural, where a hint goes, whether a map looks good. Counting
   areaportals is automatic; deciding where to put them is not.
+
+And two things that used to be on this list and are not any more, because the entry expired
+rather than the reasoning:
+
+- **Look at a map.** `render_vmf_view` draws an uncompiled `.vmf` from any camera and
+  `render_vmf_plan` draws it as a dimensioned floor plan — both without the game and without a
+  compile. What neither is, and will not be, is a viewport you drag things in.
+- **Know whether a map seals without compiling it.** `read_vmf_leak` floods the geometry and
+  returns the path out. It can miss a leak through a wall thinner than its cell; it does not
+  invent one, because a cell counts as free only when its whole interior is.
 
 ## The server is shared
 
