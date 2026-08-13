@@ -216,7 +216,7 @@ killed *is fail as soon as one error violation stands*.
 
 ## 4 — Nothing creates a `.vmf`, so a pure-MCP workflow cannot start
 
-**Class: gap** · the one rule of the exercise that had to be broken · [**#47**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/47)
+**Class: gap** · the one rule of the exercise that had to be broken · [**#47**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/47) — **fixed**
 
 `write_vmf_solid` on a path that does not exist:
 
@@ -239,7 +239,7 @@ the advertised workflow impossible to complete without a text editor.
 
 ## 5 — Two rooms read as one, and no output says why
 
-**Class: gap** · the single most expensive obstacle of the session · [**#48**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/48)
+**Class: gap** · the single most expensive obstacle of the session · [**#48**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/48) — **half fixed, half open**
 
 A 64-wide doorway between two 384-wide rooms, and `read_vmf_rooms` returned
 `{"roomCount": 1, "portals": []}` — so `{"room": "*"}` matched one thing and
@@ -263,7 +263,7 @@ hand at the moment it decides; it simply does not say it.
 
 ## 6 — A counter top is a room, and no rule can ever pass on it
 
-**Class: bug** · [**#49**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/49)
+**Class: bug** · [**#49**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/49) — **fixed**
 
 A 40-unit counter produced `room 1: headroom is 104 units` and
 `room 1: room area is 6912 square units`, both at `[304,48,48]` — the top of the counter. It
@@ -277,7 +277,7 @@ is standable at step 16 or step 8. A real constraint dressed as a style choice.
 
 ## 7 — `read_leak` delivers the good news through the error channel
 
-**Class: ergonomics** · [**#50**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/50)
+**Class: ergonomics** · [**#50**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/50) — **fixed**
 
 Confirming on the compiled `.bsp` that vbsp agreed the map was sealed:
 
@@ -292,7 +292,7 @@ hedges the one thing being confirmed.
 
 ## 8 — `read_vmf_rooms` and `check_vmf_rules` cannot be made to agree
 
-**Class: ergonomics** · [**#51**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/51)
+**Class: ergonomics** · [**#51**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/51) — **fixed**
 
 `read_vmf_rooms` exposes `minRoomArea`; `check_vmf_rules`, which calls it, does not — it takes
 `step`, `maxCells` and `seeds` only. So the tool used to *diagnose* a segmentation and the
@@ -300,7 +300,7 @@ tool that *judges* against it can never be run at the same settings.
 
 ## 9 — The audit log cannot see the failure of finding 2
 
-**Class: gap**, in the instrumentation · [**#52**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/52)
+**Class: gap**, in the instrumentation · [**#52**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/52) — **fixed in `mcp-core`, not yet here**
 
 The round-1 window of `.hammer-mcp/logs/audit.jsonl` records `edit_vmf` three times, **zero
 errors** — while the builder was hitting a hard MCP error on one of those calls. The handler
@@ -349,3 +349,53 @@ What survives is narrower and still worth having: the builder used `render_vmf_p
 never called `render_vmf_view`, and reached for none of `measure_vmf_clearance`,
 `measure_vmf_approach` or `read_vmf_surfaces` — none of which the brief mentions and none of
 which the skills describe. Round 2, on updated skills, is what will actually test it.
+
+
+---
+
+## What happened to all of it
+
+| | Class | State |
+|---|---|---|
+| 1 · a build twelve tools old, silently | bug | fixed — `health` reports its tool count and whether its build is stale |
+| 2 · `edit_vmf` erroring after it wrote | bug | fixed — and the retry it invited is the reason it mattered |
+| 3 · `check_vmf_rules` green while checking nothing | bug | fixed — an `overall` that says `skipped`, never `pass` |
+| 4 · nothing creates a `.vmf` | gap | fixed — `write_vmf`, proven by a compile that seals |
+| 5 · no output says why two rooms merged | gap | **half fixed** — every merge now reports its reason and its cell; the ordering defect underneath is open |
+| 6 · a counter top is a room | bug | fixed — a place no walk reaches is reported apart from the rooms |
+| 7 · `read_leak` answering through the error channel | ergonomics | fixed — and the hedge replaced with evidence |
+| 8 · the two room tools could not agree | ergonomics | fixed — they share `minRoomArea` |
+| 9 · the audit log could not see finding 2 | gap | fixed in `mcp-core`; reaches this repo at its next release |
+
+Six fixed here, one fixed upstream, one half open. The suite went from 847 tests to 875.
+
+## The one that is still open, and why it is the interesting one
+
+Finding 5 turned out to have two halves. Reporting the merges was straightforward and is
+done. The half underneath is not, and the reason is worth more than the fix would have been.
+
+`peak` is a region's widest clearance — the code says so — and stops being true the moment
+two regions merge: the union is pointed at `min(index)` and keeps *that* region's peak. Cell
+indices are a fact about scan order, so absorb a one-cell nook in a corner into a large room
+and the union inherits the nook's peak. The bar for merging through a doorway on the far
+side of the map then drops to the width of a corner nobody was looking at.
+
+`test/watershed.test.ts` draws it in eight lines of ASCII. The sharpest form: **flip the
+plan top to bottom and the room count changes**, one against two — mirroring changes cell
+indices and nothing else.
+
+And the one-line repair is wrong. Carrying the peak through the merge turns those plans
+green and turns the three-space fixture into **four** rooms, breaking nine further
+assertions across the plan renderer and the doorway measurements. Which says that the merge
+criterion — *"if the opening between two regions is as wide as the narrower of the two,
+nothing narrows and they are one space"* — was calibrated against peaks that shrink. Correct
+the peak and the rule under-merges: the corridor the rule exists to collapse stops
+collapsing.
+
+So the defect is real, minimal, reproduced, and repairing it means revisiting the criterion
+rather than the bookkeeping. Both plans are committed as `it.fails`, so they go red the day
+somebody gets it right.
+
+That is the shape of this whole exercise in one finding: using the thing surfaced something
+no amount of reading the code would have, and the honest account of it is worth more than a
+green test bought by asserting the wrong answer.
