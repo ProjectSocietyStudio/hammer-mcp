@@ -108,11 +108,12 @@ Both ends are lifted by `eyeHeight` (64 by default, Source's own) before the tra
 between two markers at z 48 traces at z 112, so a lintel at 112 blocks a line that looks clear
 at floor level. The height is in every violation's message and it is an argument.
 
-### One material per brush
+### Materials, per brush or per role
 
-`write_vmf_solid` takes a single `material` for every face. A floor whose top is tile and whose
-sides are nodraw needs `set_face_material` afterwards, selecting by `facing`.
-([#57](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/57).)
+`write_vmf_solid` takes a single `material` for every face, or `materials: {top, bottom, sides}`
+for the case a single string cannot say — a floor whose top is tile and whose sides are nodraw.
+The roles are the ones `set_face_material`'s `facing` selects, at the same threshold. Anything
+finer than that still wants `set_face_material` afterwards.
 
 ### The spawn is what the flood starts from
 

@@ -481,7 +481,7 @@ from and whether a file was read; `health` reports it. See
 | `paint_displacement` | `map` | ● | The blend channel: uniform, by height, or by slope |
 | `write_portal` | `map` | ● | Areaportals and occluders — the runtime half of visibility |
 | `set_map_properties` | `map` | ● | worldspawn: the sky, the detail sprites, the fog |
-| `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face |
+| `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face. One material, or one per role: top, bottom, sides |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
 | `read_map_organisation` | `map` | | Visgroups, groups and the cordon, with what belongs to each |

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { insertSolids } from "../vmf/build.js";
+import { FACING_COSINE } from "../vmf/select.js";
 import type { SolidSpec } from "../vmf/build.js";
 import { expandShape } from "../vmf/shapes.js";
 import type { CompoundSpec } from "../vmf/shapes.js";
@@ -103,6 +104,20 @@ export const writeVmfSolidTool = defineTool({
       .string()
       .optional()
       .describe("Material for every face. Default TOOLS/TOOLSNODRAW, which draws nothing."),
+    materials: z
+      .object({
+        top: z.string().optional().describe("Faces pointing up: the floor of a slab."),
+        bottom: z.string().optional().describe("Faces pointing down."),
+        sides: z.string().optional().describe("Faces pointing neither up nor down: the walls."),
+      })
+      .optional()
+      .describe(
+        "Material per role, for the common case a single string cannot express -- a floor " +
+          "whose top is tile and whose sides are nodraw. Roles are the same ones " +
+          "set_face_material's `facing` selects, cut at the same 45 degrees, so a ramp " +
+          "counts as what it is closer to being. Any role left out falls back to " +
+          "`material`.",
+      ),
     lightmapScale: z.number().optional().describe("Luxels per unit on every face. Default 16."),
     textureScale: z.number().optional().describe("Texture scale on both axes. Default 0.25."),
     dryRun: DRY_RUN,
@@ -159,6 +174,18 @@ export const writeVmfSolidTool = defineTool({
     const result = insertSolids(before, flattened, {
       ...(args.entityId !== undefined ? { entityId: args.entityId } : {}),
       ...(args.material !== undefined ? { material: args.material } : {}),
+      // Same cut as `select.ts` and `classify.ts` use for `facing`, deliberately: a second
+      // threshold for the same word is how two tools come to disagree about what a wall is.
+      ...(args.materials !== undefined
+        ? {
+            materialForFace: (face: { normal: readonly number[] }) => {
+              const z = face.normal[2]!;
+              if (z > FACING_COSINE) return args.materials!.top;
+              if (z < -FACING_COSINE) return args.materials!.bottom;
+              return args.materials!.sides;
+            },
+          }
+        : {}),
       ...(args.lightmapScale !== undefined ? { lightmapScale: args.lightmapScale } : {}),
       ...(args.textureScale !== undefined ? { textureScale: args.textureScale } : {}),
     });

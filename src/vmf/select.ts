@@ -61,6 +61,16 @@ export function isEmptySelector(sel: SolidSelector | FaceSelector): boolean {
   return Object.values(sel).every((v) => v === undefined);
 }
 
+/**
+ * The cut between a floor, a ceiling and a wall, as a cosine of the face's normal.
+ *
+ * One home for it, because `facing` is a word two tools now use: this selector, and
+ * `write_vmf_solid`'s per-role materials. A second threshold for the same word is how two
+ * tools come to disagree about what a wall is. 0.7 is a hair over 45 degrees, so a ramp
+ * counts as whichever it is closer to being.
+ */
+export const FACING_COSINE = 0.7;
+
 export function matchesFace(side: SolidSide, sel: FaceSelector): boolean {
   if (sel.material && !side.material.toLowerCase().includes(sel.material.toLowerCase())) {
     return false;
@@ -68,9 +78,9 @@ export function matchesFace(side: SolidSide, sel: FaceSelector): boolean {
   if (sel.minArea !== undefined && side.area < sel.minArea) return false;
   if (sel.facing && sel.facing !== "any") {
     const z = side.plane?.normal[2] ?? 0;
-    if (sel.facing === "up" && z <= 0.7) return false;
-    if (sel.facing === "down" && z >= -0.7) return false;
-    if (sel.facing === "side" && Math.abs(z) > 0.7) return false;
+    if (sel.facing === "up" && z <= FACING_COSINE) return false;
+    if (sel.facing === "down" && z >= -FACING_COSINE) return false;
+    if (sel.facing === "side" && Math.abs(z) > FACING_COSINE) return false;
   }
   return true;
 }

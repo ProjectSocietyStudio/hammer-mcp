@@ -298,6 +298,86 @@ describe("write_vmf_solid", () => {
 });
 
 /**
+ * One brush, three materials.
+ *
+ * `material` is a single string for every face, so a floor whose top is tile and whose
+ * sides are nodraw took a second call to `set_face_material` plus a lookup to find which
+ * faces were the sides. An agent building a map accepted uniform materials rather than pay
+ * for that, and recorded it (issue #57) -- which is the outcome worth noticing: the tool
+ * refused nothing, it just made the cheaper answer the wrong one.
+ *
+ * The roles are the ones `set_face_material`'s `facing` selects, at the same threshold,
+ * from the same constant. Two thresholds for one word is how two tools come to disagree
+ * about what a wall is.
+ */
+describe("a material per role", () => {
+  const box: SolidSpec[] = [{ shape: "box", mins: [0, 0, 0], maxs: [64, 64, 16] }];
+
+  /** A fresh copy of the probe, so each case writes to its own file. */
+  let n = 0;
+  const PROBE_COPY = (): string => {
+    const path = join(scratch, `roles-${n++}.vmf`);
+    writeFileSync(path, probe());
+    return path;
+  };
+
+  const facesOf = (text: string): Array<{ material: string; normalZ: number }> => {
+    const report = checkVmfSolids("built", text);
+    const solid = report.solids[report.solids.length - 1]!;
+    return solid.sides.map((side) => ({
+      material: side.material,
+      normalZ: side.plane?.normal[2] ?? 0,
+    }));
+  };
+
+  it("puts each material on the faces that role names", () => {
+    const roles = writeVmfSolidTool.handler(
+      {
+        path: PROBE_COPY(),
+        solids: box,
+        materials: { top: "DEV/DEV_MEASUREWALL01A", bottom: "TOOLS/TOOLSNODRAW", sides: "DEV/DEV_MEASUREGENERIC01" },
+        dryRun: false,
+        backup: false,
+        confirm: true,
+      } as never,
+      ctx,
+    ) as { path: string };
+
+    const faces = facesOf(readFileSync(roles.path, "utf8"));
+    const up = faces.filter((f) => f.normalZ > 0.7);
+    const down = faces.filter((f) => f.normalZ < -0.7);
+    const side = faces.filter((f) => Math.abs(f.normalZ) <= 0.7);
+    expect(up).toHaveLength(1);
+    expect(down).toHaveLength(1);
+    expect(side).toHaveLength(4);
+    expect(up[0]!.material).toBe("DEV/DEV_MEASUREWALL01A");
+    expect(down[0]!.material).toBe("TOOLS/TOOLSNODRAW");
+    for (const f of side) expect(f.material).toBe("DEV/DEV_MEASUREGENERIC01");
+  });
+
+  it("falls back to `material` for a role left out", () => {
+    const r = writeVmfSolidTool.handler(
+      {
+        path: PROBE_COPY(),
+        solids: box,
+        material: "DEV/DEV_MEASUREGENERIC01",
+        materials: { top: "DEV/DEV_MEASUREWALL01A" },
+        dryRun: false,
+        backup: false,
+        confirm: true,
+      } as never,
+      ctx,
+    ) as { path: string };
+
+    const faces = facesOf(readFileSync(r.path, "utf8"));
+    expect(faces.filter((f) => f.normalZ > 0.7)[0]!.material).toBe("DEV/DEV_MEASUREWALL01A");
+    for (const f of faces.filter((f) => f.normalZ <= 0.7)) {
+      expect(f.material).toBe("DEV/DEV_MEASUREGENERIC01");
+    }
+  });
+});
+
+/**
  * The compiler oracle.
  *
  * Everything above is one program checking another, both written here on the same
