@@ -353,14 +353,14 @@ They reference each other and neither copies the other. Every rule in `source-ma
 | `[contesté]` | mappers disagree, and the disagreement is stated |
 | `[mesuré]` | measured in this workshop, with the sample size |
 
-[`couverture-outillage.md`](.claude/skills/source-mapping/references/couverture-outillage.md) is
+[`tooling-coverage.md`](.claude/skills/source-mapping/references/tooling-coverage.md) is
 the honest half: it maps each family of rules to the tool that verifies it, and names the ones
 **nothing** verifies. That column is not a gap in the tooling — it is the nature of the work, and
 an agent that dresses a judgement up as a metric produces a wrong number and false confidence.
 
 The `[mesuré]` markers come from an audit of shipped city maps whose raw files stay in a private
 repository. What is here is what survived a contradiction pass, together with what did not —
-[`corpus-mesure.md`](.claude/skills/source-mapping/references/corpus-mesure.md) keeps both, and
+[`measured-corpus.md`](.claude/skills/source-mapping/references/measured-corpus.md) keeps both, and
 the refutations are the more useful half.
 
 ## Hammer, command by command
@@ -549,6 +549,9 @@ The dated record of what was tried, measured, and got wrong:
   profiles
 - [docs/architecture.md](docs/architecture.md) — why the write path is a splice, the write
   discipline, and shared plumbing
+- [docs/audits/fishke/](docs/audits/fishke/) — three production maps read end to end with this
+  server: the raw readings, the analyses, and the adversarial pass that refuted two of their own
+  conclusions
 
 ## Configuration
 

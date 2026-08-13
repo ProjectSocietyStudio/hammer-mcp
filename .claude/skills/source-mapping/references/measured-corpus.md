@@ -13,10 +13,12 @@ useful part of the page. A second wave of measurements, taken after that pass wi
 not exist yet, corrected one dated fact (HDR, below) and added one figure (diagonal planes) without
 changing any already written.
 
-⚠️ **The audit dossier these numbers come from is not in this repository.** The raw readings, the
-adversarial passes and the reconstruction of the author's method live in the workshop's private
-repo. What is here is what survived, together with what fell — not the full reasoning. A figure
-that looks doubtful to you may well be: every line says how many maps it holds on.
+**The audit dossier these numbers come from is in this repository**, under
+[`docs/audits/fishke/`](../../../../docs/audits/fishke/README.md): the raw readings, the analyses,
+the adversarial pass and the reconstruction of the author's method. What is on this page is what
+survived, together with what fell — the dossier carries the full reasoning. A figure that looks
+doubtful to you may well be: every line here says how many maps it holds on, and the dossier says
+how it was taken.
 
 ## The two warnings everything else depends on
 
