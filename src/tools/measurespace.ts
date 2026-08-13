@@ -7,12 +7,13 @@ import {
   HULL_CROUCHING,
   HULL_STANDING,
   narrowestWidth,
+  standingAt,
   widthAcross,
 } from "../space/measure.js";
 import { findRooms } from "../space/rooms.js";
 import { buildScene, MASK_PLAYER, MASK_SIGHT, MASK_SOLID } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
-import { traceRay } from "../space/trace.js";
+import { boxInSolid, traceRay } from "../space/trace.js";
 import { voxelise } from "../space/voxel.js";
 import { readEntities } from "../vmf/edit.js";
 import type { VmfEntity } from "../vmf/edit.js";
@@ -89,8 +90,13 @@ export const measureVmfClearanceTool = defineTool({
   outputSchema: {
     path: z.string(),
     at: z.array(z.number()),
-    widthUnits: z.number(),
-    widthMetres: z.number(),
+    /** Whether a body of the requested hull actually fits here. */
+    hullFits: z.boolean(),
+    /** Where a body standing on the floor under `at` would be centred. Null when it fits. */
+    standingAt: z.array(z.number()).nullable(),
+    /** Null when the hull does not fit: there is no width to report, only a hull's own size. */
+    widthUnits: z.number().nullable(),
+    widthMetres: z.number().nullable(),
     narrowestAxis: z.array(z.number()),
     boundedBy: z.array(
       z.object({
@@ -117,12 +123,44 @@ export const measureVmfClearanceTool = defineTool({
     const mask = args.mask === "player" ? MASK_PLAYER : MASK_SOLID;
 
     const insideSolid = traceRay(scene, at, at, mask).startSolid;
+
+    // Whether a body actually fits here, which is not the same question as whether the
+    // point is in open air -- and the difference is the whole of this tool's worst bug.
+    //
+    // A point on the floor passes `insideSolid` (the point is in air) while the hull
+    // centred on it is buried in the floor, so every sweep stopped at zero and the tool
+    // reported the hull's own footprint as a width: 32 units, with a bound naming no
+    // brush at distance 0, and `insideSolid: false` arguing the point was fine. That is
+    // indistinguishable from a real one-cell passage, and an agent building a map nearly
+    // designed around it (issue #55).
+    //
+    // It is the same class of error as `standingAt` exists to prevent for the rules
+    // check: a place on the floor is not a body position.
+    const hullFits = boxInSolid(scene, at, half, mask) === null;
     const width = args.axis
       ? widthAcross(scene, at, args.axis as unknown as Vec3, half, mask)
       : narrowestWidth(scene, at, half, mask);
     const head = headroom(scene, at, MASK_SOLID);
 
     const notes: string[] = [];
+    // Where a body would stand on the floor under this point -- offered rather than
+    // silently substituted, because moving a caller's point without saying so is its own
+    // fault (issue #58).
+    const standing = hullFits ? null : standingAt(scene, at, half);
+    if (!hullFits) {
+      notes.push(
+        `The ${args.hull} hull does not fit at this point, so there is no width to report: ` +
+          `every sweep starts inside a brush and returns zero, which would read as a very ` +
+          `narrow passage. ` +
+          (standing
+            ? `A body standing on the floor here would be centred at ` +
+              `[${standing.map(round).join(", ")}] -- measure there.`
+            : `read_vmf_nearest_surface says how far the nearest open space is.`) +
+          (insideSolid
+            ? ``
+            : ` Note the point itself IS in open air: it is the body that does not fit.`),
+      );
+    }
     if (insideSolid) {
       notes.push(
         "The point is inside a brush, so every width below is zero for a reason that has " +
@@ -144,8 +182,13 @@ export const measureVmfClearanceTool = defineTool({
     return {
       path,
       at: [...at],
-      widthUnits: round(width.widthUnits),
-      widthMetres: metres(width.widthUnits),
+      hullFits,
+      standingAt: standing === null ? null : standing.map(round),
+      // Null rather than a number when no body fits: a number here is read as a
+      // measurement, and this repository would rather admit a gap than return a
+      // confident wrong value.
+      widthUnits: hullFits ? round(width.widthUnits) : null,
+      widthMetres: hullFits ? metres(width.widthUnits) : null,
       narrowestAxis: width.axis.map(round),
       boundedBy: width.sides.map((s) => ({
         brushId: s.brushId,

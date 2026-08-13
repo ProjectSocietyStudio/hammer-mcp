@@ -57,6 +57,51 @@ describe("measure_vmf_clearance", () => {
     for (const side of r.boundedBy) expect(side.brushId).not.toBeNull();
   });
 
+  /**
+   * The failure that produced this test, on the map of 13/08/2026: measuring at a
+   * floor-level point returned `widthUnits: 32` -- exactly the standing hull's own
+   * footprint -- with `insideSolid: false` and a bound naming no brush at distance 0.
+   * The hull is 72 tall and centred on the point, so at floor level it is buried in the
+   * floor and every sweep returns nothing.
+   *
+   * A confident wrong number, indistinguishable from a real one-cell passage. It is the
+   * same class of error as the `standingAt` defect `check_vmf_rules` was built to avoid --
+   * a point on the floor is not a body position -- in a tool that does not go through
+   * `standingAt`.
+   */
+  describe("a point the hull cannot occupy", () => {
+    // Just above the corridor's floor -- the height the round-2 builder measured at, and
+    // the interesting case: the point is in open air, the body is not. At z 0 the point
+    // is itself inside the floor brush, which the old check would already have caught.
+    const onTheFloor = { at: [0, -256, 16] };
+
+    it("says the hull does not fit rather than measuring anyway", () => {
+      const r = clearance(onTheFloor) as {
+        hullFits: boolean;
+        widthUnits: number | null;
+        insideSolid: boolean;
+      };
+      expect(r.hullFits).toBe(false);
+      // Null, not the hull's own width. A number here is read as a measurement.
+      expect(r.widthUnits).toBeNull();
+      // The point itself really is in open air, which is why the old check missed it.
+      expect(r.insideSolid).toBe(false);
+    });
+
+    it("names the point that would have worked", () => {
+      const r = clearance(onTheFloor) as { notes: string[]; standingAt: number[] | null };
+      expect(r.standingAt).not.toBeNull();
+      expect(r.standingAt![2]).toBeGreaterThan(0);
+      expect(r.notes.join(" ")).toMatch(/hull/i);
+    });
+
+    it("measures the same place correctly once the hull fits", () => {
+      const r = clearance() as { hullFits: boolean; widthUnits: number };
+      expect(r.hullFits).toBe(true);
+      expect(r.widthUnits).toBeCloseTo(ROOMS.corridorWidth, 1);
+    });
+  });
+
   it("finds the narrow direction by itself", () => {
     const r = clearance() as { narrowestAxis: number[] };
     // The corridor runs along x, so the narrow axis is y.
