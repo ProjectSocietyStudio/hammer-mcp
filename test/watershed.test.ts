@@ -60,6 +60,78 @@ function plan(rows: string[], step = 16): VoxelGrid {
 /** Rooms of at least one cell, so a plan's own shape decides the count and not a threshold. */
 const rooms = (rows: string[]): number => findRooms(plan(rows), { minRoomArea: 0 }).rooms.length;
 
+const NOOK = [
+  "###############",
+  "#.#...###.....#",
+  "#.#...###.....#",
+  "#.....###.....#",
+  "#.............#",
+  "#.....###.....#",
+  "#.....###.....#",
+  "#.....###.....#",
+  "###############",
+];
+
+describe("saying why it merged", () => {
+  /**
+   * The request this came from, in the builder's own words: for each pair of regions it
+   * merged, report the reason and the cell. Every dead end hit while building
+   * `hmcp_bodega` was a merge that could not be seen, at a coordinate nobody would guess,
+   * and the only way out was reading `src/space/rooms.ts` -- which a caller of this server
+   * cannot do.
+   *
+   * Worth having whether or not the peak defect below is ever repaired: it is what turns
+   * a room count that surprises you into a sentence.
+   */
+  it("reports the merge that collapses two rooms into one, and where", () => {
+    const result = findRooms(plan(NOOK), { minRoomArea: 0 });
+    expect(result.rooms).toHaveLength(1);
+    expect(result.merges.length).toBeGreaterThan(0);
+
+    const constrictions = result.merges.filter((m) => m.reason === "not-a-constriction");
+    expect(constrictions.length).toBeGreaterThan(0);
+    for (const m of constrictions) {
+      // Both numbers, so the reader can see the comparison rather than take a verdict.
+      expect(m.measured).toBeGreaterThanOrEqual(m.bar);
+      expect(m.at).not.toBeNull();
+      expect(m.at).toHaveLength(3);
+    }
+  });
+
+  it("says which regions were offcuts, and against what threshold", () => {
+    // Two boxes that survive the constriction pass as separate rooms, judged against a
+    // threshold neither clears -- so one is absorbed as an offcut, and says so.
+    const twoBoxes = [
+      "###############",
+      "#.....###.....#",
+      "#.....###.....#",
+      "#.....###.....#",
+      "#.............#",
+      "#.....###.....#",
+      "#.....###.....#",
+      "#.....###.....#",
+      "###############",
+    ];
+    expect(rooms(twoBoxes)).toBe(2);
+
+    const result = findRooms(plan(twoBoxes), { minRoomArea: 1e9 });
+    const offcuts = result.merges.filter((m) => m.reason === "offcut");
+    expect(offcuts.length).toBeGreaterThan(0);
+    for (const m of offcuts) {
+      expect(m.bar).toBe(1e9);
+      expect(m.measured).toBeLessThan(m.bar);
+    }
+  });
+
+  it("reports no merges at all for a plan that needs none", () => {
+    const result = findRooms(
+      plan(["#########", "#.......#", "#.......#", "#.......#", "#########"]),
+      { minRoomArea: 0 },
+    );
+    expect(result.merges).toEqual([]);
+  });
+});
+
 describe("the watershed on a drawn plan", () => {
   it("calls one open box one room", () => {
     expect(

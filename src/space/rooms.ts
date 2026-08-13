@@ -71,9 +71,38 @@ export interface Portal {
   approxHeightUnits: number;
 }
 
+/**
+ * One merge the room pass made, and the reason it made it.
+ *
+ * Rooms are the *result* of merging, so a room count that surprises you is a merge you
+ * cannot see -- and every dead end hit while building `hmcp_bodega` was exactly that: a
+ * merge at a coordinate nobody would have guessed, decided by a rule nothing printed.
+ * The algorithm has all of this in hand at the moment it decides; it simply never said it.
+ */
+export interface Merge {
+  /** The region that stopped existing. */
+  absorbed: number;
+  /** The region it became part of. */
+  into: number;
+  /** Why: a constriction that did not constrict, or a region too small to be a room. */
+  reason: "not-a-constriction" | "offcut";
+  /** Where, in world units. The point to look at. */
+  at: Vec3 | null;
+  /**
+   * The comparison that decided it, in units.
+   *
+   * `not-a-constriction`: the opening between the two, against the narrower of their two
+   * widest points. `offcut`: the region's floor area, against the threshold.
+   */
+  measured: number;
+  bar: number;
+}
+
 export interface RoomsResult {
   rooms: Room[];
   portals: Portal[];
+  /** Every merge, in the order it happened. What turns a surprising count into a reason. */
+  merges: Merge[];
   /** Region id per cell, or -1. */
   regionOf: Int32Array;
   method: string;
@@ -214,7 +243,7 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
       `no standable space was found, so there are no rooms to report. A map with no floor a ` +
         `person can stand on is usually a map whose seed was wrong, not a map with no rooms.`,
     );
-    return { rooms: [], portals: [], regionOf, method: "watershed-clearance", parameters: { minRoomArea: minArea, step: grid.step }, notes };
+    return { rooms: [], portals: [], merges: [], regionOf, method: "watershed-clearance", parameters: { minRoomArea: minArea, step: grid.step }, notes };
   }
 
   const at3 = (at: number): [number, number, number] => [
@@ -342,6 +371,7 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
     return r;
   };
 
+  const merged: Merge[] = [];
   for (let pass = 0; pass < 8; pass++) {
     const peak = new Int32Array(nextRegion);
     for (const at of cells) {
@@ -359,6 +389,14 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
         // cell wide reads as clearance 1 from whichever side you stand on.
         const through = Math.max(clearance[at]!, clearance[n]!);
         if (through < narrower) continue;
+        merged.push({
+          absorbed: Math.max(mine, theirs),
+          into: Math.min(mine, theirs),
+          reason: "not-a-constriction",
+          at: cellCentre(grid, ...at3(at)),
+          measured: through * grid.step,
+          bar: narrower * grid.step,
+        });
         parent[Math.max(mine, theirs)] = Math.min(mine, theirs);
         joined += 1;
       }
@@ -392,6 +430,15 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
       let into = options[0]!;
       for (const n of options) if (count[n]! > count[into]!) into = n;
       if (into === r) continue;
+      const where = cells.find((at) => regionOf[at] === r);
+      merged.push({
+        absorbed: r,
+        into,
+        reason: "offcut",
+        at: where === undefined ? null : cellCentre(grid, ...at3(where)),
+        measured: count[r]! * areaOfCell,
+        bar: minArea,
+      });
       for (const at of cells) if (regionOf[at] === r) regionOf[at] = into;
       count[into]! += count[r]!;
       count[r] = 0;
@@ -487,9 +534,30 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
       `cell; a swept player hull is what measures one exactly.`,
   );
 
+  // A region is absorbed once, and a reader should see it once.
+  //
+  // The merge loop visits a boundary from both of its sides, over several passes, and in
+  // three dimensions also from the cell above and below -- so the same absorption was
+  // reported up to four times with identical coordinates, which reads as four separate
+  // decisions and inflates a count a caller is meant to reason about. First record wins:
+  // it is the one that actually decided.
+  //
+  // Measured on the bodega map of 13/08/2026: 21 records for 14 absorptions. No committed
+  // fixture reproduces it -- a single-layer plan never revisits a boundary and neither
+  // does the three-room fixture -- so this is deduplication by construction rather than
+  // by test, and saying so is the point. A region that has been absorbed cannot be
+  // absorbed again, so keeping the first record cannot drop a real one.
+  const seen = new Set<number>();
+  const merged1 = merged.filter((m) => !seen.has(m.absorbed) && seen.add(m.absorbed) !== null);
+
+  // Merges are recorded against internal region ids; the surviving ones are renumbered at
+  // the end, so `into` is mapped through to the id the caller will actually see.
+  for (const m of merged1) m.into = remap.get(m.into) ?? m.into;
+
   return {
     rooms,
     portals,
+    merges: merged1,
     regionOf,
     method: "watershed-clearance",
     parameters: { minRoomArea: minArea, step: grid.step, cellArea: areaOfCell },

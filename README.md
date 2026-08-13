@@ -505,7 +505,7 @@ from and whether a file was read; `health` reports it. See
 | `read_vmf_nearest_surface` | `map` | | Exact distance from a point to the nearest surface, and which face it belongs to |
 | `render_vmf_view` | `map` | | Renders an **uncompiled** `.vmf` from a camera and returns the picture: form and occlusion, no textures |
 | `read_vmf_leak` | `map` | | Whether a `.vmf` seals, **without compiling it**, with the path out |
-| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect |
+| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect — and every merge it made, with the reason |
 | `read_vmf_surfaces` | `map` | | Faces sorted into floor, wall, ceiling — and which of them a person could touch |
 | `render_vmf_plan` | `map` | | A **dimensioned floor plan**: rooms, areas, doorway widths, grid, scale bar, north |
 | `measure_vmf_clearance` | `map` | | Free width and headroom at a point, measured with a **swept player hull**, not a ray |

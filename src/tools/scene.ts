@@ -150,6 +150,13 @@ export const readVmfRoomsTool = defineTool({
   realm: "map",
   inputSchema: {
     ...commonInput,
+    mergeLimit: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(20)
+      .describe("How many merges to report, newest first-hit last. mergeCount stays exact."),
     minRoomArea: z
       .number()
       .min(0)
@@ -180,6 +187,25 @@ export const readVmfRoomsTool = defineTool({
         approxHeightUnits: z.number(),
       }),
     ),
+    /**
+     * Every merge the pass made, newest last, and why.
+     *
+     * Rooms are what is left after merging, so a room count that surprises you is a merge
+     * you cannot see. Before this, working out why two obvious rooms read as one meant
+     * reading `src/space/rooms.ts` -- which an ordinary caller of this server cannot do.
+     */
+    merges: z.array(
+      z.object({
+        absorbed: z.number(),
+        into: z.number(),
+        reason: z.string(),
+        at: z.array(z.number()).nullable(),
+        measured: z.number(),
+        bar: z.number(),
+        why: z.string(),
+      }),
+    ),
+    mergeCount: z.number(),
     method: z.string(),
     parameters: z.record(z.string(), z.number()),
     notes: z.array(z.string()),
@@ -218,6 +244,26 @@ export const readVmfRoomsTool = defineTool({
         approxWidthUnits: p.approxWidthUnits,
         approxHeightUnits: p.approxHeightUnits,
       })),
+      // Newest last, and capped: a large map merges hundreds of offcuts and the tail of
+      // that list is noise. `mergeCount` stays exact so a truncated list never reads as a
+      // short one.
+      merges: result.merges.slice(-args.mergeLimit).map((m) => ({
+        absorbed: m.absorbed,
+        into: m.into,
+        reason: m.reason,
+        at: m.at ? [...m.at] : null,
+        measured: m.measured,
+        bar: m.bar,
+        why:
+          m.reason === "not-a-constriction"
+            ? `region ${m.absorbed} was merged into ${m.into}: the opening between them is ` +
+              `${m.measured} units where the narrower of the two spaces is ${m.bar}, so it ` +
+              `narrows nothing and they are one space.`
+            : `region ${m.absorbed} was merged into ${m.into}: ${m.measured} square units is ` +
+              `below the ${m.bar} an offcut has to clear to count as a room. Raise ` +
+              `minRoomArea to keep it, or lower it to ${m.measured} to see it separately.`,
+      })),
+      mergeCount: result.merges.length,
       method: result.method,
       parameters: result.parameters,
       notes,
