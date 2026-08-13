@@ -56,6 +56,16 @@ export const checkVmfRulesTool = defineTool({
           "neighbour. The same knob read_vmf_rooms takes: pass both the same value, or a " +
           "diagnosis and the verdict it explains are about different segmentations.",
       ),
+    eyeHeight: z
+      .number()
+      .min(0)
+      .max(256)
+      .default(64)
+      .describe(
+        "Height above each end's origin that a sightline is traced at. Source's own eye " +
+          "is 64. It is in every sightline violation's message, because a rule that fails " +
+          "on a lintel is otherwise indistinguishable from one that fails on a wall.",
+      ),
     step: z.number().int().min(4).max(128).default(16),
     maxCells: z.number().int().min(1000).max(64_000_000).default(4_000_000),
     limit: z.number().int().min(1).max(500).default(100),
@@ -129,6 +139,7 @@ export const checkVmfRulesTool = defineTool({
     const file = parseRules(readFileSync(rulesPath, "utf8"), rulesPath);
     const { scene, source } = sceneFor(path);
     const report = checkRules(scene, source, file, {
+      eyeHeight: args.eyeHeight,
       step: args.step,
       minRoomArea: args.minRoomArea,
       maxCells: args.maxCells,

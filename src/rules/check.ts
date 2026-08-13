@@ -229,10 +229,17 @@ export function checkRules(
           measured: clear ? null : Math.round(t.fraction * 1000) / 1000,
           at: clear ? to.point : t.point,
           subject: `${from.name} -> ${to.name}`,
+          // The height is in the message because it had to be reverse-engineered from a
+          // violation's own coordinates once: two entities at z 48, a doorway open from 0
+          // to 112, a level trace clear by 64 units -- and a blocked verdict, because the
+          // trace runs at origin + eyeHeight and struck the lintel. Nothing said so
+          // (issue #56).
           message: clear
-            ? `${from.name} can see ${to.name}, and this rule wants that view blocked.`
-            : `${from.name} cannot see ${to.name}: brush ${t.brushId} (${t.material}) is in ` +
-              `the way. Nothing else in this toolkit would have mentioned it.`,
+            ? `${from.name} can see ${to.name} at eye height ${eyeHeight}, and this rule ` +
+              `wants that view blocked.`
+            : `${from.name} cannot see ${to.name}: traced at eye height ${eyeHeight} above ` +
+              `each end, brush ${t.brushId} (${t.material}) is in the way. Nothing else in ` +
+              `this toolkit would have mentioned it.`,
         });
       }
       continue;

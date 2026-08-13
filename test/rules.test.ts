@@ -364,6 +364,46 @@ describe("checking a map against its rules", () => {
     });
   });
 
+  /**
+   * A blocked sightline whose message does not say what height it traced at is a puzzle
+   * rather than a finding. A round-2 builder had two entities at z 48 and a doorway open
+   * from 0 to 112, measured a level line clear by 64 units, and still got "cannot see" --
+   * because the trace runs at origin + eyeHeight and struck the lintel at exactly z 112.
+   * The height had to be deduced from a single coordinate in the violation's own output.
+   */
+  it("says what height a sightline was traced at, and takes that height as an argument", () => {
+    const rules = writeRules("eye.json", [
+      {
+        id: "lobby-view",
+        what: "sightline",
+        from: { entity: "reception" },
+        to: { entity: "front_door" },
+        mustBe: "blocked",
+      },
+    ]);
+    const rulesClear = writeRules("eye-clear.json", [
+      {
+        id: "lobby-view",
+        what: "sightline",
+        from: { entity: "reception" },
+        to: { entity: "front_door" },
+        mustBe: "clear",
+      },
+    ]);
+
+    // Exactly one of the two senses must fail, whichever way this fixture's line runs.
+    const both = [check(rules), check(rulesClear)];
+    const failed = both.find((r) => r.violations.length > 0);
+    expect(failed).toBeDefined();
+    expect(failed!.violations[0]!.message).toMatch(/eye height 64/);
+
+    // And the height is a knob rather than a constant: a crawling line is another question.
+    const lower = check(failed === both[0] ? rules : rulesClear, { eyeHeight: 8 });
+    if (lower.violations.length > 0) {
+      expect(lower.violations[0]!.message).toMatch(/eye height 8/);
+    }
+  });
+
   it("sorts errors before warnings and can filter to errors alone", () => {
     const path = writeRules("mixed.json", [
       { id: "warn", what: "circulation_width", select: { room: "*" }, min: 9999, severity: "warning" },
