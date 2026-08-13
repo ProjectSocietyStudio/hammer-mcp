@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "map": "hmcp_bodega -- a corner shop. The prose half of this brief is brief.md, beside it.",
+  "rules": [
+    {
+      "id": "doorways-wide-enough",
+      "what": "circulation_width",
+      "select": { "portal": "*" },
+      "min": 64,
+      "note": "Two people meeting at a doorway should not have to take turns."
+    },
+    {
+      "id": "rooms-not-pinched",
+      "what": "circulation_width",
+      "select": { "room": "*" },
+      "min": 64,
+      "note": "A room whose widest point is narrow is a corridor that has been mislabelled."
+    },
+    {
+      "id": "headroom",
+      "what": "headroom",
+      "select": { "room": "*" },
+      "min": 112,
+      "note": "A shop with a low ceiling reads as a basement."
+    },
+    {
+      "id": "rooms-are-rooms",
+      "what": "room_area",
+      "select": { "room": "*" },
+      "min": 24000,
+      "note": "About 15 m2. Below that it is a cupboard, not a room."
+    },
+    {
+      "id": "room-to-stand-at-the-till",
+      "what": "clearance_in_front",
+      "select": { "targetname": "register" },
+      "min": 48,
+      "note": "A customer stands in front of the till. 48 units is one person, not a queue."
+    },
+    {
+      "id": "the-till-watches-the-door",
+      "what": "sightline",
+      "from": { "entity": "register" },
+      "to": { "entity": "front_door" },
+      "mustBe": "clear",
+      "note": "The one sight line the shop is arranged around."
+    },
+    {
+      "id": "the-street-cannot-see-the-storeroom",
+      "what": "sightline",
+      "from": { "entity": "front_door" },
+      "to": { "entity": "storeroom" },
+      "mustBe": "blocked",
+      "note": "What is behind the counter is the shop's business, not the street's."
+    }
+  ]
+}
