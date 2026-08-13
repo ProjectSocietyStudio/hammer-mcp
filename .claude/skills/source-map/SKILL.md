@@ -77,12 +77,25 @@ builds of the same brief rather than from the tool list. The shape of it:
 no `world` block, so an absent or empty one is not a starting point.
 
 Then: shell → `read_vmf_leak` → openings → spawn and markers → `read_vmf_rooms` →
-`check_vmf_rules` → furniture → compile. Steps 3, 6 and 7 are seconds rather than minutes,
-which is the whole reason to work offline; run them after every structural change.
+`check_vmf_rules` → furniture → **fittings** → **look** → compile. The cheap steps are seconds
+rather than minutes, which is the whole reason to work offline; run them after every
+structural change.
 
-**Done is three greens**: `read_vmf_leak` sealed, `check_vmf_rules` with `overall: "pass"`, and
-`run_compile` clean — then `read_leak` on the `.bsp`, which answers the seal question a second
-time by a different method.
+**Done is three greens and a look**: `read_vmf_leak` sealed, `check_vmf_rules` with
+`overall: "pass"`, `run_compile` clean — then `read_leak` on the `.bsp`, which answers the
+seal question a second time by a different method — and `render_vmf_tour`, described in
+writing before you conclude.
+
+⚠️ **The fourth one is not a nicety.** Three builders reached the first three greens on the
+same brief. The third map was sealed, satisfied all seven of its rules and compiled clean,
+and in game had a door painted flat on a wall, counters that were single boxes, and no
+skirting anywhere. `render_vmf_view` existed throughout and was called **once in 145 tool
+calls**. A count of greens cannot see proportion or absence; you can.
+
+**Build to Source's scale, which is not the real world's.** Heights are four thirds of real —
+measured on three unrelated Valve models — while the player is one to one. Door leaf 48 × 108,
+shop counter 56 tall, casework 24 deep. `write_vmf_fitting` carries all of it: give it the
+envelope you would have given a box and it supplies the articulation.
 
 Read `overall`, never `errorCount`: zero errors is also what a run returns when a rule matched
 nothing, and when there is no rules file at all. Both come back `skipped`.
@@ -105,7 +118,7 @@ These answer questions Hammer never asked, and all of them work on an **uncompil
 | Can this see that? | `read_vmf_visibility`, `read_vmf_sightlines` |
 | What is in the way, and how far? | `read_vmf_trace`, `read_vmf_nearest_surface` |
 | Which faces are floor, wall, ceiling — and touchable? | `read_vmf_surfaces` |
-| **What does it look like?** | `render_vmf_view` from a camera, `render_vmf_plan` as a dimensioned floor plan |
+| **What does it look like?** | `render_vmf_tour` for the whole place in one call, `render_vmf_view` from one camera, `render_vmf_plan` as a dimensioned floor plan |
 | Does it meet its own brief? | `check_vmf_rules` against `<map>.rules.json` |
 
 A brief is checkable: `<map>.rules.json` beside the `.vmf` states widths, headroom, floor areas
@@ -179,12 +192,18 @@ To be said rather than worked around:
 - **Judge.** Which wall is structural, where a hint goes, whether a map looks good. Counting
   areaportals is automatic; deciding where to put them is not.
 
+  This one has a sharper edge than it used to. No *tool* judges — but `render_vmf_tour` puts
+  the picture in front of somebody who can, and three sessions' worth of evidence says that
+  not looking is the expensive failure, not looking and being unsure. The line is between
+  "no tool decides whether this is good" and "nobody looked", and only the first is a limit.
+
 And two things that used to be on this list and are not any more, because the entry expired
 rather than the reasoning:
 
-- **Look at a map.** `render_vmf_view` draws an uncompiled `.vmf` from any camera and
-  `render_vmf_plan` draws it as a dimensioned floor plan — both without the game and without a
-  compile. What neither is, and will not be, is a viewport you drag things in.
+- **Look at a map.** `render_vmf_view` draws an uncompiled `.vmf` from any camera,
+  `render_vmf_tour` walks the whole place and returns it as one contact sheet, and
+  `render_vmf_plan` draws a dimensioned floor plan — all without the game and without a
+  compile. What none of them is, and will not be, is a viewport you drag things in.
 - **Know whether a map seals without compiling it.** `read_vmf_leak` floods the geometry and
   returns the path out. It can miss a leak through a wall thinner than its cell; it does not
   invent one, because a cell counts as free only when its whole interior is.

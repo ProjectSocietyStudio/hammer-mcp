@@ -32,22 +32,41 @@ deliberate: such a rule reads as enforcement and is not.
 | 6 | Ask what the map *is* | `read_vmf_rooms` — and read `merges`, see below |
 | 7 | Judge it against the brief | `check_vmf_rules` — read `overall`, not `errorCount` |
 | 8 | Furniture, materials, lights | `write_vmf_solid`, `set_face_material`, `set_solid_class` |
-| 9 | Compile | `read_vmf_lint`, then `run_compile` with `fast: true` |
-| 10 | Cross-check the seal | `read_leak` on the `.bsp` — two independent answers to one question |
+| 9 | **Finish it** | `write_vmf_fitting` — casings, counters, skirting. See below; skipping this is what made three maps in a row look unbuilt |
+| 10 | **Look at it** | `render_vmf_tour` — one call, the whole place at eye height |
+| 11 | Compile | `read_vmf_lint`, then `run_compile` with `fast: true` |
+| 12 | Cross-check the seal | `read_leak` on the `.bsp` — two independent answers to one question |
 
 Steps 3, 6 and 7 are cheap and they are the whole point of doing this offline. Run them after
 every structural change, not at the end.
 
-## Done is three greens
+## Done is three greens and a look
 
 1. `read_vmf_leak` — `sealed: true`.
 2. `check_vmf_rules` — `overall: "pass"`. **Not `errorCount: 0`**, which is also what you get
    when a rule matched nothing and when there is no rules file at all. `overall` is `skipped`
    in both of those, never `pass`.
 3. `run_compile` — every stage exits 0.
+4. **`render_vmf_tour`, and say what you see.** In writing, before you conclude. Name what is
+   in each frame and what is missing from it.
 
 Then `read_leak` on the result. A `.bsp` and no pointfile is the compiler agreeing with
 `read_vmf_leak`, by an entirely different method.
+
+### Why the fourth one is not optional
+
+Three builders reached the first three greens on this brief. All three maps were sealed,
+satisfied every rule, and compiled clean. Loaded in game, the third one had **a door painted
+flat on a wall** — no frame, no reveal, no lintel — counters and shelving that were each a
+single box, and not one skirting board in any shot. The diagnosis took one look at three
+screenshots and no tool calls at all.
+
+`render_vmf_view` had existed the whole time. Across those three sessions, **145 tool calls
+between them, it was called once.** Nothing in the loop asked anybody to look, so nobody
+looked, and every report said the map was finished.
+
+A count of greens cannot see proportion, articulation or absence. You can. Use the eye you
+have.
 
 ## The traps, each of which cost real time
 
@@ -136,6 +155,53 @@ through one. Measured: a doorway **built 80 wide reports 64** at step 16.
 So a rule asking for 64 can fail a doorway built at exactly 64, and passes one built at 80.
 Build openings a cell wider than the number you have to satisfy, or expect to discover this by
 failing your own brief ([#61](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/61)).
+
+### Build to Source's scale, which is not the real world's
+
+Measured on 13/08/2026 with `read_model_info`, on three unrelated models Valve ships:
+
+| Model | Real | Measured | Ratio |
+|---|---|---|---|
+| `props_interiors/furniture_desk01a` | 30 in desk | 39.601 | 1.320 |
+| `props_doors/door01_dynamic` | 80 in door leaf | 108.000 | 1.350 |
+| `props_interiors/vendingmachinesoda01a` | 72 in machine | 96.578 | 1.341 |
+
+**Heights are built at four thirds of real.** The player hull is 72 units for a six-foot
+body — **one to one**. So Valve's architecture stands a third taller than the player it is
+built around, and a room built to honest real-world heights reads as a crawlspace through a
+Source camera. That is what a 176-unit ceiling did to this brief.
+
+**The factor does not hold in plan.** Four casework models come back at real-world inches for
+depth (sink 23.877, cabinets 23.220 and 21.110, fridge 33.828). A counter is 24 deep and 56
+tall, and neither is a compromise.
+
+Numbers worth knowing without looking them up: **door leaf 48 × 108** (both models agree,
+and 48 wide is what a 32-wide player needs), **shop counter 56 tall**, kitchen run 48,
+**shelving 19 deep**. The whole table, with each number's provenance, is
+`src/vmf/fittings/dimensions.ts`.
+
+### Finish with fittings, not with boxes
+
+`write_vmf_solid` makes **one convex shape per call**. So an agent that thinks "counter"
+writes a box — which is exactly what happened three times running. Detail in Source lives
+between 4 and 16 units: a worktop with a nosing, a body, a recessed kick.
+
+`write_vmf_fitting` takes the same `mins`/`maxs` you would have given a box and articulates
+it. **You own the envelope, it owns the articulation** — every internal dimension comes from
+the measured table, and those are precisely the numbers there is no way to know.
+
+| Fitting | What you get |
+|---|---|
+| `door_frame` | jambs, head, on both wall faces, around a hole you already cut. Optional threshold |
+| `counter` | worktop oversailing the body, over a kick set back on the side you name |
+| `skirting` | a run round the inside of a room, or a cornice at its ceiling. `omit` the walls with doorways in them |
+
+Two things it refuses, both of which pass every per-brush check: parts that share an interior,
+and parts that fail to join up into the number of pieces the fitting says it should be.
+
+⚠️ **A doorway is a hole plus a frame.** Cutting the hole is `clip_solids` or three brushes;
+the frame is a separate step and it is the one everybody skips. A bare rectangular hole with
+sharp arrises is the single clearest tell that a map was left unfinished.
 
 ### Materials, per brush or per role
 
