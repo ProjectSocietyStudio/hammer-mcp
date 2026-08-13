@@ -216,7 +216,7 @@ killed *is fail as soon as one error violation stands*.
 
 ## 4 — Nothing creates a `.vmf`, so a pure-MCP workflow cannot start
 
-**Class: gap** · the one rule of the exercise that had to be broken · **filed**
+**Class: gap** · the one rule of the exercise that had to be broken · [**#47**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/47)
 
 `write_vmf_solid` on a path that does not exist:
 
@@ -239,7 +239,7 @@ the advertised workflow impossible to complete without a text editor.
 
 ## 5 — Two rooms read as one, and no output says why
 
-**Class: gap** · the single most expensive obstacle of the session · **filed**
+**Class: gap** · the single most expensive obstacle of the session · [**#48**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/48)
 
 A 64-wide doorway between two 384-wide rooms, and `read_vmf_rooms` returned
 `{"roomCount": 1, "portals": []}` — so `{"room": "*"}` matched one thing and
@@ -263,7 +263,7 @@ hand at the moment it decides; it simply does not say it.
 
 ## 6 — A counter top is a room, and no rule can ever pass on it
 
-**Class: bug** · **filed**
+**Class: bug** · [**#49**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/49)
 
 A 40-unit counter produced `room 1: headroom is 104 units` and
 `room 1: room area is 6912 square units`, both at `[304,48,48]` — the top of the counter. It
@@ -277,7 +277,7 @@ is standable at step 16 or step 8. A real constraint dressed as a style choice.
 
 ## 7 — `read_leak` delivers the good news through the error channel
 
-**Class: ergonomics** · **filed**
+**Class: ergonomics** · [**#50**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/50)
 
 Confirming on the compiled `.bsp` that vbsp agreed the map was sealed:
 
@@ -292,7 +292,7 @@ hedges the one thing being confirmed.
 
 ## 8 — `read_vmf_rooms` and `check_vmf_rules` cannot be made to agree
 
-**Class: ergonomics** · **filed**
+**Class: ergonomics** · [**#51**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/51)
 
 `read_vmf_rooms` exposes `minRoomArea`; `check_vmf_rules`, which calls it, does not — it takes
 `step`, `maxCells` and `seeds` only. So the tool used to *diagnose* a segmentation and the
@@ -300,7 +300,7 @@ tool that *judges* against it can never be run at the same settings.
 
 ## 9 — The audit log cannot see the failure of finding 2
 
-**Class: gap**, in the instrumentation · **filed**
+**Class: gap**, in the instrumentation · [**#52**](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/52)
 
 The round-1 window of `.hammer-mcp/logs/audit.jsonl` records `edit_vmf` three times, **zero
 errors** — while the builder was hitting a hard MCP error on one of those calls. The handler
