@@ -73,6 +73,10 @@ export const checkVmfRulesTool = defineTool({
      * took it for compliance.
      */
     overall: z.enum(["pass", "warn", "fail", "skipped"]),
+    /** What the room pass actually found, for the rules that needed it. */
+    segmentation: z
+      .object({ rooms: z.number(), portals: z.number(), step: z.number() })
+      .nullable(),
     rulesFound: z.boolean(),
     rulesChecked: z.number(),
     matchedNothing: z.array(z.string()),
@@ -105,6 +109,7 @@ export const checkVmfRulesTool = defineTool({
         path,
         rulesPath,
         overall: "skipped" as const,
+        segmentation: null,
         rulesFound: false,
         rulesChecked: 0,
         matchedNothing: [],
@@ -156,6 +161,7 @@ export const checkVmfRulesTool = defineTool({
       path,
       rulesPath,
       overall,
+      segmentation: report.segmentation,
       rulesFound: true,
       rulesChecked: report.checked,
       matchedNothing: report.matchedNothing,

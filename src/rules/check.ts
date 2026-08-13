@@ -49,6 +49,18 @@ export interface Violation {
 
 export interface RulesReport {
   checked: number;
+  /**
+   * The segmentation every room and portal rule was judged against, or null when no rule
+   * needed one.
+   *
+   * Reported because without it a caller cannot tell a rules file that is wrong from a
+   * map that is wrong from a room pass that found nothing. On 13/08/2026 an agent got
+   * `matchedNothing: ["doorways-wide-enough"]` with a note blaming the rules file, on a
+   * map whose rules file and geometry were both correct: the room pass had found one room
+   * and no portals at the default cell size. The tool had that number in hand and did not
+   * say it.
+   */
+  segmentation: { rooms: number; portals: number; step: number } | null;
   /** Rules that matched nothing. A rule about a room that does not exist is a finding. */
   matchedNothing: string[];
   violations: Violation[];
@@ -159,6 +171,7 @@ export function checkRules(
   );
   let rooms: RoomsResult | null = null;
   let grid: VoxelGrid | null = null;
+  const step = options.step ?? 16;
   if (needsRooms) {
     const seeds =
       options.seeds && options.seeds.length > 0
@@ -325,8 +338,24 @@ export function checkRules(
       "refuse, because a non-planar face is not a choice and 96 units of corridor is.",
   );
 
+  // A portal rule that matched nothing on a map the pass split into one room is not a
+  // finding about the rules: it is the segmentation, and this is where to say so. The
+  // cell size is the thing to vary, and it is not monotone -- see issue #53.
+  const wantedPortals = file.rules.some((r) => r.select?.portal !== undefined);
+  if (rooms && wantedPortals && rooms.portals.length === 0) {
+    notes.push(
+      `The room pass found ${rooms.rooms.length} room(s) and no doorways at step ${step}, ` +
+        `so every rule about a portal matched nothing. That is about the segmentation, not ` +
+        `about the rules file: try another 'step'. Larger can help where smaller does not, ` +
+        `and read_vmf_rooms at the same step shows the merges that produced this.`,
+    );
+  }
+
   return {
     checked: file.rules.length,
+    segmentation: rooms
+      ? { rooms: rooms.rooms.length, portals: rooms.portals.length, step }
+      : null,
     matchedNothing,
     violations,
     errorCount: violations.filter((v) => v.severity === "error").length,

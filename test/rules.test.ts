@@ -43,6 +43,7 @@ const writeRules = (name: string, rules: unknown): string => {
 
 interface Report {
   overall: "pass" | "warn" | "fail" | "skipped";
+  segmentation: { rooms: number; portals: number; step: number } | null;
   rulesFound: boolean;
   rulesChecked: number;
   errorCount: number;
@@ -321,6 +322,46 @@ describe("checking a map against its rules", () => {
     // And the knob has to actually move something, or the equality above is vacuous.
     // Measured on this fixture: three rooms up to 100 000, one at 500 000.
     expect(roomsAt(0)).not.toBe(roomsAt(500_000));
+  });
+
+  /**
+   * A rules file that is right, a map that is right, and a verdict that blames the rules
+   * file. That is what a round-2 builder met: `matchedNothing: ["doorways-wide-enough"]`
+   * on a shop with a doorway in it, because the room pass had found one room and no
+   * portals at the default cell size and did not say so.
+   */
+  describe("the segmentation the verdict rests on", () => {
+    it("is reported whenever a rule needed the room pass", () => {
+      const r = check(writeRules("seg.json", [
+        { id: "doorways", what: "circulation_width", select: { portal: "*" }, min: 1 },
+      ]));
+      expect(r.segmentation).not.toBeNull();
+      expect(r.segmentation!.rooms).toBe(3);
+      expect(r.segmentation!.portals).toBe(2);
+      expect(r.segmentation!.step).toBe(16);
+    });
+
+    it("is null when no rule is about rooms, so nothing pays for the pass", () => {
+      const r = check(writeRules("no-rooms.json", [
+        { id: "till", what: "clearance_in_front", select: { classname: "prop_door" }, min: 1 },
+      ]));
+      expect(r.segmentation).toBeNull();
+    });
+
+    it("says the segmentation is the problem when a portal rule matches nothing", () => {
+      // A cell size coarse enough that the pass finds no doorway at all.
+      const r = check(
+        writeRules("no-portal.json", [
+          { id: "doorways", what: "circulation_width", select: { portal: "*" }, min: 1 },
+        ]),
+        { step: 128 },
+      );
+      expect(r.segmentation!.portals).toBe(0);
+      expect(r.matchedNothing).toEqual(["doorways"]);
+      // Naming 'step' is the point: it is what a caller has to vary, and nothing else said so.
+      expect(r.notes.join(" ")).toMatch(/step/);
+      expect(r.notes.join(" ")).toMatch(/not about the rules file/i);
+    });
   });
 
   it("sorts errors before warnings and can filter to errors alone", () => {
