@@ -510,3 +510,93 @@ identical calls, which no friction log would have recorded as remarkable — a b
 notice it is repeating itself. And the friction log caught the round-2 `step` finding, which
 the audit log shows only as eleven `read_vmf_rooms` calls with varying arguments and no
 indication that ten of them were wasted.
+
+---
+
+# Round 3 — the same brief again, with the workflow written down
+
+Same brief, byte for byte, for the third time. Same instructions. What changed since round 2:
+the skills, which now carry [`building.md`](../../../.claude/skills/source-map/references/building.md),
+and eight further tool fixes.
+
+**That is two variables at once, and the honest reading has to say so.** Rounds 1 and 2 isolated
+the tooling; this one cannot separate the written workflow from the fixes that landed beside it.
+One number stays attributable, and it is the one the page was written for: what the `step` trap
+costs when somebody has been warned about it.
+
+## What it cost
+
+| | Round 1 | Round 2 | Round 3 |
+|---|---|---|---|
+| MCP calls | 53 | 51 | **41** |
+| logged failures | 2 | 1 | **0** |
+| hand-edits forced | 1 | 0 | 0 |
+| `check_vmf_rules` passes at the **default** cell size | — | no (needed 32) | **yes** |
+| worst repeated identical call | 9× `read_vmf_rooms` | 2× | 6× `check_vmf_rules` |
+| brushes · entities | 18 · 8 | 14 · 8 | 16 · 8 |
+
+Twenty-three per cent fewer calls than round 1, and the first session with **no failed call at
+all**. The map is also the first to satisfy its brief at the default `step`, which no amount of
+documentation causes — that is geometry the builder chose, and it chose it having read why the
+cell size matters.
+
+Two things in the call list say the page was read and followed: `validate_io` and
+`render_vmf_plan` were both called, and both appear in `building.md` under *"what is worth doing
+even though nothing enforces it"*. Neither had been called in round 1 or 2.
+
+## What the documentation was worth, and where it was wrong
+
+The builder's own account names seven things it saved. The load-bearing one:
+
+> the non-monotone `step` trap — **which is what proved my problem was *not* segmentation**
+
+That is the page working exactly as intended, and it is worth being precise about how. It did
+not prevent the problem. It ended the search: five `step` values, all giving one room, and the
+builder concluded from the documented table that this was not the documented trap and went
+looking elsewhere. Rounds 1 and 2 had no such stopping rule and each spent about two thirds of
+the session there.
+
+Also named: *"read `overall`, never `errorCount`"* — the furniture regression returned
+`errorCount: 0` with an empty `violations` array and `overall: "skipped"`, a run that looks
+perfect and checked nothing. Without that line the session would have ended green and wrong.
+
+**And the page was wrong about one thing, which is the finding this round exists to produce.**
+It said to put shelving flush to a wall. The builder did exactly that — three runs, all against
+walls, none near the divider — and still lost the doorway. The cause was **depth**: a run 48
+units deep collapsed the segmentation where the same run at 32 did not, from 200 units away.
+`building.md` now says so, and says that the `step` sweep will not find it.
+
+## The new findings
+
+| | Class | Where |
+|---|---|---|
+| 16 · `clearance_in_front` reports 0 without saying what stopped it | **bug** | [#59](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/59) |
+| 17 · nothing reports a portal that stopped existing | **gap** | [#60](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/60) |
+| 18 · a doorway built to the brief's own number can measure under it | **bug** | [#61](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/61) |
+| 19 · `write_vmf` picks a skybox vbsp then complains about | **ergonomics** | [#62](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/62) |
+| 20 · `building.md` said flush-to-a-wall was enough | **docs** | fixed |
+
+Finding 16 is the sharpest, because it is **my own incomplete fix**. #55 taught
+`measure_vmf_clearance` to say `hullFits: false` and name what bounded it. The
+`clearance_in_front` check inside `check_vmf_rules` does the same measurement and did not get
+the same treatment, so it still reports a bare 0 — and the builder spent its first hypothesis on
+a yaw convention that was never the problem. Fixing a tool is not the same as fixing the
+question it answers.
+
+Finding 17 is #48 from a third angle. Round 1: the segmentation varies with cell **order**.
+Round 2: with cell **size**, non-monotonically. Round 3: with **geometry 200 units from the
+boundary that changes**. Three different symptoms, one statement — the segmentation is a fact
+about the grid rather than about the map — and the thing that would have cost one call instead
+of a dozen is the same each time: *say what changed and why*.
+
+## What three rounds are worth
+
+Twenty findings, sixteen fixed. The call count fell 53 → 51 → 41 and the failure count 2 → 1 →
+0, but the number that matters is not on that line: each round's remaining obstacle is a
+sharper statement of the same defect than the last, and the sessions stopped being spent on the
+toolkit's problems and started being spent on the map's.
+
+The method also produced its own correction three times, which is the part worth keeping. Round
+1's prediction was refuted and deserved to be. Round 2's instrumentation gap was predicted and
+then measured. Round 3 found the documentation written after round 2 to be wrong in a specific,
+correctable way — which no amount of re-reading it would have shown.

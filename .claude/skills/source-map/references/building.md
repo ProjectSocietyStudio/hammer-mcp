@@ -71,6 +71,10 @@ converges, and `step`'s own description — *"16 is the coarsest that resolves a
 doorway"* — points the wrong way.
 
 **So: when a portal rule matches nothing, vary `step` before touching the geometry.** Try 32.
+But bound that search: if three or four values all give the same answer, it is **not** a
+resolution problem and every further `step` is wasted — go and bisect the geometry instead. A
+third builder spent five calls here on advice that is right often enough to be on this page and
+was wrong that time.
 `check_vmf_rules` now reports the `segmentation` it used and says so in a note, and both tools
 take `minRoomArea` so a diagnosis and the verdict it explains can be run at the same settings.
 Open as [#53](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/53); one builder
@@ -91,6 +95,21 @@ A block standing in the middle of a room splits that room around itself — the 
 exactly what it is for, on a pillar you did not think of as a pillar. Put shelving flush to a
 wall and run a counter to the end of its wall unless you mean to divide the space.
 
+⚠️ **Flush to a wall is not enough, and this page said it was.** A third builder followed that
+instruction exactly and still lost a doorway: three shelf runs, all against walls, none near
+the divider, turned `rooms: 2, portals: 1` into `rooms: 1, portals: 0`. The culprit was
+**depth**, not position — a run 48 units deep collapsed the segmentation where the same run at
+32 did not, from about 200 units away from the doorway that disappeared.
+
+So the rule to build is: **furniture deep enough to matter narrows the room it stands in**, and
+the room pass reads that narrowing as the map's real shape. If a portal disappears after a
+furniture change, suspect the furniture's *depth* before anything else — and note that the
+`step` sweep will not find it, because it is not a resolution problem.
+
+Nothing reports a portal that stopped existing ([#60](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/60)),
+so bisection — delete one brush, re-read, put it back — is currently the only way. It took
+five wasted `step` calls before that.
+
 A standable surface above the floor — a counter top, a ledge — is no longer reported as a room:
 it comes back under `unreachable`, because no walk of one cell reaches it. You no longer have
 to make furniture 80 units tall to hide it from the room pass.
@@ -107,6 +126,16 @@ measurement — but the habit to build is *measure where a person's middle would
 Both ends are lifted by `eyeHeight` (64 by default, Source's own) before the trace. A rule
 between two markers at z 48 traces at z 112, so a lintel at 112 blocks a line that looks clear
 at floor level. The height is in every violation's message and it is an argument.
+
+### A doorway built to the brief's own number can measure under it
+
+The voxel ruler loses up to a cell against each surface, on purpose — a cell counts as free
+only when its whole interior is, and losing space against a wall is safer than gaining it
+through one. Measured: a doorway **built 80 wide reports 64** at step 16.
+
+So a rule asking for 64 can fail a doorway built at exactly 64, and passes one built at 80.
+Build openings a cell wider than the number you have to satisfy, or expect to discover this by
+failing your own brief ([#61](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/61)).
 
 ### Materials, per brush or per role
 
