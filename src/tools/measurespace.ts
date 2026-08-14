@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { defineTool } from "../mcp/registry.js";
 import {
+  bodyFits,
   clearanceInFront,
   headroom,
   HULL_CROUCHING,
@@ -13,7 +14,7 @@ import {
 import { findRooms } from "../space/rooms.js";
 import { buildScene, MASK_PLAYER, MASK_SIGHT, MASK_SOLID } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
-import { boxInSolid, traceRay } from "../space/trace.js";
+import { traceRay } from "../space/trace.js";
 import { voxelise } from "../space/voxel.js";
 import { readEntities } from "../vmf/edit.js";
 import type { VmfEntity } from "../vmf/edit.js";
@@ -125,18 +126,12 @@ export const measureVmfClearanceTool = defineTool({
     const insideSolid = traceRay(scene, at, at, mask).startSolid;
 
     // Whether a body actually fits here, which is not the same question as whether the
-    // point is in open air -- and the difference is the whole of this tool's worst bug.
-    //
-    // A point on the floor passes `insideSolid` (the point is in air) while the hull
-    // centred on it is buried in the floor, so every sweep stopped at zero and the tool
-    // reported the hull's own footprint as a width: 32 units, with a bound naming no
-    // brush at distance 0, and `insideSolid: false` arguing the point was fine. That is
-    // indistinguishable from a real one-cell passage, and an agent building a map nearly
-    // designed around it (issue #55).
-    //
-    // It is the same class of error as `standingAt` exists to prevent for the rules
-    // check: a place on the floor is not a body position.
-    const hullFits = boxInSolid(scene, at, half, mask) === null;
+    // point is in open air -- and the difference is the whole of this tool's worst bug
+    // (issue #55). The test itself lives in `bodyFits`, beside the measurements that need
+    // it: the rules check asks it of the same points, and a second copy is how the two
+    // answers drift apart (issue #59).
+    const fit = bodyFits(scene, at, half, mask);
+    const hullFits = fit.fits;
     const width = args.axis
       ? widthAcross(scene, at, args.axis as unknown as Vec3, half, mask)
       : narrowestWidth(scene, at, half, mask);
@@ -150,8 +145,11 @@ export const measureVmfClearanceTool = defineTool({
     if (!hullFits) {
       notes.push(
         `The ${args.hull} hull does not fit at this point, so there is no width to report: ` +
-          `every sweep starts inside a brush and returns zero, which would read as a very ` +
-          `narrow passage. ` +
+          `every sweep starts inside ` +
+          (fit.insideOf
+            ? `brush ${fit.insideOf.brushId} (${fit.insideOf.owner})`
+            : `a brush`) +
+          ` and returns zero, which would read as a very narrow passage. ` +
           (standing
             ? `A body standing on the floor here would be centred at ` +
               `[${standing.map(round).join(", ")}] -- measure there.`

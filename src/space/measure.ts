@@ -23,7 +23,7 @@
  */
 import { HULL_CROUCHING, HULL_STANDING, MASK_PLAYER, MASK_SOLID } from "./scene.js";
 import type { Scene } from "./scene.js";
-import { DIST_EPSILON, nearestSurface, traceRay } from "./trace.js";
+import { boxInSolid, DIST_EPSILON, nearestSurface, traceRay } from "./trace.js";
 import type { Vec3 } from "../vmf/solid.js";
 
 /** Source's own step height: a player climbs 18 units without jumping. */
@@ -134,6 +134,44 @@ export function floorUnder(scene: Scene, at: Vec3): number {
  */
 export function eyeAt(scene: Scene, at: Vec3, eyeHeight = 64): Vec3 {
   return [at[0], at[1], floorUnder(scene, at) + eyeHeight];
+}
+
+export interface BodyFit {
+  /** False when the hull centred here overlaps a brush, so no sweep from it means anything. */
+  fits: boolean;
+  /**
+   * The brush the hull is already inside, named so the reader can go and look at it.
+   *
+   * Its `owner` rather than a material: a box overlaps a brush across several faces at once,
+   * so "which material" has no single answer here, and inventing one would be a number
+   * nobody read.
+   */
+  insideOf: { brushId: number; owner: string } | null;
+}
+
+/**
+ * Whether a body actually fits at a point -- which is not whether the point is in open air.
+ *
+ * The difference is the whole of issue #55: a point on the floor is in air while the hull
+ * centred on it is buried in the slab, so every sweep from it returns zero and the caller
+ * reads the hull's own footprint as a very narrow passage. A bare zero is indistinguishable
+ * from a real one-cell gap, and an agent building a map nearly designed around one.
+ *
+ * It lives here rather than in the tool that first needed it because the *rules* check asks
+ * the same question of the same points (issue #59), and a second copy of this test is how the
+ * two answers drift apart.
+ */
+export function bodyFits(
+  scene: Scene,
+  at: Vec3,
+  half: Vec3 = HULL_STANDING,
+  mask = MASK_PLAYER,
+): BodyFit {
+  const brush = boxInSolid(scene, at, half, mask);
+  return {
+    fits: brush === null,
+    insideOf: brush === null ? null : { brushId: brush.id, owner: brush.owner },
+  };
 }
 
 export interface WidthMeasurement {
@@ -251,6 +289,16 @@ export interface Approach {
   /** Where the measurement was taken from. */
   from: Vec3;
   /**
+   * Whether a body fits at `from` at all.
+   *
+   * When it does not, `clearUnits` is 0 for a reason that has nothing to do with what is
+   * ahead: the sweep started inside a brush. The two cases produce the identical number, and
+   * a builder spent its first hypothesis on the yaw convention because of it (issue #59).
+   */
+  hullFits: boolean;
+  /** The brush already occupied at `from`, when the hull does not fit. */
+  startsInside: BodyFit["insideOf"];
+  /**
    * The hull used, stated because it is an assumption and not a measurement.
    *
    * A door's leaf width lives in a model this server cannot open offline, so "can the door
@@ -278,12 +326,15 @@ export function clearanceInFront(
   const facing: Vec3 = [Math.cos(rad), Math.sin(rad), 0];
 
   const from = standingAt(scene, origin, half);
+  const fit = bodyFits(scene, from, half, mask);
   const s = sweep(scene, from, facing, half, mask);
   return {
     clearUnits: s.distance,
     facing,
     blockedBy: s.unbounded ? null : { brushId: s.brushId, material: s.material },
     from,
+    hullFits: fit.fits,
+    startsInside: fit.insideOf,
     assumedHull: half,
   };
 }

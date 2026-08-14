@@ -12,6 +12,7 @@
  * look -- and the loop closes without anyone compiling anything.
  */
 import {
+  bodyFits,
   clearanceInFront,
   headroom,
   HULL_CROUCHING,
@@ -19,6 +20,7 @@ import {
   narrowestWidth,
   standingAt,
 } from "../space/measure.js";
+import type { BodyFit } from "../space/measure.js";
 import { findRooms } from "../space/rooms.js";
 import type { RoomsResult } from "../space/rooms.js";
 import { MASK_PLAYER, MASK_SIGHT, MASK_SOLID } from "../space/scene.js";
@@ -45,6 +47,29 @@ export interface Violation {
   subject: string;
   message: string;
   note?: string;
+  /**
+   * How the measurement was taken, for the checks where a bare number is ambiguous.
+   *
+   * A sub-object rather than flat fields because `headroom` and `room_area` have nothing to
+   * put in it. What it exists to end: `clearance in front is 0 units` with no statement of
+   * which way "in front" was taken and no mention that the hull did not fit where the sweep
+   * started -- the same output for a wrong yaw convention and for a marker standing inside a
+   * counter, which cost a builder its first and costlier hypothesis (issue #59).
+   */
+  evidence?: {
+    /** False when the hull was already inside a brush, so `measured` means nothing. */
+    hullFits: boolean;
+    /** The brush occupied at the measuring point, when the hull did not fit. */
+    startsInside: { brushId: number; owner: string } | null;
+    /** What stopped the sweep, when something did. */
+    blockedBy?: { brushId: number | null; material: string | null } | null;
+    /** The direction swept, as a unit vector. Only for checks that have one. */
+    facing?: Vec3;
+    /** The yaw that direction came from, in degrees, and where it came from. */
+    yawDegrees?: number;
+    /** The hull assumed, stated because it is an assumption and not a measurement. */
+    assumedHull: Vec3;
+  };
 }
 
 export interface RulesReport {
@@ -133,6 +158,56 @@ function outOfBounds(rule: Rule, value: number): boolean {
   if (rule.min !== undefined && value < rule.min) return true;
   if (rule.max !== undefined && value > rule.max) return true;
   return false;
+}
+
+const hullText = (half: Vec3): string => `${half[0] * 2}x${half[1] * 2}x${half[2] * 2}`;
+const pointText = (p: Vec3): string => `[${p.map((n) => Math.round(n * 1000) / 1000).join(", ")}]`;
+
+/**
+ * The finding for a point no body can stand at, which is not the same finding as "too narrow".
+ *
+ * Both used to come back as a number -- 0 units of clearance, or 32 units of width, the hull's
+ * own footprint -- and the caller had no way to tell a real constriction from a measurement
+ * that never happened. `measured` is null here for the same reason `measure_vmf_clearance`
+ * returns null: this repository would rather admit a gap than return a confident wrong value.
+ */
+function noBodyFits(
+  rule: Rule,
+  subject: string,
+  from: Vec3,
+  fit: BodyFit,
+  half: Vec3,
+  unit: string,
+  swept?: { facing: Vec3; yawDegrees: number; hasOwnYaw: boolean },
+): Omit<Violation, "ruleId" | "severity" | "what" | "note"> {
+  const inside = fit.insideOf
+    ? `brush ${fit.insideOf.brushId} (${fit.insideOf.owner})`
+    : `a brush`;
+  const direction = swept
+    ? ` The direction taken was (${swept.facing[0]}, ${swept.facing[1]}), from yaw ` +
+      `${swept.yawDegrees}` +
+      (swept.hasOwnYaw
+        ? ` -- the entity's own.`
+        : ` -- the default, because a room or a doorway has no yaw of its own.`)
+    : ``;
+  return {
+    required: boundText(rule, unit),
+    measured: null,
+    at: from,
+    subject,
+    message:
+      `${subject}: no body fits where this would be measured. The ${hullText(half)} hull ` +
+      `centred at ${pointText(from)} is already inside ${inside}, so every sweep from it ` +
+      `returns 0 -- which is not a measurement of the room.${direction} Move the point clear ` +
+      `of that brush, or measure with read_vmf_nearest_surface to find how far the open ` +
+      `space is. The rule asks for ${boundText(rule, unit)}.`,
+    evidence: {
+      hullFits: false,
+      startsInside: fit.insideOf,
+      assumedHull: half,
+      ...(swept ? { facing: swept.facing, yawDegrees: swept.yawDegrees } : {}),
+    },
+  };
 }
 
 export interface CheckOptions {
@@ -293,18 +368,52 @@ export function checkRules(
       let value: number;
       let unit = "units";
       let at = subject.at;
+      let evidence: Violation["evidence"];
 
       if (rule.what === "circulation_width") {
         // A room's widest cell and a doorway's col are both places on the floor, not body
         // positions. Measured as given, a hull centred there starts inside the slab and
         // every corridor in the map comes back 32 units wide -- the hull's own footprint.
-        const m = narrowestWidth(scene, standingAt(scene, subject.at, half), half, MASK_PLAYER);
+        const from = standingAt(scene, subject.at, half);
+        const fit = bodyFits(scene, from, half, MASK_PLAYER);
+        if (!fit.fits) {
+          report(noBodyFits(rule, subject.name, from, fit, half, unit));
+          continue;
+        }
+        const m = narrowestWidth(scene, from, half, MASK_PLAYER);
         value = m.widthUnits;
         at = m.at;
+        evidence = { hullFits: true, startsInside: null, assumedHull: half };
       } else if (rule.what === "clearance_in_front") {
-        const a = clearanceInFront(scene, subject.at, subject.yaw ?? 0, half, MASK_PLAYER);
+        // The yaw is the entity's own; a room or a portal has none, and 0 means +x. Saying
+        // so is the point: the identical "0 units" comes back from a marker facing a wall
+        // and from a direction nobody chose (issue #59).
+        const yaw = subject.yaw ?? 0;
+        const a = clearanceInFront(scene, subject.at, yaw, half, MASK_PLAYER);
+        if (!a.hullFits) {
+          report(
+            noBodyFits(
+              rule,
+              subject.name,
+              a.from,
+              { fits: false, insideOf: a.startsInside },
+              half,
+              unit,
+              { facing: a.facing, yawDegrees: yaw, hasOwnYaw: subject.yaw !== undefined },
+            ),
+          );
+          continue;
+        }
         value = a.clearUnits;
         at = a.from;
+        evidence = {
+          hullFits: true,
+          startsInside: null,
+          blockedBy: a.blockedBy,
+          facing: a.facing,
+          yawDegrees: yaw,
+          assumedHull: half,
+        };
       } else if (rule.what === "headroom") {
         const h = headroom(scene, subject.at, MASK_SOLID);
         value = h.heightUnits;
@@ -324,7 +433,19 @@ export function checkRules(
         subject: subject.name,
         message:
           `${subject.name}: ${rule.what.replace(/_/g, " ")} is ${value} ${unit}, and this ` +
-          `map's rules ask for ${boundText(rule, unit)}.`,
+          `map's rules ask for ${boundText(rule, unit)}.` +
+          (evidence?.facing
+            ? ` Measured along (${evidence.facing[0]}, ${evidence.facing[1]}) from yaw ` +
+              `${evidence.yawDegrees}` +
+              (subject.yaw === undefined
+                ? ` -- the default, because a room or a doorway has no yaw of its own.`
+                : `.`) +
+              (evidence.blockedBy
+                ? ` Brush ${evidence.blockedBy.brushId} (${evidence.blockedBy.material}) is ` +
+                  `what stopped it.`
+                : ` Nothing stopped it within reach.`)
+            : ``),
+        ...(evidence ? { evidence } : {}),
       });
     }
 

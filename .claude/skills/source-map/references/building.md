@@ -140,6 +140,13 @@ the floor and the hull is buried in the floor. It now says `hullFits: false` and
 point that would have worked, rather than returning the hull's own width as if it were a
 measurement — but the habit to build is *measure where a person's middle would be*.
 
+`check_vmf_rules` says the same thing now, and it did not use to: a `circulation_width` or
+`clearance_in_front` violation whose hull did not fit reports `measured: null` and
+`evidence.startsInside` naming the brush, instead of the bare `0` that cost a builder its first
+hypothesis. When the hull *does* fit, `evidence` still carries `facing` and `yawDegrees` — so a
+marker that measures 0 because it faces the wrong way is distinguishable from one standing in a
+counter. A subject with no `angles` of its own is swept along +x, and the violation says so.
+
 ### Sightlines are traced at eye height
 
 Both ends are lifted by `eyeHeight` (64 by default, Source's own) before the trace. A rule
