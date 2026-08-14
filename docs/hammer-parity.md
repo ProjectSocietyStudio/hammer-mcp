@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 13/08/2026: **72 tools**.
+Last checked against the tool list on 14/08/2026: **73 tools**.
 
 ## The file itself
 
@@ -126,6 +126,7 @@ getting `ENOENT` on the first call.
 | Check what is missing | `read_map_dependencies` | The end of "purple checkerboard for the player, fine for me" |
 | Budgets | `read_map_report` | A verdict per criterion rather than another number |
 | Walking the map to check it | `read_vmf_trace`, `read_vmf_visibility` | Hammer has no answer at all: you compile and go and look. These trace the `.vmf` itself |
+| Rename a finished map | `run_bsp_rename` | Hammer cannot: the map is compiled by then. Renaming the file alone orphans everything packed under `maps/<name>/`, silently. Drives ficool2's `bsp_rename`, a separate download |
 | Build cubemaps | *the running engine* | `buildcubemaps` needs the game. That is `gmod-mcp` |
 | Generate a nav mesh | *the running engine* | Same. `read_nav` says whether one still matches its map |
 
@@ -158,7 +159,7 @@ with these tools and nothing else.
 
 ## Beyond Hammer
 
-Thirty-three of the tools here answer questions Hammer never asked. They are not parity and
+Thirty-four of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 

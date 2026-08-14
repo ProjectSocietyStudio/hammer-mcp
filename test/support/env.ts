@@ -88,6 +88,15 @@ export const has = {
    * and the tests would report the content missing rather than the mount failing.
    */
   gameContent: existsSync(join(config.gmodGameDir, "gameinfo.txt")),
+  /**
+   * ficool2's bsp_rename, a standalone download that belongs to no game install.
+   *
+   * Absent is the normal case, here as on any fresh clone: it is not ours to
+   * redistribute, so it cannot be committed and cannot be discovered either.
+   */
+  bspRename: existsSync(
+    join(config.externalToolsDir ?? join(config.stateDir, "tools"), "bsp_rename.exe"),
+  ),
 } as const;
 
 const LABELS: Record<keyof typeof has, string> = {
@@ -102,6 +111,7 @@ const LABELS: Record<keyof typeof has, string> = {
   navPair: "a .nav / .bsp pair",
   luaEntities: "a GMod Lua entity tree",
   gameContent: `the game's own content (${config.gmodGameDir})`,
+  bspRename: `ficool2's bsp_rename.exe in ${config.externalToolsDir} (optional)`,
 };
 
 let announced = false;

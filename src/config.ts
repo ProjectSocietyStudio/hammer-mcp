@@ -40,6 +40,19 @@ export const ConfigFile = z.object({
    */
   gmodBinPlusPlus: z.string().optional(),
   /**
+   * Directory holding the standalone tools this server can drive, beyond the compilers.
+   *
+   * These are separate downloads that belong to nobody's game install -- ficool2's
+   * `bsp_rename.exe` is the first -- so they cannot be discovered the way `gmodBin` is.
+   *
+   * Defaults to `<stateDir>/tools`, i.e. `.hammer-mcp/tools`. Not `<repoRoot>/tools`,
+   * which was the first choice and is wrong here: `repoRoot` is the *parent* repository
+   * this server is embedded in, whose `tools/` is full of that project's own scripts.
+   * Dropping third-party Windows binaries in there would be writing into somebody else's
+   * source tree. `.hammer-mcp/` is already this server's own and already ignored by git.
+   */
+  externalToolsDir: z.string().optional(),
+  /**
    * Which game profile tools work against when a call does not name one. `gmod` unless
    * set; `read_source_games` lists what this machine actually has.
    */
@@ -146,6 +159,10 @@ export function loadConfig(cwd: string = process.cwd()): Config {
       return null;
     }
   };
+
+  if (config.externalToolsDir === undefined) {
+    config.externalToolsDir = join(config.stateDir, "tools");
+  }
 
   lazy(config, "gmodBin", () => config.explicit.gmodBin ?? active()?.binDir ?? join(STEAM_GMOD, "bin"));
   lazy(
