@@ -4,7 +4,13 @@ import { clip } from "@projectsociety/mcp-core";
 import { z } from "zod";
 import { parseCompileLog } from "../compile/log.js";
 import { locateLeak, readPointfile } from "../compile/leak.js";
-import { ToolchainError, compilerExe, runCompiler, toWindowsPath } from "../compile/wine.js";
+import {
+  ToolchainError,
+  chooseToolchain,
+  compilerExe,
+  runCompiler,
+  toWindowsPath,
+} from "../compile/wine.js";
 import { readEntityLump } from "../bsp/entities.js";
 import { checkNavFreshness } from "../bsp/nav.js";
 import { parseEntityText } from "../bsp/entities.js";
@@ -22,19 +28,25 @@ const FINDING = z.object({
 });
 
 /**
- * Stock by default, on purpose and not out of caution.
+ * Hammer++ by default: it is the better compiler, and this project compiles with it.
  *
- * The Hammer++ compilers are faster and cull more, which is exactly why they must not be
- * the default: the only way to know whether they changed something they should not have
- * on a 1.13 GB map is to recompile the same source with the stock chain and compare.
- * A default nobody chose would remove that comparison without anyone noticing.
+ * The chain used to default to `stock`, on the argument that the comparison between the two
+ * is the only oracle for whether the faster one changed something it should not have. That
+ * argument is still true and it is now served differently: the comparison is preserved by
+ * every result naming the chain that actually ran, not by making the slower chain the one
+ * everybody gets by accident.
+ *
+ * An absent `++` install falls back to stock and says so, rather than failing -- a default
+ * that cannot run on a machine without Hammer++ would take CI and every fresh clone with it.
  */
 const TOOLCHAIN = z
   .enum(["stock", "plusplus"])
-  .default("stock")
+  .default("plusplus")
   .describe(
-    "Which compilers to drive. 'plusplus' is the Hammer++ rebuild: much faster vvis, and " +
-      "flags the stock chain does not have. Requires them installed; see health.",
+    "Which compilers to drive. The default 'plusplus' is ficool2's Hammer++ rebuild: much " +
+      "faster vvis and flags the stock chain does not have. Falls back to 'stock' when it " +
+      "is not installed, and the result says which one ran. 'stock' forces the compilers " +
+      "that ship with the game, which is what a comparison between the two needs.",
   );
 
 const STAGE_RESULT = z.object({
@@ -72,12 +84,14 @@ export const runCompile = defineTool({
     toolchain: TOOLCHAIN,
     cull: z
       .boolean()
-      .default(false)
+      .optional()
       .describe(
-        "Hammer++ only. Culls unreferenced planes, vertices, brushes and brush sides " +
-          "even when no limit is reached yet. Measured on ttt_traps: -20.5% PLANES, " +
-          "-12.8% VERTEXES, -10.5% file size. Changes no geometry; read_map_geometry " +
-          "before and after is the check.",
+        "Hammer++ only, and ON by default whenever the ++ chain runs. Culls unreferenced " +
+          "planes, vertices, brushes and brush sides even when no limit is reached yet. " +
+          "Measured on ttt_traps: -20.5% PLANES, -12.8% VERTEXES, -10.5% file size, with " +
+          "FACES and TEXINFO unchanged -- which is what distinguishes a prune from a broken " +
+          "map. Pass false to compile without it; read_map_geometry before and after is the " +
+          "check. Passing true with toolchain 'stock' is refused rather than ignored.",
       ),
     game: GAME,
     timeoutMinutes: z.number().int().min(1).max(600).default(60),
@@ -85,7 +99,14 @@ export const runCompile = defineTool({
   },
   outputSchema: {
     vmf: z.string(),
+    /** The chain that actually ran, which is not always the one that was asked for. */
     toolchain: z.string(),
+    /** What was asked for. Equal to `toolchain` unless the ++ chain was missing. */
+    toolchainRequested: z.string(),
+    /** Said whenever the two differ. A silent substitution would make a .bsp untraceable. */
+    toolchainNote: z.string().nullable(),
+    /** Whether the culling flags were passed. False on stock, where they do not exist. */
+    cull: z.boolean(),
     game: GAME_BLOCK,
     bsp: z.string(),
     bspExists: z.boolean(),
@@ -96,10 +117,11 @@ export const runCompile = defineTool({
     ok: z.boolean(),
   },
   handler: async (args, ctx) => {
-    const chain = args.toolchain;
     // Checked before anything touches the disk: this is an inconsistency between two
-    // arguments, and it stays true whether or not the map exists.
-    if (args.cull && chain !== "plusplus") {
+    // arguments, and it stays true whether or not the map exists. Only an *explicit* cull
+    // is refused -- the default is now "on with the ++ chain", so leaving it out on a
+    // stock compile has to mean "no culling" rather than an error.
+    if (args.cull === true && args.toolchain !== "plusplus") {
       // Refused rather than dropped: the stock vbsp accepts unknown flags in silence, so
       // a stock compile with cull would report success and have culled nothing.
       throw new Error(`cull is a Hammer++ flag; pass toolchain: "plusplus" to use it`);
@@ -123,9 +145,18 @@ export const runCompile = defineTool({
     const target = toWindowsPath(vmf);
     const timeoutMs = args.timeoutMinutes * 60_000;
 
+    // Resolved against what is on disk, for the stages actually being run: asking for the
+    // ++ chain on a machine that has none of it is a normal state, not a fault.
+    const chosen = chooseToolchain(ctx.config, args.toolchain, args.stages, profile);
+    const chain = chosen.chain;
+
+    // On by default with the ++ chain, impossible without it. A fallback to stock takes
+    // the flags with it, which is the whole reason the result reports `cull` separately.
+    const culling = chain === "plusplus" && (args.cull ?? true);
+
     // The four go together: they cull the same way in four lumps, and read_map_geometry
     // reports each one separately, so nothing here is hidden behind a single number.
-    const cull = args.cull
+    const cull = culling
       ? ["-cullverts", "-cullplanes", "-cullbrushes", "-cullbrushsides"]
       : [];
 
@@ -188,6 +219,9 @@ export const runCompile = defineTool({
     return {
       vmf,
       toolchain: chain,
+      toolchainRequested: chosen.requested,
+      toolchainNote: chosen.note,
+      cull: culling,
       game: gameBlock(profile, from),
       bsp,
       bspExists,
@@ -433,7 +467,10 @@ export const runPack = defineTool({
   },
   outputSchema: {
     bsp: z.string(),
+    /** The chain that actually ran. bspzip++ packs with multi-threaded LZMA; stock does not. */
     toolchain: z.string(),
+    toolchainRequested: z.string(),
+    toolchainNote: z.string().nullable(),
     game: GAME_BLOCK,
     requested: z.number(),
     /** Pairs auto mode derived from the map, whether or not any were also given by hand. */
@@ -537,9 +574,11 @@ export const runPack = defineTool({
       files.flatMap((f) => [f.internal, resolveInput(f.source, ctx.config)]).join("\n") + "\n",
     );
 
+    const packChain = chooseToolchain(ctx.config, args.toolchain, ["bspzip"], packProfile);
+
     const run = await runCompiler(
       ctx.config,
-      compilerExe("bspzip", args.toolchain),
+      compilerExe("bspzip", packChain.chain),
       [
         "-game",
         toWindowsPath(packProfile.gameDir ?? ctx.config.gmodGameDir),
@@ -549,7 +588,7 @@ export const runPack = defineTool({
         toWindowsPath(bsp),
       ],
       600_000,
-      args.toolchain,
+      packChain.chain,
       packProfile,
     );
 
@@ -558,7 +597,9 @@ export const runPack = defineTool({
 
     return {
       bsp,
-      toolchain: args.toolchain,
+      toolchain: packChain.chain,
+      toolchainRequested: packChain.requested,
+      toolchainNote: packChain.note,
       game: gameBlock(packProfile, packFrom),
       requested: files.length,
       derived,

@@ -21,25 +21,24 @@ running vvis after a leak spends an hour computing a visibility set that means n
 
 ## Which chain — stock or Hammer++
 
-`run_compile` takes `toolchain`. **The default is `stock`, and that is not timidity**: the only way
-to know whether the `++` chain changed something it should not have is to recompile the same source
-with the stock chain and compare. A default nobody chose would remove that comparison without it
-being visible.
+**The default is `plusplus`** — ficool2's Hammer++ rebuild — and `cull` is on with it. You do not
+pass either; you pass `toolchain: "stock"` when you specifically want the compilers the game ships.
 
 | Situation | Chain |
 |---|---|
-| Iterating, shipping, everyday work | `stock` |
-| vvis takes hours | `plusplus` — that is where the gain is |
-| A map hits a `MAX_MAP_*` ceiling | `plusplus` + `cull` |
-| Doubt about a result `plusplus` returned | recompile with `stock` and compare |
+| Iterating, shipping, everyday work | the default |
+| Doubt about a result the `++` chain returned | `toolchain: "stock"`, recompile, compare |
+| A compile that must prune nothing | `cull: false` |
 
-`cull` (Hammer++ only) prunes what nothing references without waiting for a ceiling to be reached.
-Measured on `ttt_traps`: −20.5% `PLANES`, −12.8% `VERTEXES`, −10.5% file size, faces and texinfos
-unchanged. It is **refused** on the stock chain rather than ignored — vbsp swallows unknown options
-silently.
+`cull` prunes what nothing references without waiting for a ceiling to be reached. Measured on
+`ttt_traps`: −20.5% `PLANES`, −12.8% `VERTEXES`, −10.5% file size, faces and texinfos unchanged —
+which is what distinguishes a prune from a broken map. It is **refused** on the stock chain rather
+than ignored, since vbsp swallows unknown options silently.
 
-The `++` binaries are optional: `health` says whether they are there. Absent, only
-`toolchain: "plusplus"` fails, and it fails naming the chain.
+The `++` binaries stay optional: `health` says whether they are there, and without them
+`run_compile` **falls back to stock**, reporting it in `toolchainNote` with the binaries that were
+missing. So read `toolchain` in the result, not the argument you passed — they are not always the
+same, and a `.bsp` you cannot attribute to a compiler is the thing this reporting exists to prevent.
 
 ## Reading compiler output
 

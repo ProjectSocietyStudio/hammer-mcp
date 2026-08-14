@@ -136,9 +136,11 @@ export const health = defineTool({
         // produces a compile which starts and then fails at the second stage.
         usable: Object.values(plusBinaries).every(Boolean),
         note:
-          "Optional. Absent is normal: run_compile and run_pack default to the stock " +
-          "chain, and only toolchain: 'plusplus' needs these. From tools_plusplus.zip " +
-          "(ficool2/misc_tools); they require the x86-64 beta branch of GMod.",
+          "run_compile and run_pack DEFAULT to this chain, and fall back to the stock " +
+          "compilers when it is absent -- saying so in toolchainNote rather than " +
+          "substituting in silence. So absent is workable, not broken: it costs a much " +
+          "slower vvis and the culling flags. From tools_plusplus.zip (ficool2/misc_tools); " +
+          "they require the x86-64 beta branch of GMod.",
       },
       backend: {
         kind: config.backend,
