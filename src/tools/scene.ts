@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { defineTool } from "../mcp/registry.js";
 import { classify } from "../space/classify.js";
+import { portalWidth } from "../space/measure.js";
 import { buildScene } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
 import { findRooms } from "../space/rooms.js";
@@ -223,6 +224,19 @@ export const readVmfRoomsTool = defineTool({
         at: z.array(z.number()),
         approxWidthUnits: z.number(),
         approxHeightUnits: z.number(),
+        /**
+         * The doorway's width, measured -- not estimated.
+         *
+         * `approxWidthUnits` counts cells, so it can only ever be a multiple of `step`, and
+         * it rounds **down**: a cell is free only when its whole interior is. A doorway built
+         * 80 wide reports 64 at step 16, and a builder that widened a door to 80 to satisfy a
+         * rule asking for 64 was following the tool rather than the brief (issue #61).
+         *
+         * This is the swept player hull at the same col, which is exact. Null when no body
+         * fits there at all -- the same answer `measure_vmf_clearance` gives, for the same
+         * reason: a number would be read as a measurement.
+         */
+        widthUnits: z.number().nullable(),
       }),
     ),
     /**
@@ -262,8 +276,14 @@ export const readVmfRoomsTool = defineTool({
   },
   handler: (args, ctx) => {
     const path = resolveInput(args.path, ctx.config);
-    const { grid, seedNote } = gridFor(path, args);
+    const { scene, grid, seedNote } = gridFor(path, args);
     const result = findRooms(grid, { minRoomArea: args.minRoomArea });
+
+    // The voxel localises, the swept hull measures -- the rule the whole of
+    // `src/space/measure.ts` is built on, and the half a portal was missing. The scene is
+    // here already; `findRooms` never sees it, which is why this is done at the wrapper
+    // rather than inside the pass.
+    const portalWidths = result.portals.map((p) => portalWidth(scene, p.at));
 
     const notes = [...grid.notes, ...result.notes];
     if (seedNote) notes.unshift(seedNote);
@@ -297,11 +317,15 @@ export const readVmfRoomsTool = defineTool({
         mins: [...r.mins],
         maxs: [...r.maxs],
       })),
-      portals: result.portals.map((p) => ({
+      portals: result.portals.map((p, i) => ({
         between: [...p.between],
         at: [...p.at],
         approxWidthUnits: p.approxWidthUnits,
         approxHeightUnits: p.approxHeightUnits,
+        widthUnits:
+          portalWidths[i] === null || portalWidths[i] === undefined
+            ? null
+            : Math.round(portalWidths[i]! * 1000) / 1000,
       })),
       // Newest last, and capped: a large map merges hundreds of offcuts and the tail of
       // that list is noise. `mergeCount` stays exact so a truncated list never reads as a

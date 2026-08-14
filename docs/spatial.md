@@ -300,6 +300,7 @@ wall. Every expectation is a number from that file, never one recorded from a pr
 |---|---|
 | Three rooms, two doorways | the fixture's own plan |
 | Doorway width | **exactly 96 units**, and nothing in the algorithm was told that |
+| Doorway width, off the grid | a doorway built **100** wide: `approxWidthUnits` 96, `widthUnits` **100**. The fixture's 96 is a multiple of the cell size, so it cannot tell a count from a measurement — this one can |
 | Room half-width | **exactly 256**, for rooms built 512 across |
 | The graph | one space touches both others; they do not touch each other |
 | Leak found | the path out ends inside the 64-unit hole, and starts at the seed |

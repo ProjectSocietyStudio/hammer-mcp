@@ -516,9 +516,9 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `read_vmf_nearest_surface` | `map` | | Exact distance from a point to the nearest surface, and which face it belongs to |
 | `render_vmf_view` | `map` | | Renders an **uncompiled** `.vmf` from a camera and returns the picture: form and occlusion, no textures |
 | `read_vmf_leak` | `map` | | Whether a `.vmf` seals, **without compiling it**, with the path out |
-| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect — every merge it made with the reason, **the doorway that merge stopped reporting**, and the standable places no walk reaches |
+| `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect — every merge it made with the reason, **the doorway that merge stopped reporting**, and the standable places no walk reaches. Each doorway carries both its cell-count estimate and its **measured** width, from a swept player hull at the same col |
 | `read_vmf_surfaces` | `map` | | Faces sorted into floor, wall, ceiling — and which of them a person could touch |
-| `render_vmf_plan` | `map` | | A **dimensioned floor plan**: rooms, areas, doorway widths, grid, scale bar, north |
+| `render_vmf_plan` | `map` | | A **dimensioned floor plan**: rooms, areas, doorway widths as measured rather than counted, grid, scale bar, north |
 | `measure_vmf_clearance` | `map` | | Free width and headroom at a point, measured with a **swept player hull**, not a ray. Says when no body fits there rather than reporting the hull's own width |
 | `measure_vmf_approach` | `map` | | How much clear room a person has in front of each entity — the door that opens into a wall |
 | `read_vmf_sightlines` | `map` | | Longest clear sight lines in an **uncompiled** `.vmf`, sampled where a person can stand |

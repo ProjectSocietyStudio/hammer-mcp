@@ -21,6 +21,7 @@
  * how much, which is exactly the question. So every portal gets its width written on it.
  */
 import { classify } from "../space/classify.js";
+import { portalWidth } from "../space/measure.js";
 import { findRooms } from "../space/rooms.js";
 import type { RoomsResult } from "../space/rooms.js";
 import type { Scene } from "../space/scene.js";
@@ -249,10 +250,14 @@ export function buildPlan(scene: Scene, seeds: readonly Vec3[], options: PlanOpt
         strokeWidth: 2,
         role: `portal:${portal.between.join("-")}`,
       });
+      // The measured width, not the cell count, because this label is what a reader takes
+      // a decision from: a doorway built 80 wide is labelled 64 by the estimate (issue
+      // #61). Falls back to the estimate only where no body fits at the col.
+      const exact = portalWidth(scene, portal.at);
       items.push({
         kind: "label",
         at: [px, py - r - 2],
-        text: `${portal.approxWidthUnits}u`,
+        text: `${exact ?? portal.approxWidthUnits}u`,
         size: 8,
         colour: PORTAL_INK,
         anchor: "middle",

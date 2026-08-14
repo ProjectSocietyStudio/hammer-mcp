@@ -339,6 +339,32 @@ export function clearanceInFront(
   };
 }
 
+/** How far above a col's own cell a body is measured. A col is floor; a person is not. */
+const COL_LIFT = 32;
+
+/**
+ * The exact width of a doorway the room pass located.
+ *
+ * The pass reports `approxWidthUnits`, which counts cells: it can only be a multiple of the
+ * cell size and it rounds down, because a cell is free only when its whole interior is. A
+ * doorway built 80 wide comes back 64 at step 16 -- and a builder that then widens the door
+ * to satisfy a rule about 64 is following the ruler rather than the brief (issue #61).
+ *
+ * So the grid says where, and this says how wide, which is the division of labour the rest of
+ * this file already follows. Null when no body fits at the col: a number there would be the
+ * hull's own footprint dressed as a measurement.
+ */
+export function portalWidth(
+  scene: Scene,
+  colAt: Vec3,
+  half: Vec3 = HULL_STANDING,
+  mask = MASK_PLAYER,
+): number | null {
+  const from = standingAt(scene, [colAt[0], colAt[1], colAt[2] + COL_LIFT], half);
+  if (!bodyFits(scene, from, half, mask).fits) return null;
+  return Math.round(narrowestWidth(scene, from, half, mask).widthUnits * 1000) / 1000;
+}
+
 export interface Nearest {
   distanceUnits: number;
   point: Vec3;

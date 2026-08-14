@@ -238,6 +238,8 @@ export function checkRules(
   const violations: Violation[] = [];
   const matchedNothing: string[] = [];
   const notes: string[] = [];
+  /** Verdicts within one cell of their bar, pass or fail. See where they are pushed. */
+  const nearMisses: string[] = [];
 
   // The room pass is only run when a rule needs it: it is the expensive half, and a file of
   // entity rules should not pay for it.
@@ -424,6 +426,28 @@ export function checkRules(
       }
 
       value = Math.round(value * 1000) / 1000;
+
+      // A verdict that could go either way is worth saying so, and only for the checks
+      // whose *place* came from the grid: a room's widest cell and a doorway's col are
+      // located to within a cell, so the same measurement taken one cell over can land on
+      // the other side of the bar. The measurement itself is a swept hull and exact --
+      // what is approximate is where it was taken. Issue #61, where a doorway built to the
+      // brief's own 64 measured under it and the natural reading was "widen the door".
+      const fromTheGrid =
+        subject.name.startsWith("doorway ") || subject.name.startsWith("room ");
+      if (fromTheGrid && (rule.what === "circulation_width" || rule.what === "headroom")) {
+        for (const bound of [rule.min, rule.max]) {
+          if (bound === undefined || Math.abs(value - bound) >= step) continue;
+          nearMisses.push(
+            `${subject.name}: ${rule.what.replace(/_/g, " ")} is ${value} ${unit} against a ` +
+              `bar of ${bound}, which is inside one cell of ${step}. The place this was ` +
+              `measured at came from the grid, so it is located to within a cell -- the ` +
+              `verdict is the one most likely to flip at another 'step'. ` +
+              `${outOfBounds(rule, value) ? "It failed" : "It passed"} here.`,
+          );
+        }
+      }
+
       if (!outOfBounds(rule, value)) continue;
 
       report({
@@ -451,6 +475,8 @@ export function checkRules(
 
     if (matched === 0) matchedNothing.push(rule.id);
   }
+
+  for (const near of nearMisses) notes.push(near);
 
   if (matchedNothing.length > 0) {
     notes.push(

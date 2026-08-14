@@ -157,15 +157,24 @@ Both ends are lifted by `eyeHeight` (64 by default, Source's own) before the tra
 between two markers at z 48 traces at z 112, so a lintel at 112 blocks a line that looks clear
 at floor level. The height is in every violation's message and it is an argument.
 
-### A doorway built to the brief's own number can measure under it
+### Read a doorway's `widthUnits`, never its `approxWidthUnits`
 
 The voxel ruler loses up to a cell against each surface, on purpose — a cell counts as free
 only when its whole interior is, and losing space against a wall is safer than gaining it
-through one. Measured: a doorway **built 80 wide reports 64** at step 16.
+through one. Measured: a doorway **built 80 wide reports 64** at step 16, so a rule asking for
+64 could fail a doorway built at exactly 64 and pass one built at 80.
 
-So a rule asking for 64 can fail a doorway built at exactly 64, and passes one built at 80.
-Build openings a cell wider than the number you have to satisfy, or expect to discover this by
-failing your own brief ([#61](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/61)).
+**Each portal now carries both numbers.** `approxWidthUnits` is the cell count — a multiple of
+`step`, rounded down, and the number the segmentation itself used. `widthUnits` beside it is a
+swept player hull at the same col, exact to a thirty-second of a unit: a doorway built 100
+wide reports `approxWidthUnits: 96` and `widthUnits: 100`. `render_vmf_plan` labels the
+measured one. Judge a doorway on `widthUnits`; `null` there means no body fits at the col at
+all, which is a finding of its own.
+
+What that does **not** fix is *where* the col is. The grid localises it to within a cell, so a
+verdict within one cell of its bar can still flip at another `step` — `check_vmf_rules` now
+says so in a note when a room or doorway lands that close, pass or fail
+([#61](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/61)).
 
 ### Build to Source's scale, which is not the real world's
 
