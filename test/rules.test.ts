@@ -631,3 +631,65 @@ describe("it reports and never refuses", () => {
     expect(r.notes.join(" ")).toMatch(/reports; it never refuses/);
   });
 });
+
+/**
+ * #83. Found building `hmcp_tenement`: a staircase mid-wing left a 32-unit gap against a
+ * wall. The room pass reported it correctly -- `approxWidthUnits: 32`, `widthUnits: null` --
+ * and `check_vmf_rules`, asked for 64, answered that it could not measure:
+ *
+ *   doorway 1-2: measured: null
+ *   "no body fits where this would be measured ... Move the point clear of that brush, or
+ *    measure with read_vmf_nearest_surface to find how far the open space is."
+ *
+ * A message about the check failing, and an instruction to go and measure it by hand. But
+ * "no body fits here" IS the measurement against a minimum: a gap a 32-wide hull cannot
+ * enter is not 64 wide. The number was already in the same reply.
+ *
+ * The cost was a map read as broken tooling when the map was broken. I moved the staircase
+ * to make the message go away, and the staircase was fine.
+ */
+describe("a doorway no body fits through (#83)", () => {
+  const PINCHED = join(dir, "pinched.vmf");
+  writeFileSync(
+    PINCHED,
+    // A block in the corridor, leaving 32 units between it and the south wall.
+    insertSolids(roomsVmf(), [{ shape: "box", mins: [-64, -352, 0], maxs: [64, 256, 256] }], {
+      material: "DEV/DEV_MEASUREGENERIC01",
+    }).text,
+  );
+
+  const rules = writeRules("pinched.rules.json", [
+    { id: "doorways-wide-enough", what: "circulation_width", select: { portal: "*" }, min: 64 },
+  ]);
+
+  it("reports the gap's width rather than a failure to measure it", () => {
+    // Seeded explicitly: the block sits over the fixture's own spawn, and a room pass with
+    // no seed reports that it checked nothing.
+    const r = check(rules, { path: PINCHED, seeds: [[-768, 256, 16]] });
+    const v = r.violations.find((x) => x.ruleId === "doorways-wide-enough");
+    expect(v, "the 32-unit gap must violate a rule asking for 64").toBeDefined();
+    expect(v!.measured).not.toBeNull();
+    expect(v!.measured!).toBeLessThan(64);
+    expect(v!.evidence?.hullFits).toBe(false);
+    // The reader is told about the gap, not about their next debugging step.
+    expect(v!.message).not.toMatch(/read_vmf_nearest_surface/);
+  });
+
+  it("still refuses to measure at a marker whose hull is inside a brush", () => {
+    // #59, which must not be traded away: for an entity-anchored subject, no body fitting
+    // genuinely does mean the point is wrong.
+    const r = check(
+      writeRules("pinched-register.json", [
+        {
+          id: "room-at-the-register",
+          what: "clearance_in_front",
+          select: { targetname: "register" },
+          min: 48,
+        },
+      ]),
+    );
+    const v = r.violations.find((x) => x.ruleId === "room-at-the-register")!;
+    expect(v.measured).toBeNull();
+    expect(v.evidence?.startsInside).not.toBeNull();
+  });
+});

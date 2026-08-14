@@ -485,3 +485,132 @@ describe("a pocket must not set the merge bar for the whole map (#74)", () => {
     expect(shipped.portals).toHaveLength(2);
   });
 });
+
+/**
+ * #81. Found building `hmcp_tenement`, the first map here with a staircase.
+ *
+ * `STEP_CELLS = 1` let a walk climb **one cell**, and its comment said that was Source's
+ * 18 — which is true at `step: 16` and at no other value. The allowance scaled with the
+ * segmentation parameter, so a stair of 10 rise on 16 run was walked at 16 and fragmented
+ * into three unreachable slivers at 8, while at 32 a 30-unit ledge nobody can climb would
+ * have read as walkable.
+ *
+ * `step` is documented as a resolution knob. It was also, silently, the body's step height.
+ */
+describe("a walk climbs Source's step, not one cell (#81)", () => {
+  const TENEMENT = join(FIXTURES, "hmcp_tenement.vmf");
+
+  /** The tallest z extent of any REACHED region: how far one walk climbs. */
+  const tallestWalk = (step: number): number => {
+    const scene = buildScene(TENEMENT, readFileSync(TENEMENT, "utf8"));
+    const r = findRooms(voxelise(scene, [[320, 88, 16]], { step }));
+    return Math.max(...r.rooms.map((room) => room.maxs[2] - room.mins[2]));
+  };
+
+  it("walks the same staircase at every cell size fine enough to resolve it", () => {
+    // The stair rises 160 over 16 treads. A walk that climbs it spans far more than the
+    // 16-24 units a single-storey region does.
+    for (const step of [16, 8]) {
+      expect(tallestWalk(step), `step ${step}`).toBeGreaterThan(48);
+    }
+  });
+
+  it("does not let a walk climb what a player cannot", () => {
+    // A 30-unit rise is past Source's 18: no cell size may make it walkable, and a coarse
+    // grid must not buy the allowance back by having big cells.
+    const scene = buildScene(
+      PROBE,
+      insertSolids(probe(), [{ shape: "box", mins: [0, -256, 0], maxs: [256, 256, 30] }], {
+        material: "DEV/DEV_MEASUREGENERIC01",
+      }).text,
+    );
+    // At step 16 the allowance is one cell, 16 units, and the ledge is 30: unreachable. A
+    // sabotage that widens the allowance -- which is exactly what the constant did -- makes
+    // it reachable and turns this red. At step 32 it could not: one cell is already 32.
+    const r = findRooms(voxelise(scene, [[-128, 0, 16]], { step: 16 }));
+    const onTheLedge = [...r.rooms, ...r.unreachable].filter((x) => x.mins[2] > 24);
+    expect(onTheLedge.length, "the ledge has to be a region for this to say anything").toBeGreaterThan(0);
+    expect(onTheLedge.every((x) => r.unreachable.includes(x))).toBe(true);
+  });
+});
+
+/**
+ * #82 and #84, which are one defect: `remap` applied to ids that had already been remapped.
+ *
+ * `regionOf` is renumbered in place to a dense 0..n-1 so the ids mean something to a reader.
+ * Two places downstream then looked those dense ids up in `remap` again -- a table keyed by
+ * the *raw* ids -- and fell back to the raw value on a miss. A double remap either misses
+ * (right by accident) or hits a different region's entry (wrong, and indistinguishable).
+ *
+ * On one storey every id happened to line up and six rounds never saw it. On `hmcp_tenement`
+ * it produced portals joining rooms 150 units apart in z, and a reachability walk that
+ * returned the same answer whatever seed it was given.
+ *
+ * Same shape as round 1's finding about `into` carrying an internal number that looks exactly
+ * like a room id -- the fix for which is three lines further down this same file.
+ */
+describe("region ids survive being reported (#82, #84)", () => {
+  const TENEMENT = join(FIXTURES, "hmcp_tenement.vmf");
+
+  const rooms = (path: string, seeds: Vec3[], step = 16): ReturnType<typeof findRooms> =>
+    findRooms(voxelise(buildScene(path, readFileSync(path, "utf8")), seeds, { step }));
+
+  it("puts every portal inside both of the rooms it says it joins", () => {
+    const r = rooms(TENEMENT, [[320, 88, 16]]);
+    const byId = new Map([...r.rooms, ...r.unreachable].map((x) => [x.id, x]));
+    expect(r.portals.length).toBeGreaterThan(0);
+    for (const p of r.portals) {
+      for (const id of p.between) {
+        const room = byId.get(id);
+        expect(room, `portal ${p.between} names room ${id}, which is not reported`).toBeDefined();
+        for (const axis of [0, 1, 2] as const) {
+          // One cell of slack: the col sits on the boundary between the two, and a room's
+          // bounds are cell centres.
+          expect(p.at[axis]!, `portal ${p.between} at axis ${axis}`).toBeGreaterThanOrEqual(
+            room!.mins[axis]! - 16,
+          );
+          expect(p.at[axis]!, `portal ${p.between} at axis ${axis}`).toBeLessThanOrEqual(
+            room!.maxs[axis]! + 16,
+          );
+        }
+      }
+    }
+  });
+
+  it("answers a different question when given a different seed", () => {
+    // Two standable places with no walk between them: the probe's floor, and a platform 64
+    // tall in one corner -- past Source's 18 by a long way, so nobody climbs it.
+    const split = insertSolids(
+      probe(),
+      [{ shape: "box", mins: [64, 64, 0], maxs: [256, 256, 64] }],
+      { material: "DEV/DEV_MEASUREGENERIC01" },
+    ).text;
+    const path = join(FIXTURES, "hmcp_probe.vmf");
+    const scene = buildScene(path, split);
+
+    const fromFloor = findRooms(voxelise(scene, [[-128, -128, 16]], { step: 16 }));
+    const fromLedge = findRooms(voxelise(scene, [[160, 160, 80]], { step: 16 }));
+
+    const reachable = (r: ReturnType<typeof findRooms>): number[] =>
+      r.rooms.map((x) => Math.round(x.mins[2])).sort((a, b) => a - b);
+
+    // Standing on the floor, the ledge is not a room. Standing on the ledge, the floor is not.
+    expect(reachable(fromFloor)).not.toEqual(reachable(fromLedge));
+
+    // The invariant the seed lookup exists to hold, and the one a double remap breaks: the
+    // region you are standing in is reachable. Asserted rather than inferred from the pair
+    // above, because two answers can differ and both still be about the wrong region.
+    const holds = (r: ReturnType<typeof findRooms>, at: Vec3): boolean =>
+      r.rooms.some(
+        (room) =>
+          at[0] >= room.mins[0] - 16 &&
+          at[0] <= room.maxs[0] + 16 &&
+          at[1] >= room.mins[1] - 16 &&
+          at[1] <= room.maxs[1] + 16 &&
+          at[2] >= room.mins[2] - 16 &&
+          at[2] <= room.maxs[2] + 48,
+      );
+    expect(holds(fromFloor, [-128, -128, 16]), "the floor you seeded from").toBe(true);
+    expect(holds(fromLedge, [160, 160, 80]), "the ledge you seeded from").toBe(true);
+  });
+});

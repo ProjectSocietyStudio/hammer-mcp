@@ -8,9 +8,9 @@ import { contactSheet } from "../render/sheet.js";
 import type { Tile } from "../render/sheet.js";
 import { anglesTowards } from "../render/camera.js";
 import type { Camera } from "../render/camera.js";
-import { buildScene } from "../space/scene.js";
+import { buildScene, MASK_SOLID } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
-import { eyeAt } from "../space/measure.js";
+import { eyeAt, headroom } from "../space/measure.js";
 import { findRooms } from "../space/rooms.js";
 import { pointInSolid } from "../space/trace.js";
 import { voxelise } from "../space/voxel.js";
@@ -334,21 +334,33 @@ export const renderVmfTourTool = defineTool({
     const { rooms, portals } = findRooms(grid, { minRoomArea: args.minRoomArea });
 
     /** Where to stand and what to face, before anything is drawn. */
-    const wanted: { label: string; from: Vec3; at: Vec3 }[] = [];
+    // `aimAtOwnZ` is set only by a view that deliberately chose a height. Every other view
+    // is flattened to eye level, which is what a person does: a doorway's col is a voxel
+    // centre near the floor, and aiming at it would pitch the camera at the threshold.
+    const wanted: { label: string; from: Vec3; at: Vec3; aimAtOwnZ?: boolean }[] = [];
 
     for (const room of rooms) {
       // Along the room's longer side, from its widest point: the view that shows the most of
       // a rectangular room, which is what almost every interior is.
       const spanX = room.maxs[0] - room.mins[0];
       const spanY = room.maxs[1] - room.mins[1];
-      const at: Vec3 =
-        spanX >= spanY
+      // A shaft is a room taller than it is wide -- a light well, a stairwell, an atrium --
+      // and a horizontal eye cannot see one (#86). On `hmcp_tenement`, whose whole subject
+      // is a well running through two floors and out to the sky, not one of nine frames
+      // showed it. The room pass gives the plan; headroom gives the height.
+      const height = headroom(scene, room.centre, MASK_SOLID).heightUnits;
+      const shaft = height > Math.max(spanX, spanY);
+      const at: Vec3 = shaft
+        ? [room.centre[0], room.centre[1], room.centre[2] + height * 0.9]
+        : spanX >= spanY
           ? [room.maxs[0], room.centre[1], room.centre[2]]
           : [room.centre[0], room.maxs[1], room.centre[2]];
       wanted.push({
-        label: `ROOM ${room.id} - ${room.floorAreaSquareMetres.toFixed(1)}m2`,
+        label:
+          `ROOM ${room.id} - ${room.floorAreaSquareMetres.toFixed(1)}m2` + (shaft ? " (UP)" : ""),
         from: room.centre,
         at,
+        aimAtOwnZ: shaft,
       });
     }
 
@@ -410,7 +422,10 @@ export const renderVmfTourTool = defineTool({
 
     for (const w of wanted.slice(0, MAX_TILES)) {
       const origin = eyeAt(scene, w.from);
-      const angles = anglesTowards(origin, [w.at[0], w.at[1], origin[2]]);
+      // The target's own z only when the view asked for it. Flattening unconditionally is
+      // what kept every camera horizontal however the view was chosen (#86) -- a shaft
+      // aimed at its own ceiling still came out looking at a wall.
+      const angles = anglesTowards(origin, w.aimAtOwnZ ? w.at : [w.at[0], w.at[1], origin[2]]);
       const camera: Camera = {
         origin,
         angles,

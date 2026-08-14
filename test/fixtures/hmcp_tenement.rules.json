@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "map": "hmcp_tenement -- two storeys round a light well. The prose half of this brief is brief.md, beside it.",
+  "rules": [
+    {
+      "id": "doorways-wide-enough",
+      "what": "circulation_width",
+      "select": { "portal": "*" },
+      "min": 64,
+      "note": "Two people meeting at a doorway should not have to take turns."
+    },
+    {
+      "id": "rooms-not-pinched",
+      "what": "circulation_width",
+      "select": { "room": "*" },
+      "min": 64,
+      "note": "A room whose widest point is narrow is a corridor that has been mislabelled."
+    },
+    {
+      "id": "headroom-on-both-storeys",
+      "what": "headroom",
+      "select": { "room": "*" },
+      "min": 112,
+      "note": "Every place a person can stand, on either floor. The courtyard's ceiling is the sky."
+    },
+    {
+      "id": "rooms-are-rooms",
+      "what": "room_area",
+      "select": { "room": "*" },
+      "min": 24000,
+      "note": "About 15 m2. Below that it is a cupboard, and a light well that small is a chimney."
+    },
+    {
+      "id": "room-at-the-foot-of-the-stair",
+      "what": "clearance_in_front",
+      "select": { "targetname": "stair_foot" },
+      "min": 48,
+      "note": "You stand at the bottom before you climb. 48 units is one person."
+    },
+    {
+      "id": "the-landing-sees-the-courtyard",
+      "what": "sightline",
+      "from": { "entity": "landing" },
+      "to": { "entity": "courtyard" },
+      "mustBe": "clear",
+      "note": "What a light well is for. Traced with every door removed -- the tracer sees no props."
+    },
+    {
+      "id": "the-hall-does-not-see-the-landing",
+      "what": "sightline",
+      "from": { "entity": "hall" },
+      "to": { "entity": "landing" },
+      "mustBe": "blocked",
+      "note": "A tenement's stair does not put the street in the bedrooms."
+    }
+  ]
+}

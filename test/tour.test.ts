@@ -183,3 +183,46 @@ describe("render_vmf_tour on the first map these tools built", () => {
     expect(tour(16).omitted).toEqual([]);
   });
 });
+
+/**
+ * #86. Found building `hmcp_tenement`, the first two-storey map here.
+ *
+ * Nineteen views on a nine-frame sheet, and the ten omitted came back with **duplicate
+ * labels** -- `DOOR 1-2 FROM 1` twice, because two distinct portals shared one pair of room
+ * ids. A reader cannot tell which is which, nor ask `render_vmf_view` for one by name.
+ *
+ * And every camera is horizontal at eye height, so on a map whose entire subject is a light
+ * well running through two floors and out to the sky, **not one frame showed the well**.
+ */
+describe("a tour of a map with two storeys (#86)", () => {
+  const TENEMENT = join(FIXTURES, "hmcp_tenement.vmf");
+
+  const tourOf = (path: string) =>
+    renderVmfTourTool.handler(
+      { path, step: 16, maxCells: 4_000_000, minRoomArea: 4096, fov: 90, width: 160, height: 120 },
+      ctx,
+    ) as unknown as {
+      views: { label: string; angles: number[]; skyFraction: number }[];
+      omitted: string[];
+      roomCount: number;
+    };
+
+  it("gives every frame a label of its own", () => {
+    const r = tourOf(TENEMENT);
+    const all = [...r.views.map((v) => v.label), ...r.omitted];
+    expect(new Set(all).size, `duplicates in ${JSON.stringify(all)}`).toBe(all.length);
+  });
+
+  it("looks up a shaft rather than across it", () => {
+    // The light well is open from the ground to the sky. A camera that never leaves the
+    // horizontal cannot see that, and the whole point of the tour is to see what is there.
+    const r = tourOf(TENEMENT);
+    expect(r.views.some((v) => v.skyFraction > 0), "no frame sees the sky").toBe(true);
+  });
+
+  it("still looks along a room that is wider than it is tall", () => {
+    // The bodega is four ordinary rooms. Nothing here may start pitching cameras at ceilings
+    // in a building with no shaft in it.
+    for (const v of tourOf(BODEGA).views) expect(Math.abs(v.angles[0]!)).toBeLessThan(20);
+  });
+});

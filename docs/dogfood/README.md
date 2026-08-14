@@ -62,6 +62,7 @@ Without the second round we would have fixed things without knowing whether it h
 |---|---|---|
 | 1–3 | a corner shop — `hmcp_bodega` | [`2026-08-13-bodega/`](2026-08-13-bodega/) |
 | 5 | a house and its garden — `hmcp_backyard` | [`2026-08-14-backyard/`](2026-08-14-backyard/) |
+| 6 | a two-storey tenement — `hmcp_tenement` | [`2026-08-15-tenement/`](2026-08-15-tenement/) |
 
 Round 4 was written and never run: its brief is in the bodega folder, and what it asked for —
 finish, not just measurement — was folded into round 5's brief instead.
@@ -72,7 +73,13 @@ an **outside** — a `toolsskybox` shell, terrain as displacements, a door that 
 than a hole, and a building seen from the garden. Five of its six findings are reachable only from
 a map that has one.
 
-It also changes the *builder*: the session had read rounds 1 to 3 first, so its call count is not
+**Round 6 changes the axis again**, to verticality and to visibility. Thirty-four of the seventy-four
+tools had never been called once, and the largest cluster was the one `source-mapping` names as the
+first of the three things that decide a map. It is the first round whose deliverable is a
+*measurement* rather than a map: what `func_detail`, an areaportal and a hint are each worth, taken
+by compiling before and after.
+
+Round 5 also changed the *builder*: the session had read rounds 1 to 3 first, so its call count is not
 comparable with theirs. What it measures is different and worth having — **what the toolkit still
 costs somebody who knows every trap it has already produced** — and two of its findings are places
 where that knowledge turned out to be wrong.

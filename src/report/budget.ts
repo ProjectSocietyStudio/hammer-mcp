@@ -264,8 +264,10 @@ export function reportMap(path: string, profile: BudgetProfile): MapReport {
       warnAt: profile.lumpFill.warnAt,
       failAt: profile.lumpFill.failAt,
       direction: "over",
+      // lump.used, not lump.count: a byte-denominated ceiling has no record count, and
+      // printing the absent one gave `null of 16777216` beside a computed fraction (#85).
       message:
-        `${lump.count} of ${lump.limit}` +
+        `${lump.used ? `${lump.used.value}${lump.used.unit === "bytes" ? " bytes" : ""}` : lump.count} of ${lump.limit}` +
         (verdict === "fail"
           ? `. Past the stock ceiling -- either the compilers that built this raise it, ` +
             `or vbsp would have refused. Do not read it as "this map is broken" without ` +
