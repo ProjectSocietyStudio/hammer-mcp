@@ -159,7 +159,7 @@ with these tools and nothing else.
 
 ## Beyond Hammer
 
-Thirty-seven of the tools here answer questions Hammer never asked. They are not parity and
+Thirty-eight of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -175,6 +175,8 @@ map and looking, or by not happening at all.
 | `read_pakfile` | nothing |
 | `run_pakfile_extract` | nothing: a compiled map's packed content could be listed and never opened |
 | `run_cubemap2hdr` | nothing offline. The engine builds cubemaps in whichever mode it is running |
+| `run_vtf_convert` | nothing: Hammer browses textures, it does not make them |
+Thirty-eight of the tools here answer questions Hammer never asked. They are not parity and
 | `read_sightlines` | the eye, standing in the map |
 | `read_vmf_rooms` | nothing: Hammer has no idea what a room is |
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |

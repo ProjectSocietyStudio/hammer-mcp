@@ -31,6 +31,7 @@ import { solidTools } from "./solids.js";
 import { spaceTools } from "./space.js";
 import { vertexTools } from "./vertex.js";
 import { visleafTools } from "./visleaf.js";
+import { vtfTools } from "./vtf.js";
 import { vmfTools } from "./vmf.js";
 import { vmfEditTools } from "./vmfedit.js";
 import { wiringTools } from "./wiring.js";

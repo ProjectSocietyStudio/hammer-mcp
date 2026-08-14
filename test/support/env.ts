@@ -105,6 +105,8 @@ export const has = {
   cubemap2hdr: existsSync(
     join(config.externalToolsDir ?? join(config.stateDir, "tools"), "cubemap2hdr.exe"),
   ),
+  /** VTFCmd, the command-line half of VTFEdit++. Needs DevIL.dll beside it. */
+  vtfcmd: existsSync(join(config.externalToolsDir ?? join(config.stateDir, "tools"), "VTFCmd.exe")),
 } as const;
 
 const LABELS: Record<keyof typeof has, string> = {
@@ -122,6 +124,7 @@ const LABELS: Record<keyof typeof has, string> = {
   bspRename: `ficool2's bsp_rename.exe in ${config.externalToolsDir} (optional)`,
   tga2skybox: `ficool2's tga2skybox.exe in ${config.externalToolsDir} (optional)`,
   cubemap2hdr: `ficool2's cubemap2hdr.exe in ${config.externalToolsDir} (optional)`,
+  vtfcmd: `VTFCmd.exe and DevIL.dll in ${config.externalToolsDir} (optional)`,
 };
 
 let announced = false;
