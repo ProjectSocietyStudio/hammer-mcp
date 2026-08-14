@@ -53,6 +53,32 @@ describe("buildScene", () => {
   });
 });
 
+// #73. Found building hmcp_backyard: a rules file asked that the garden NOT be visible from
+// the living room, check_vmf_rules reported pass, and read_vmf_trace with mask "sight" set
+// explicitly named the window pane as what stopped it. A mustBe:"blocked" that passes because
+// of a window is a green asserting the opposite of the truth, and rp_nycity_day is a city of
+// shopfronts.
+describe("maskFor and glass (#73)", () => {
+  it("lets an eye through a pane while a body still stops at it", () => {
+    const m = maskFor("world", ["GLASS/GLASSWINDOW002A"]);
+    expect(m & MASK_SOLID).toBeTruthy();
+    expect(m & MASK_PLAYER).toBeTruthy();
+    expect(m & MASK_SIGHT).toBeFalsy();
+  });
+
+  it("does not make a wall see-through because one face of it is glazed", () => {
+    // A window frame textured glass on its reveal and brick everywhere else is a wall.
+    const m = maskFor("world", ["GLASS/GLASSWINDOW002A", "BRICK/BRICKWALL014A"]);
+    expect(m & MASK_SIGHT).toBeTruthy();
+  });
+
+  it("ignores nodraw beside the glass, which is how a pane is usually built", () => {
+    const m = maskFor("world", ["GLASS/GLASSWINDOW002A", "TOOLS/TOOLSNODRAW"]);
+    expect(m & MASK_SIGHT).toBeFalsy();
+    expect(m & MASK_SOLID).toBeTruthy();
+  });
+});
+
 describe("maskFor", () => {
   it("makes a clip brush stop people and not eyes", () => {
     const m = maskFor("world", ["TOOLS/TOOLSPLAYERCLIP"]);
@@ -356,3 +382,43 @@ function gapScene(width: number) {
   expect(gap.brushes).toHaveLength(2);
   return gap;
 }
+
+/**
+ * #73, end to end: a glazed partition across the probe.
+ *
+ * Found building `hmcp_backyard`, whose rules file asked that the garden not be visible from
+ * the living room. `check_vmf_rules` said pass; `read_vmf_trace` with `mask: "sight"` set
+ * explicitly named the window pane as what stopped it. A `mustBe: "blocked"` that passes
+ * because of a window is a green asserting the opposite of what a player sees, and
+ * `rp_nycity_day` is a city of shopfronts.
+ *
+ * Built here rather than measured on that map, so the assertion is about the tracer and not
+ * about one map's design.
+ */
+describe("a line of sight through glass (#73)", () => {
+  const glazed = (material: string): ReturnType<typeof buildScene> =>
+    buildScene(
+      PROBE,
+      insertSolids(probe(), [{ shape: "box", mins: [-8, -256, 0], maxs: [8, 256, 256] }], {
+        material,
+      }).text,
+    );
+
+  const across: [Vec3, Vec3] = [
+    [-128, 0, 64],
+    [128, 0, 64],
+  ];
+
+  it("passes an eye and stops a body", () => {
+    const scene = glazed("GLASS/GLASSWINDOW002A");
+    expect(isVisible(scene, ...across, MASK_SIGHT)).toBe(true);
+    expect(isVisible(scene, ...across, MASK_SOLID)).toBe(false);
+    expect(isVisible(scene, ...across, MASK_PLAYER)).toBe(false);
+  });
+
+  it("stops both when the same partition is brick", () => {
+    const scene = glazed("BRICK/BRICKWALL014A");
+    expect(isVisible(scene, ...across, MASK_SIGHT)).toBe(false);
+    expect(isVisible(scene, ...across, MASK_SOLID)).toBe(false);
+  });
+});

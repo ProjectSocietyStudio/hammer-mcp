@@ -81,6 +81,35 @@ const CLIP_TOOLS = new Set(["TOOLSCLIP", "TOOLSPLAYERCLIP", "TOOLSNPCCLIP", "TOO
 const SIGHT_ONLY_TOOLS = new Set(["TOOLSBLOCK_LOS", "TOOLSBLOCKLOS"]);
 
 /**
+ * Materials you see through and cannot walk through: the opposite of a clip brush.
+ *
+ * The mirror of `CLIP_TOOLS` and it was missing (#73). A glazed window is solid to a body
+ * and transparent to an eye, and until this existed every pane in every map stopped every
+ * sightline. On `hmcp_backyard` that made a rule reading "the garden is not visible from the
+ * sofa" pass, through a window that looks straight at it -- a green asserting the opposite
+ * of the truth, which is worse than no rule at all.
+ *
+ * Matched on the material's directory, not its basename, because unlike the tool textures
+ * this is a whole family: Garry's Mod ships some fifty `glass/glasswindow*`, and naming them
+ * one by one would go stale the first time a mod adds one.
+ *
+ * ⚠️ **This is the same name-based convention as the rest of this file, with the same
+ * limits, and it does not reach the second case.** A chain-link fence or a foliage card is
+ * transparent through its material's alpha, under `metal/` or `props_foliage/` with nothing
+ * in the name to say so. Only the `.vmt`'s `$translucent` / `$alphatest` settles those, and
+ * reading it would make every spatial question depend on a mounted game. The masks a brush
+ * ended up in are in every tool's output; a rule that says what it did is honest.
+ */
+const SEE_THROUGH_DIRS = new Set(["GLASS"]);
+
+/** The directory a material sits in: `GLASS/GLASSWINDOW002A` -> `GLASS`. */
+const materialDir = (material: string): string => {
+  const clean = material.replace(/\\/g, "/");
+  const cut = clean.lastIndexOf("/");
+  return cut < 0 ? "" : clean.slice(0, cut).toUpperCase();
+};
+
+/**
  * Brush entities whose geometry stops nothing, whatever it is textured with.
  *
  * `func_illusionary` is the reason this list exists: it is normally textured with a real
@@ -177,14 +206,26 @@ export function maskFor(owner: string, materials: readonly string[]): number {
 
   let sightOnly = false;
   let clip = false;
+  // See-through is the one classification here that needs EVERY face to agree, where the
+  // others need one. A single clip face makes the whole brush a clip brush, as vbsp reads
+  // it; a single glazed face does not make a wall a window. A window frame with glass on
+  // its reveal and brick everywhere else is a wall, and the reveal is the commonest way to
+  // texture one. Nodraw abstains rather than voting: a pane built glass-front and
+  // nodraw-edged is still a pane.
+  let seeThrough = false;
+  let opaqueFace = false;
   for (const m of materials) {
     const name = toolName(m);
     if (NON_SOLID_TOOLS.has(name)) return 0;
     if (SIGHT_ONLY_TOOLS.has(name)) sightOnly = true;
     if (CLIP_TOOLS.has(name)) clip = true;
+    if (SEE_THROUGH_DIRS.has(materialDir(m))) seeThrough = true;
+    else if (name !== "TOOLSNODRAW" && !CLIP_TOOLS.has(name)) opaqueFace = true;
   }
   if (sightOnly) return MASK_SIGHT;
   if (clip) return MASK_PLAYER;
+  // Stops a body and a bullet, passes an eye. The mirror of a clip brush.
+  if (seeThrough && !opaqueFace) return MASK_SOLID | MASK_PLAYER;
   return MASK_SOLID | MASK_PLAYER | MASK_SIGHT;
 }
 

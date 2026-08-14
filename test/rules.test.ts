@@ -528,3 +528,4 @@ describe("it reports and never refuses", () => {
     expect(r.notes.join(" ")).toMatch(/reports; it never refuses/);
   });
 });
+
