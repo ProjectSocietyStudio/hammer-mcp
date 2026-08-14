@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { LUMP_SPECS } from "../bsp/geometry.js";
@@ -9,6 +9,13 @@ import { fgdNamesFor, gameBlock, gameFor } from "../games/resolve.js";
 import { luaEntityClasses } from "../lua/entities.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
+import { buildScene, MASK_SOLID } from "../space/scene.js";
+import type { Scene } from "../space/scene.js";
+import { traceRay } from "../space/trace.js";
+import type { Vec3 } from "../vmf/solid.js";
+
+/** How far below a prop to look for its floor. Half a map is further than any prop stands. */
+const FLOOR_REACH = 8192;
 import { GAME, GAME_BLOCK, resolveInput } from "./paths.js";
 
 const FINDING = z.object({
@@ -224,6 +231,63 @@ interface LintReply {
   byRule: Record<string, number>;
   returned: number;
   findings: Array<Record<string, unknown>>;
+  /** Point entities carrying a model, with that model's own hull. See sinkingProps. */
+  props?: Array<{
+    id: number;
+    classname: string;
+    model: string;
+    origin: [number, number, number];
+    mins: [number, number, number];
+    maxs: [number, number, number];
+  }>;
+}
+
+/**
+ * Props standing below the floor they were placed on.
+ *
+ * A model's origin is wherever the artist put it. `props_c17/door01_left.mdl` has it at the
+ * centre -- `mins z -54.25` -- so a door placed at the floor's own z is half underground,
+ * and `read_model_info` says exactly that in its own description while nothing acted on it.
+ * Found on `hmcp_backyard` (#76), where the sunk door passed this lint, `validate_io`,
+ * `check_vmf_rules`, all three compile stages and a seven-frame tour that could not draw it.
+ *
+ * The two halves of the question live in different places on purpose: only the sidecar can
+ * read a `.mdl`'s bounds, only this side has a tracer that can find the floor. Neither could
+ * have answered it alone.
+ *
+ * A warning rather than an error: a crate half-buried in rubble is a thing mappers do.
+ */
+function sinkingProps(scene: Scene, props: NonNullable<LintReply["props"]>): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of props) {
+    // Traced rather than measured with floorUnder, because that returns the point's own z
+    // when it finds nothing -- which is indistinguishable from a prop standing exactly on
+    // its floor, the commonest case there is. `hit` is the only honest answer to "is there
+    // a floor". The start is lifted clear of a surface the origin may be sitting on.
+    const from: Vec3 = [p.origin[0], p.origin[1], p.origin[2] + 1];
+    const down = traceRay(scene, from, [from[0], from[1], from[2] - FLOOR_REACH], MASK_SOLID);
+    // Nothing below: a prop hung on a wall or over a pit has no floor to be under.
+    if (!down.hit || down.startSolid) continue;
+    const floor = down.point[2];
+    const bottom = p.origin[2] + p.mins[2];
+    const sink = Math.round((floor - bottom) * 100) / 100;
+    if (sink <= 1) continue;
+    out.push({
+      severity: "warning",
+      rule: "prop-below-floor",
+      message:
+        `${p.classname} ${p.id} sits ${sink} units into the floor under it: ${p.model} has ` +
+        `its origin ${Math.round(-p.mins[2] * 100) / 100} above its own lowest point, and ` +
+        `the entity is at z ${p.origin[2]} with the floor at ${Math.round(floor * 100) / 100}. ` +
+        `A model's origin is wherever the artist put it; read_model_info reports the bounds. ` +
+        `Deliberate if the prop is meant to be buried.`,
+      entity_ids: [p.id],
+      model: p.model,
+      sinkUnits: sink,
+      suggestedZ: Math.round((floor - p.mins[2]) * 100) / 100,
+    });
+  }
+  return out;
 }
 
 /** VMF counts, mapped onto the compiler ceilings `read_map_geometry` already sources. */
@@ -238,7 +302,9 @@ export const readVmfLint = defineTool({
     "a compile that can take forty minutes to fail. Finds unknown classes and keyvalues, " +
     "outputs aimed at nothing, inputs a target class does not answer to, texture scales " +
     "that become 'Bad surface extents', displacements on brush entities (with the real " +
-    "brush id, which vbsp does not print), and counts that approach the compiler limits. " +
+    "brush id, which vbsp does not print), props standing below the floor they were placed " +
+    "on because their model's origin is at its centre, and counts that approach the " +
+    "compiler limits. " +
     "Knows the repo's Lua-defined entities, so a scripted class is not reported as " +
     "unknown. Needs the Python sidecar and the GMod bin directory; see health.",
   realm: "map",
@@ -292,10 +358,11 @@ export const readVmfLint = defineTool({
   },
   handler: async (args, ctx) => {
     const { game, from, binDir, fgd } = fgdContext(ctx.config, args.game);
+    const path = resolveInput(args.path, ctx.config);
     const reply = await callSidecar<LintReply>(
       "vmf_lint",
       {
-        path: resolveInput(args.path, ctx.config),
+        path,
         binDir,
         fgd,
         collapseInstances: args.collapseInstances,
@@ -338,7 +405,20 @@ export const readVmfLint = defineTool({
       }
     }
 
-    let findings = reply.findings;
+    // The sidecar returned the props and their bounds; the floor is this side's to find.
+    // Costs nothing on a map with no models: the scene is only built when there are some.
+    const sunk =
+      reply.props && reply.props.length > 0
+        ? sinkingProps(buildScene(path, readFileSync(path, "utf8")), reply.props)
+        : [];
+    const byRule = { ...reply.byRule };
+    const bySeverity = { ...reply.bySeverity };
+    for (const f of sunk) {
+      byRule["prop-below-floor"] = (byRule["prop-below-floor"] ?? 0) + 1;
+      bySeverity["warning"] = (bySeverity["warning"] ?? 0) + 1;
+    }
+
+    let findings = [...reply.findings, ...sunk];
     if (args.severity) findings = findings.filter((f) => f["severity"] === args.severity);
     if (args.rule) findings = findings.filter((f) => f["rule"] === args.rule);
 
@@ -351,9 +431,9 @@ export const readVmfLint = defineTool({
       toleratedHelpers: reply.toleratedHelpers,
       fgdsLoaded: reply.fgdsLoaded,
       game: gameBlock(game, from),
-      total: reply.total,
-      bySeverity: reply.bySeverity,
-      byRule: reply.byRule,
+      total: reply.total + sunk.length,
+      bySeverity,
+      byRule,
       matched: findings.length,
       returned: Math.min(findings.length, args.limit),
       findings: findings.slice(0, args.limit),

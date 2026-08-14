@@ -203,3 +203,64 @@ describe("read_vmf_lint on a real Hammer-written map", () => {
     expect(() => z.object(readVmf.outputSchema!).parse(out)).not.toThrow();
   }, 120_000);
 });
+
+/**
+ * #76. Found building `hmcp_backyard`: a `prop_door_rotating` at `origin z 0` on a floor at
+ * `z 0`, carrying `props_c17/door01_left.mdl` whose bounds are `mins z -54.25` -- the origin
+ * sits at the model's centre, so half the door was underground.
+ *
+ * What passed while it was: this lint, `validate_io`, `check_vmf_rules`, all three compile
+ * stages, `read_leak`, and a seven-frame `render_vmf_tour` in which the door appears nowhere,
+ * because nothing offline draws a model. `read_model_info` names the trap in its own
+ * description and nothing acted on it.
+ */
+describe("a prop sunk by its own model origin (#76)", () => {
+  const both = ready && has.gameContent;
+
+  /** The probe with one door prop at a given z. Its floor is at z 0. */
+  const withDoor = (name: string, z: number): string =>
+    broken(name, (s) =>
+      s.replace(
+        /^entity$/m,
+        `entity
+{
+	"id" "9001"
+	"classname" "prop_door_rotating"
+	"model" "models/props_c17/door01_left.mdl"
+	"origin" "0 0 ${z}"
+}
+entity`,
+      ),
+    );
+
+  it.skipIf(!both)("reports the sink, naming the model and how far", async () => {
+    // door01_left is 108.5 tall with its origin at the centre, mins z -54.25. Placed at the
+    // floor's own z it stands half underground -- the case hmcp_backyard shipped with.
+    const r = await lint(withDoor("sunk-prop", 0));
+    expect(r.byRule["prop-below-floor"]).toBe(1);
+    const f = r.findings.find((x) => x.rule === "prop-below-floor")!;
+    expect(String(f.message)).toMatch(/door01_left/);
+    expect(f.severity).toBe("warning");
+    expect(f.sinkUnits).toBeCloseTo(54.25, 1);
+    expect(f.suggestedZ).toBeCloseTo(54.25, 1);
+  }, 120_000);
+
+  it.skipIf(!both)("says nothing about the same prop stood on its own base", async () => {
+    const r = await lint(withDoor("standing-prop", 55));
+    expect(r.byRule["prop-below-floor"] ?? 0).toBe(0);
+  }, 120_000);
+
+  it.skipIf(!both)("says nothing about a prop with no floor under it at all", async () => {
+    // Outside the probe's shell entirely: nothing below to be under. A prop hung on a wall
+    // or flying over a pit is not a sunk prop, and floorUnder cannot tell the difference --
+    // it returns the point's own z when it finds nothing, which is also what standing
+    // exactly on a floor looks like.
+    const r = await lint(withDoor("floating-prop", 6000));
+    expect(r.byRule["prop-below-floor"] ?? 0).toBe(0);
+  }, 120_000);
+
+  it.skipIf(!ready)("costs nothing on a map with no models at all", async () => {
+    const r = await lint(PROBE_VMF);
+    expect(r.byRule["prop-below-floor"] ?? 0).toBe(0);
+  }, 120_000);
+});
