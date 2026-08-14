@@ -667,8 +667,9 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
   notes.push(
     `Rooms come from a watershed on the clearance field, not from connected components -- a ` +
       `sealed map has exactly one of those. This is a heuristic: it can split a hall with a ` +
-      `pillar in it and swallow an alcove. Portal widths are voxel estimates to within a ` +
-      `cell; a swept player hull is what measures one exactly.`,
+      `pillar in it and swallow an alcove. 'approxWidthUnits' is a voxel estimate that ` +
+      `rounds down to a whole cell; 'widthUnits' beside it is the swept player hull at the ` +
+      `same place, which is exact. Judge a doorway on the second.`,
   );
 
   // A region is absorbed once, and a reader should see it once.

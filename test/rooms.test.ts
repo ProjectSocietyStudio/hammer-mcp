@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classify, FLOOR_COSINE, kindOf } from "../src/space/classify.js";
+import { portalWidth } from "../src/space/measure.js";
 import { findRooms, clearanceField } from "../src/space/rooms.js";
 import { buildScene } from "../src/space/scene.js";
 import { cellIndex, voxelise, VoxelBudgetError } from "../src/space/voxel.js";
@@ -333,5 +334,78 @@ describe("findRooms", () => {
     // caller back to the compiler, which is what this exists to avoid.
     const rooms = findRooms(voxelise(leaky, [SEED]));
     expect(rooms.rooms).toHaveLength(3);
+  });
+});
+
+/**
+ * The doorway a voxel count cannot report, and the swept hull can.
+ *
+ * `approxWidthUnits` counts cells: it is a multiple of `step` by construction, and it rounds
+ * down, because a cell is free only when its whole interior is. So a doorway is reported at
+ * the largest multiple of the cell size that fits inside it -- and a builder that widens a
+ * door until the estimate reaches the brief's own number is following the ruler rather than
+ * the brief. Measured 13/08/2026: a doorway built 80 wide reported 64 at step 16, and the
+ * builder had to build 80 to satisfy a rule about 64 (issue #61).
+ *
+ * The gap between the two numbers is what this fixture is for, so its doorway is built at a
+ * width that is **not** a multiple of the cell size. 100 units, at step 16: six whole cells
+ * fit, which is 96, and the four missing units are exactly the error.
+ */
+describe("measuring a doorway rather than counting cells", () => {
+  const T = 32;
+  const H = 256;
+  const GAP = 100;
+  const box = (
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number,
+  ): { shape: "box"; mins: Vec3; maxs: Vec3 } => ({
+    shape: "box",
+    mins: [x0, y0, z0],
+    maxs: [x1, y1, z1],
+  });
+
+  // Two 320-square rooms either side of a divider at x 368..400, with a GAP-wide opening
+  // in it centred on y = 256. The opening's edges land off the 16-unit grid on purpose.
+  const low = 256 - GAP / 2;
+  const high = 256 + GAP / 2;
+  const SOURCE = insertSolids(
+    'versioninfo\n{\n}\nvisgroups\n{\n}\nworld\n{\n\t"id" "1"\n\t"classname" "worldspawn"\n}\n',
+    [
+      box(-T, -T, -T, 768 + T, 512 + T, 0),
+      box(-T, -T, H, 768 + T, 512 + T, H + T),
+      box(-T, -T, 0, 0, 512 + T, H),
+      box(768, -T, 0, 768 + T, 512 + T, H),
+      box(-T, -T, 0, 768 + T, 0, H),
+      box(-T, 512, 0, 768 + T, 512 + T, H),
+      box(368, 0, 0, 400, low, H),
+      box(368, high, 0, 400, 512, H),
+    ],
+    { material: "DEV/DEV_MEASUREGENERIC01" },
+  ).text;
+
+  const scene = buildScene("doorway.vmf", SOURCE);
+  const rooms = findRooms(voxelise(scene, [[184, 256, 16]]));
+
+  it("has the two rooms and the one doorway the plan states", () => {
+    expect(rooms.rooms).toHaveLength(2);
+    expect(rooms.portals).toHaveLength(1);
+  });
+
+  it("counts cells low, which is why the estimate alone is a trap", () => {
+    // Not a defect: the voxeliser is right to lose space against a surface rather than
+    // gain it through one. It is a defect only when it is the number a rule is judged on.
+    const estimate = rooms.portals[0]!.approxWidthUnits;
+    expect(estimate).toBeLessThan(GAP);
+    expect(estimate % 16).toBe(0);
+  });
+
+  it("measures the doorway it was built at, to the unit", () => {
+    const measured = portalWidth(scene, rooms.portals[0]!.at);
+    expect(measured).not.toBeNull();
+    expect(measured!).toBeCloseTo(GAP, 1);
   });
 });

@@ -6,6 +6,7 @@ import { paint } from "../render/paint.js";
 import { buildPlan } from "../render/plan.js";
 import { encodePng } from "../render/png.js";
 import { toSvg } from "../render/svg.js";
+import { portalWidth } from "../space/measure.js";
 import { buildScene } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
 import { readEntities } from "../vmf/edit.js";
@@ -82,7 +83,13 @@ export const renderVmfPlanTool = defineTool({
       }),
     ),
     portals: z.array(
-      z.object({ between: z.array(z.number()), at: z.array(z.number()), approxWidthUnits: z.number() }),
+      z.object({
+        between: z.array(z.number()),
+        at: z.array(z.number()),
+        approxWidthUnits: z.number(),
+        /** The swept-hull width at the same col. Exact; null when no body fits there. */
+        widthUnits: z.number().nullable(),
+      }),
     ),
     svg: z.string().nullable(),
     notes: z.array(z.string()),
@@ -139,6 +146,7 @@ export const renderVmfPlanTool = defineTool({
         between: [...p.between],
         at: [...p.at],
         approxWidthUnits: p.approxWidthUnits,
+        widthUnits: portalWidth(scene, p.at),
       })),
       svg: args.svg ? toSvg(plan.list) : null,
       notes: [...notes, ...plan.notes, ...(plan.rooms?.notes ?? [])],
