@@ -32,6 +32,7 @@ const frame = (w: number, h: number): Framebuffer => ({
   height: h,
   rgb: new Uint8Array(w * h * 3),
   ids: new Int32Array(w * h),
+  sky: new Uint8Array(w * h),
   invDepth: new Float32Array(w * h),
 });
 const tile = (label: string, w = 16, h = 12): Tile => ({ label, frame: frame(w, h) });
@@ -132,12 +133,13 @@ describe("render_vmf_tour on the first map these tools built", () => {
     };
 
   it("walks both rooms and both sides of the doorway, in one call", () => {
-    const r = tour(32);
+    // At the default cell size now, not at 32: see the #53 note below.
+    const r = tour(16);
     expect(r.roomCount).toBe(2);
     expect(r.portalCount).toBe(1);
     expect(r.views.map((v) => v.label)).toEqual([
-      "ROOM 0 - 29.1m2",
-      "ROOM 1 - 28.4m2",
+      "ROOM 0 - 31.2m2",
+      "ROOM 1 - 32.7m2",
       "DOOR 0-1 FROM 0",
       "DOOR 0-1 FROM 1",
     ]);
@@ -145,20 +147,22 @@ describe("render_vmf_tour on the first map these tools built", () => {
   });
 
   it("stands every camera at eye height, and none inside a wall", () => {
-    for (const v of tour(32).views) {
+    for (const v of tour(16).views) {
       expect(v.origin[2], `${v.label} is not at eye height`).toBeCloseTo(64, 1);
       expect(v.insideSolid, `${v.label} is inside a brush`).toBe(false);
     }
   });
 
   /**
-   * The tour inherits #53 and does not hide it. At the default cell size this map reads as
-   * one 64 m2 room with no doorway -- the two rooms and the door between them are found at
-   * 32 and at no other value tried. So the sheet shows one frame, which is the truth about
-   * what the room pass returned rather than the truth about the map.
+   * The tour shows what the room pass returned, whatever that is -- which used to mean
+   * inheriting #53 and showing one frame for a two-room shop at the default cell size.
+   *
+   * That is fixed (#74), so the inheritance is asserted from the other end: at a cell size
+   * too coarse to resolve a 64-unit doorway the pass genuinely finds one room, and the sheet
+   * shows one frame rather than pretending to a door it was not told about.
    */
-  it("shows what the room pass found, defect included", () => {
-    const r = tour(16);
+  it("shows what the room pass found, under-resolved included", () => {
+    const r = tour(64);
     expect(r.roomCount).toBe(1);
     expect(r.portalCount).toBe(0);
     expect(r.views).toHaveLength(1);
@@ -176,6 +180,6 @@ describe("render_vmf_tour on the first map these tools built", () => {
   });
 
   it("names what a full sheet left out rather than dropping it quietly", () => {
-    expect(tour(32).omitted).toEqual([]);
+    expect(tour(16).omitted).toEqual([]);
   });
 });

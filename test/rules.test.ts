@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,8 +7,9 @@ import { parseRules, RulesError, rulesPathFor } from "../src/rules/schema.js";
 import { checkVmfRulesTool } from "../src/tools/rules.js";
 import { readVmfRoomsTool } from "../src/tools/scene.js";
 import { editVmf } from "../src/tools/vmfedit.js";
+import { insertSolids } from "../src/vmf/build.js";
 import { applyVmfOps } from "../src/vmf/edit.js";
-import { ctx as sharedCtx } from "./support/env.js";
+import { ctx as sharedCtx, FIXTURES } from "./support/env.js";
 import { ROOMS, roomsVmf } from "./support/rooms.js";
 
 const ctx = sharedCtx as unknown as ToolContext;
@@ -482,6 +483,108 @@ describe("checking a map against its rules", () => {
     const errorsOnly = check(path, { severity: "error" });
     for (const v of errorsOnly.violations) expect(v.severity).toBe("error");
     expect(errorsOnly.violations.length).toBeLessThan(all.violations.length);
+  });
+});
+
+describe("it reports and never refuses", () => {
+  it("lets a write through on a map that violates its own rules", () => {
+    // The rule this file exists to keep. A mapper may want a narrow alley; turning a design
+    // choice into a write error is how a tool stops being usable. The geometry checks DO
+    // refuse, because a non-planar face is not a choice.
+    const map = join(dir, "editable.vmf");
+    writeFileSync(map, roomsVmf());
+    writeFileSync(
+      rulesPathFor(map),
+      JSON.stringify({
+        version: 1,
+        rules: [{ id: "impossible", what: "circulation_width", select: { room: "*" }, min: 9999 }],
+      }),
+    );
+
+    // Every room violates it.
+    const before = checkVmfRulesTool.handler(
+      { path: map, severity: "all", step: 16, maxCells: 4_000_000, limit: 100 } as never,
+      ctx,
+    ) as unknown as Report;
+    expect(before.errorCount).toBeGreaterThan(0);
+
+    // And the writer does not care.
+    const written = editVmf.handler(
+      {
+        path: map,
+        ops: [{ op: "add", keyvalues: { classname: "info_target", origin: "0 0 64" } }],
+        confirm: true,
+        dryRun: false,
+        backup: false,
+      } as never,
+      ctx,
+    ) as unknown as { entitiesBefore: number; entitiesAfter: number };
+    expect(written.entitiesAfter).toBe(written.entitiesBefore + 1);
+  });
+
+  it("says so in its own output, so nobody wires it into a guard", () => {
+    const r = check(writeRules("say.json", [
+      { id: "corridor", what: "circulation_width", select: { room: "*" }, min: 192 },
+    ]));
+    expect(r.notes.join(" ")).toMatch(/reports; it never refuses/);
+  });
+});
+
+
+/**
+ * #75. Found building `hmcp_backyard`: `write_vmf_fitting`'s `door_frame` lays a threshold 2
+ * units tall across the doorway floor -- `DOOR.thresholdHeight` from its own measured table --
+ * and `check_vmf_rules` then reported `measured: null, hullFits: false` on a doorway 80 units
+ * wide, because the hull it centred there started inside the sill.
+ *
+ * The message was right, and it is the #59 fix doing its job: it named brush 568 instead of
+ * returning a bare 0. The measurement was not. The floor was found by tracing a ray straight
+ * down from the doorway's own col, which sits exactly on the wall's face -- so the ray grazes
+ * the sill's edge plane and misses it, while the 32-wide hull that follows lands squarely on
+ * it. A body does not stand on what a ray hits; it stands on what its footprint hits.
+ */
+describe("a doorway with a threshold across it (#75)", () => {
+  const BACKYARD = join(FIXTURES, "hmcp_backyard.vmf");
+  const SILL = join(dir, "sill.vmf");
+  writeFileSync(
+    SILL,
+    insertSolids(
+      readFileSync(BACKYARD, "utf8"),
+      // The threshold write_vmf_fitting lays for `door_frame` with `threshold: true`, on the
+      // garden door, at the coordinates it built: wall face to wall face, 2 units tall.
+      [{ shape: "box", mins: [320, 224, 0], maxs: [400, 240, 2] }],
+      { material: "WOOD/WOODWALL009A" },
+    ).text,
+  );
+
+  const rules = writeRules("sill.rules.json", [
+    { id: "doorways-wide-enough", what: "circulation_width", select: { portal: "*" }, min: 64 },
+  ]);
+
+  it("measures the doorway instead of reporting that no body fits", () => {
+    const r = check(rules, { path: SILL });
+    const stuck = r.violations.filter((v) => v.evidence?.hullFits === false);
+    expect(stuck).toEqual([]);
+    expect(r.overall).toBe("pass");
+  });
+
+  it("still says a body does not fit when one genuinely does not", () => {
+    // The #59 behaviour, which this must not trade away: a marker whose hull really is
+    // inside a brush reports it, with the brush named. The register in the rooms fixture
+    // stands 8 units from a wall, so the 32-wide hull centred on it overlaps that wall.
+    const r = check(
+      writeRules("sill-register.json", [
+        {
+          id: "room-at-the-register",
+          what: "clearance_in_front",
+          select: { targetname: "register" },
+          min: 48,
+        },
+      ]),
+    );
+    const v = r.violations.find((x) => x.ruleId === "room-at-the-register")!;
+    expect(v.evidence?.hullFits).toBe(false);
+    expect(v.evidence?.startsInside).not.toBeNull();
   });
 });
 

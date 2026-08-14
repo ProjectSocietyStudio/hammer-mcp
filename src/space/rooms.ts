@@ -448,7 +448,19 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
         // The opening is measured at the widest cell either side of the boundary: a col one
         // cell wide reads as clearance 1 from whichever side you stand on.
         const through = Math.max(clearance[at]!, clearance[n]!);
-        if (through < narrower) continue;
+        // One cell of slack, and it is not a fudge: the clearance field is a Manhattan BFS
+        // on a voxel grid, so the saddle across a corridor of uniform width reads exactly one
+        // cell lower than the corridor's own peak. Measured on the three-space fixture, whose
+        // corridor splits into two basins of peak 9 meeting at a col of 8 -- a "doorway" as
+        // wide as the corridor it crosses. Requiring equality there is asking a quantised
+        // field for an exact tie.
+        //
+        // Before #74 this slack was supplied by accident: a merged region inherited whichever
+        // peak had the lower union-find root, so a pocket dragged the bar down and everything
+        // met it. Correcting that (below) removed the accident and left the criterion needing
+        // the slack it had always been calibrated with. A real doorway is nowhere near this
+        // line -- 2 cells against a bar of 9, on the same fixture.
+        if (through < narrower - 1) continue;
         // The widest cell on the boundary between the two regions this cell belongs to,
         // which is where a doorway between them would have been reported.
         const a0 = regionOf[at]!;
@@ -466,7 +478,23 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
             approxWidthUnits: 2 * clearance[col]! * grid.step,
           },
         });
-        parent[Math.max(mine, theirs)] = Math.min(mine, theirs);
+        // The merged region's peak is the WIDER of the two, and keeping that straight is
+        // the whole of #74 / #48 / #60.
+        //
+        // `peak` is indexed by union-find root and `parent` points the larger id at the
+        // smaller, so without this line a pocket that happens to have the lower id becomes
+        // the peak of the room it was absorbed into -- for the rest of this pass, since
+        // `peak` is only recomputed between passes. A 26 x 24 pocket peaks at one cell, and
+        // from then on `narrower` is 16 for every boundary in the map: a doorway measuring
+        // 64 or 80 "narrows nothing" against 16 and is absorbed in turn. Nine merges, one
+        // room, on `hmcp_backyard` -- from a counter 24 units deep, 200 units away, which is
+        // why three rounds diagnosed this as furniture depth and were wrong.
+        //
+        // The bar is a fact about a region. A region that just grew did not get narrower.
+        const root = Math.min(mine, theirs);
+        const gone = Math.max(mine, theirs);
+        peak[root] = Math.max(peak[mine]!, peak[theirs]!);
+        parent[gone] = root;
         joined += 1;
       }
     }

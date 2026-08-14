@@ -111,13 +111,40 @@ export function sweep(
  * why it is one function rather than a line repeated at each call site.
  */
 export function standingAt(scene: Scene, at: Vec3, half: Vec3 = HULL_STANDING): Vec3 {
-  return [at[0], at[1], floorUnder(scene, at) + half[2] + 0.5];
+  return [at[0], at[1], floorUnderHull(scene, at, half) + half[2] + 0.5];
 }
 
 /** The height of the floor beneath a place, or the place's own z if there is none. */
 export function floorUnder(scene: Scene, at: Vec3): number {
   const down = traceRay(scene, at, [at[0], at[1], at[2] - REACH], MASK_SOLID);
   return down.hit && !down.startSolid ? down.point[2] : at[2];
+}
+
+/**
+ * The floor beneath a *body*, which is not the floor beneath a ray (#75).
+ *
+ * A hull 32 units across stands on whatever any part of its footprint lands on; a ray stands
+ * on one point. Found on `hmcp_backyard`: `write_vmf_fitting` laid a 2-unit threshold across
+ * a doorway, the room pass put the doorway's col exactly on the wall's own face, and the ray
+ * straight down from it grazed the sill's edge plane and missed. `standingAt` then centred
+ * the hull 2 units too low, `bodyFits` reported `hullFits: false`, and a doorway 80 units
+ * wide came back `measured: null` on a map that was perfectly fine.
+ *
+ * Sweeping the hull is the only honest answer to "what would a person stand on here", and it
+ * is what every measurement built on `standingAt` wanted all along. `floorUnder` keeps the ray
+ * because a camera is a point: `eyeAt` asks a different question and gets the same answer
+ * everywhere the two agree.
+ */
+export function floorUnderHull(scene: Scene, at: Vec3, half: Vec3 = HULL_STANDING): number {
+  // Swept from the point as given, not from a lifted one. Lifting by the hull's half height
+  // to clear a sill puts its top through the lintel over the same doorway, which reports
+  // startSolid and lands straight back on the ray this exists to replace.
+  const down = traceRay(scene, at, [at[0], at[1], at[2] - REACH], MASK_SOLID, half);
+  if (down.hit && !down.startSolid) return down.point[2] - half[2];
+  // The hull already overlaps something here, or there is nothing under it at all. Neither
+  // is this function's question to answer: fall back to the ray, which is what this used to
+  // be, and then to the point's own z. A place with no floor is a fact, not a failure.
+  return floorUnder(scene, at);
 }
 
 /**

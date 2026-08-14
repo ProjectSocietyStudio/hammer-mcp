@@ -72,6 +72,26 @@ const NOOK = [
   "###############",
 ];
 
+/**
+ * A hall with a pillar in it: one space that the watershed splits and the merge pass puts
+ * back together.
+ *
+ * The reporting tests below used NOOK until #74 was fixed, which is to say they used a plan
+ * whose merge was the defect. With the defect gone that plan is correctly two rooms, and a
+ * test about how a merge is *reported* needs a merge that is right to make. This is the one
+ * `rooms.ts` names in its own header -- "it can split a hall with a pillar in the middle" --
+ * so the merge here is the criterion working rather than failing.
+ */
+const HALL_WITH_PILLAR = [
+  "###############",
+  "#.............#",
+  "#.............#",
+  "#......#......#",
+  "#.............#",
+  "#.............#",
+  "###############",
+];
+
 describe("saying why it merged", () => {
   /**
    * The request this came from, in the builder's own words: for each pair of regions it
@@ -83,16 +103,18 @@ describe("saying why it merged", () => {
    * Worth having whether or not the peak defect below is ever repaired: it is what turns
    * a room count that surprises you into a sentence.
    */
-  it("reports the merge that collapses two rooms into one, and where", () => {
-    const result = findRooms(plan(NOOK), { minRoomArea: 0 });
+  it("reports the merge that puts a split hall back together, and where", () => {
+    const result = findRooms(plan(HALL_WITH_PILLAR), { minRoomArea: 0 });
     expect(result.rooms).toHaveLength(1);
     expect(result.merges.length).toBeGreaterThan(0);
 
     const constrictions = result.merges.filter((m) => m.reason === "not-a-constriction");
     expect(constrictions.length).toBeGreaterThan(0);
     for (const m of constrictions) {
-      // Both numbers, so the reader can see the comparison rather than take a verdict.
-      expect(m.measured).toBeGreaterThanOrEqual(m.bar);
+      // Both numbers, so the reader can see the comparison rather than take a verdict. One
+      // cell of slack, which is the criterion's own: a Manhattan clearance field reads the
+      // saddle across a uniform space exactly one cell below its peak (#74).
+      expect(m.measured).toBeGreaterThanOrEqual(m.bar - 16);
       expect(m.at).not.toBeNull();
       expect(m.at).toHaveLength(3);
     }
@@ -132,11 +154,13 @@ describe("saying why it merged", () => {
    * brushes went in two hundred units away. Five `step` calls and four delete-and-recheck
    * cycles to find the cause, none of which the output pointed at.
    *
-   * The NOOK plan is that map in miniature: two rooms, one doorway, and a corner bitten out
-   * of the far side that collapses the segmentation.
+   * The hall-with-a-pillar plan is a merge that is right to make: the two basins the
+   * watershed carves either side of the pillar are one space, they are merged, and the
+   * boundary between them stops being reported as an opening. That is the event a caller
+   * notices, whether the merge was right or wrong.
    */
-  it("names the doorway a merge stopped reporting", () => {
-    const result = findRooms(plan(NOOK), { minRoomArea: 0 });
+  it("names the opening a merge stopped reporting", () => {
+    const result = findRooms(plan(HALL_WITH_PILLAR), { minRoomArea: 0 });
     // The premise: one room, so no portal is reported at all.
     expect(result.rooms).toHaveLength(1);
     expect(result.portals).toEqual([]);
@@ -144,19 +168,17 @@ describe("saying why it merged", () => {
     const closed = result.merges.filter((m) => m.closed !== null);
     expect(closed.length).toBeGreaterThan(0);
 
-    // Every number below comes from the plan, not from a previous run. The only way
-    // between the two halves is row 4, columns 6 to 8, and `cellCentre` is index x step --
-    // so the doorway's col is at y = 64, x between 96 and 128. The nook in the corner is
-    // closed by a merge of its own, hence "one of them" rather than "the first".
-    const doorway = closed.filter(
-      (m) => m.closed!.at[1] === 4 * 16 && m.closed!.at[0] >= 6 * 16 && m.closed!.at[0] <= 8 * 16,
-    );
-    expect(doorway.length).toBeGreaterThan(0);
-    for (const m of doorway) expect(m.closed!.approxWidthUnits).toBeGreaterThan(0);
-
-    // And every closed col names a real place: a merge that pointed at a wall would be
-    // worse than saying nothing.
-    for (const m of closed) expect(m.closed!.at[2]).toBe(0);
+    // The pillar is at row 3, column 7, so the two ways past it are the columns either side
+    // of it -- and `cellCentre` is index x step. Every number comes from the plan above, not
+    // from a previous run.
+    for (const m of closed) {
+      expect(m.closed!.approxWidthUnits).toBeGreaterThan(0);
+      // Every closed col names a real place: a merge that pointed at a wall would be worse
+      // than saying nothing.
+      expect(m.closed!.at[2]).toBe(0);
+      expect(m.closed!.at[0]).toBeGreaterThan(0);
+      expect(m.closed!.at[0]).toBeLessThan(15 * 16);
+    }
   });
 
   /**
@@ -313,25 +335,26 @@ describe("the watershed on a drawn plan", () => {
    * destroys, and moving the same nook to the *bottom*-left corner -- a higher index --
    * makes the problem disappear, which is what made it so expensive to find.
    *
-   * ## Why this is `it.fails` and not a fix
+   * ## What it took to fix, and what this page got right in advance
    *
-   * The one-line repair is obvious and it is wrong. Carrying the peak through the merge --
-   * `peak[root] = max(peak[root], peak[absorbed])` -- turns these two plans green and
-   * turns the three-space fixture in `rooms.test.ts` into **four** rooms, along with nine
-   * other assertions across the plan renderer and the doorway measurements.
+   * This was `it.fails` for a reason it stated plainly: carrying the peak through the merge
+   * turns these two plans green and breaks the three-space fixture along with nine other
+   * assertions, because the merge criterion had been calibrated against peaks that shrink
+   * when regions merge. That prediction was exact -- sixteen assertions, measured -- and it
+   * named where the fix had to land: the criterion, not the bookkeeping.
    *
-   * Which says something worth more than the fix: the merge criterion documented above --
-   * "if the opening between two regions is as wide as the narrower of the two, nothing
-   * narrows and they are one space" -- was calibrated against peaks that shrink when
-   * regions merge. Correct the peak and the criterion under-merges: the corridor that the
-   * rule exists to collapse stops collapsing.
+   * Both halves were needed (#74). The peak is now carried through the union, and the
+   * criterion gained the one cell of slack it had always been running on by accident: the
+   * clearance field is a Manhattan BFS on a voxel grid, so the saddle across a corridor of
+   * uniform width reads exactly one cell below the corridor's own peak. Requiring equality
+   * there asks a quantised field for an exact tie, and the broken bookkeeping had been
+   * supplying the difference.
    *
-   * So the defect is real, minimal and reproduced here, and repairing it means revisiting
-   * the criterion rather than the bookkeeping. `it.fails` because a test that passes by
-   * asserting the wrong answer would enshrine it, and this one goes red the day somebody
-   * gets it right. Issue #48.
+   * `hmcp_bodega` is the other half of the evidence: its segmentation went from working at
+   * a cell size of 32 and nowhere else -- not even monotone -- to monotone, and right at
+   * the default. Issues #48, #53, #74.
    */
-  it.fails("is not swayed by a dead-end nook in the corner it scans first", () => {
+  it("is not swayed by a dead-end nook in the corner it scans first", () => {
     const withNook = [
       "###############",
       "#.#...###.....#",
@@ -352,9 +375,9 @@ describe("the watershed on a drawn plan", () => {
    *
    * This is the cleanest statement of the defect on the page, because mirroring changes
    * cell indices and nothing else. Any answer that moves is an answer about the scan
-   * order rather than about the map. Same reason for `it.fails` as above.
+   * order rather than about the map.
    */
-  it.fails("counts a plan and its mirror image the same", () => {
+  it("counts a plan and its mirror image the same", () => {
     const withNook = [
       "###############",
       "#.#...###.....#",

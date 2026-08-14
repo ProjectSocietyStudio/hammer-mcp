@@ -33,6 +33,7 @@
  */
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock } from "../kv/parse.js";
+import { readDisplacements } from "../vmf/displacement.js";
 import { checkSolid, ON_EPSILON, orderedLoop } from "../vmf/solid.js";
 import type { Plane, SolidCheck, Vec3 } from "../vmf/solid.js";
 import { buildBvh } from "./bvh.js";
@@ -79,6 +80,35 @@ const CLIP_TOOLS = new Set(["TOOLSCLIP", "TOOLSPLAYERCLIP", "TOOLSNPCCLIP", "TOO
 
 /** Blocks the eye and nothing else. */
 const SIGHT_ONLY_TOOLS = new Set(["TOOLSBLOCK_LOS", "TOOLSBLOCKLOS"]);
+
+/**
+ * Materials you see through and cannot walk through: the opposite of a clip brush.
+ *
+ * The mirror of `CLIP_TOOLS` and it was missing (#73). A glazed window is solid to a body
+ * and transparent to an eye, and until this existed every pane in every map stopped every
+ * sightline. On `hmcp_backyard` that made a rule reading "the garden is not visible from the
+ * sofa" pass, through a window that looks straight at it -- a green asserting the opposite
+ * of the truth, which is worse than no rule at all.
+ *
+ * Matched on the material's directory, not its basename, because unlike the tool textures
+ * this is a whole family: Garry's Mod ships some fifty `glass/glasswindow*`, and naming them
+ * one by one would go stale the first time a mod adds one.
+ *
+ * ⚠️ **This is the same name-based convention as the rest of this file, with the same
+ * limits, and it does not reach the second case.** A chain-link fence or a foliage card is
+ * transparent through its material's alpha, under `metal/` or `props_foliage/` with nothing
+ * in the name to say so. Only the `.vmt`'s `$translucent` / `$alphatest` settles those, and
+ * reading it would make every spatial question depend on a mounted game. The masks a brush
+ * ended up in are in every tool's output; a rule that says what it did is honest.
+ */
+const SEE_THROUGH_DIRS = new Set(["GLASS"]);
+
+/** The directory a material sits in: `GLASS/GLASSWINDOW002A` -> `GLASS`. */
+const materialDir = (material: string): string => {
+  const clean = material.replace(/\\/g, "/");
+  const cut = clean.lastIndexOf("/");
+  return cut < 0 ? "" : clean.slice(0, cut).toUpperCase();
+};
 
 /**
  * Brush entities whose geometry stops nothing, whatever it is textured with.
@@ -149,6 +179,25 @@ export interface Scene {
   maxs: Vec3;
   /** Solids read but excluded from every mask, with why. Reported by every tool. */
   excluded: { displacement: number; nonSolid: number; invalid: number };
+  /**
+   * The terrain, as triangles in world space. Empty unless `withTerrain` was asked for.
+   *
+   * Not part of the tracing scene and deliberately kept out of `brushes`: a displacement is
+   * not a convex hull and every mask here is about hulls. This exists for the renderers
+   * (#79), which until it did could not draw a single piece of terrain and said so in a note
+   * nobody was going to act on. `read_vmf_trace` is a separate problem and not solved here.
+   */
+  terrain: TerrainTriangle[];
+}
+
+/** One triangle of a displacement grid, with the material of the face it came from. */
+export interface TerrainTriangle {
+  /** The solid the displaced side belongs to, so a pixel can still name a brush. */
+  solidId: number;
+  material: string;
+  points: [Vec3, Vec3, Vec3];
+  /** Unit normal, from the winding. Terrain is two-sided in the engine; this is for shading. */
+  normal: Vec3;
 }
 
 export interface SceneOptions {
@@ -159,6 +208,13 @@ export interface SceneOptions {
   owners?: string[];
   /** Include brushes whose sides carry a displacement. Off, and off for a reason. */
   includeDisplacements?: boolean;
+  /**
+   * Also read every displacement grid into `terrain`, as triangles.
+   *
+   * Off by default because it costs a second parse of the file and nothing that traces wants
+   * it. The renderers ask for it; `read_vmf_leak` and the room pass do not.
+   */
+  withTerrain?: boolean;
 }
 
 const toolName = (material: string): string => {
@@ -177,14 +233,26 @@ export function maskFor(owner: string, materials: readonly string[]): number {
 
   let sightOnly = false;
   let clip = false;
+  // See-through is the one classification here that needs EVERY face to agree, where the
+  // others need one. A single clip face makes the whole brush a clip brush, as vbsp reads
+  // it; a single glazed face does not make a wall a window. A window frame with glass on
+  // its reveal and brick everywhere else is a wall, and the reveal is the commonest way to
+  // texture one. Nodraw abstains rather than voting: a pane built glass-front and
+  // nodraw-edged is still a pane.
+  let seeThrough = false;
+  let opaqueFace = false;
   for (const m of materials) {
     const name = toolName(m);
     if (NON_SOLID_TOOLS.has(name)) return 0;
     if (SIGHT_ONLY_TOOLS.has(name)) sightOnly = true;
     if (CLIP_TOOLS.has(name)) clip = true;
+    if (SEE_THROUGH_DIRS.has(materialDir(m))) seeThrough = true;
+    else if (name !== "TOOLSNODRAW" && !CLIP_TOOLS.has(name)) opaqueFace = true;
   }
   if (sightOnly) return MASK_SIGHT;
   if (clip) return MASK_PLAYER;
+  // Stops a body and a bullet, passes an eye. The mirror of a clip brush.
+  if (seeThrough && !opaqueFace) return MASK_SOLID | MASK_PLAYER;
   return MASK_SOLID | MASK_PLAYER | MASK_SIGHT;
 }
 
@@ -282,5 +350,68 @@ export function buildScene(path: string, source: string, options: SceneOptions =
     maxs[0] = maxs[1] = maxs[2] = 0;
   }
 
-  return { path, brushes, bvh: buildBvh(brushes), mins, maxs, excluded };
+  const terrain = options.withTerrain ? terrainOf(source) : [];
+  return { path, brushes, bvh: buildBvh(brushes), mins, maxs, excluded, terrain };
+}
+
+/**
+ * Every displacement grid of a file, triangulated in world space.
+ *
+ * A displacement of power *n* is a regular (2^n+1)^2 lattice whose vertices already carry
+ * their world positions -- `readDisplacements` computes them, and `sculpt_displacement` and
+ * `sew_displacements` agree with it to a thirty-second of a unit. So there is nothing to
+ * derive here: walk the lattice and emit two triangles per cell.
+ *
+ * Power 4, the largest Source accepts, is 512 triangles. A hillside of thirty of them is
+ * fifteen thousand, which is nothing beside the face count of a real map.
+ */
+function terrainOf(source: string): TerrainTriangle[] {
+  const out: TerrainTriangle[] = [];
+  let displacements;
+  try {
+    ({ displacements } = readDisplacements(source));
+  } catch {
+    // A file this parser cannot read is one the renderers draw without its terrain, exactly
+    // as before. Failing the whole scene over the picture would be the wrong trade.
+    return out;
+  }
+
+  for (const disp of displacements) {
+    const n = disp.size;
+    const at = new Map<number, Vec3>();
+    for (const v of disp.vertices) at.set(v.y * n + v.x, v.position);
+
+    for (let y = 0; y < n - 1; y += 1) {
+      for (let x = 0; x < n - 1; x += 1) {
+        const a = at.get(y * n + x);
+        const b = at.get(y * n + x + 1);
+        const c = at.get((y + 1) * n + x + 1);
+        const d = at.get((y + 1) * n + x);
+        if (!a || !b || !c || !d) continue;
+        for (const tri of [
+          [a, b, c],
+          [a, c, d],
+        ] as Array<[Vec3, Vec3, Vec3]>) {
+          const normal = triangleNormal(tri);
+          if (normal === null) continue;
+          out.push({ solidId: disp.solidId, material: disp.material, points: tri, normal });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Unit normal of a triangle, or null when it is degenerate. */
+function triangleNormal([a, b, c]: [Vec3, Vec3, Vec3]): Vec3 | null {
+  const u: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const v: Vec3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n: Vec3 = [
+    u[1] * v[2] - u[2] * v[1],
+    u[2] * v[0] - u[0] * v[2],
+    u[0] * v[1] - u[1] * v[0],
+  ];
+  const len = Math.hypot(n[0], n[1], n[2]);
+  if (len < ON_EPSILON) return null;
+  return [n[0] / len, n[1] / len, n[2] / len];
 }

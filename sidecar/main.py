@@ -334,13 +334,16 @@ def _vmf_read(req: dict[str, Any]) -> dict[str, Any]:
 def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
     """Checks a .vmf against the FGD and against what the compilers accept."""
     from fgd_support import load_fgds
-    from vmf_lint import count_vmf, lint_vmf
+    from vmf_lint import count_vmf, lint_vmf, model_bounds
 
     names = _fgd_names(req)
     fgd, tolerated = load_fgds(req["binDir"], names)
     vmf, instances = _load_vmf(req["path"], req)
     lua_classes = frozenset(req.get("luaClasses") or ())
     findings = lint_vmf(vmf, fgd, lua_classes)
+    # Not a finding: the raw halves of one. Whether a prop sinks into the floor is a
+    # question about the floor, and the tracer that answers it is in TypeScript.
+    props = model_bounds(vmf, req.get("gameDir"))
 
     by_rule: dict[str, int] = {}
     by_severity: dict[str, int] = {}
@@ -352,6 +355,7 @@ def _vmf_lint(req: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": req["path"],
         "counts": count_vmf(vmf),
+        "props": props,
         "instances": instances,
         "toleratedHelpers": tolerated,
         "fgdsLoaded": list(names),

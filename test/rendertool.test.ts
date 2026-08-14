@@ -8,12 +8,15 @@ import { ctx as sharedCtx, FIXTURES } from "./support/env.js";
 
 const ctx = sharedCtx as unknown as ToolContext;
 const PROBE = join(FIXTURES, "hmcp_probe.vmf");
+/** The only fixture with an outside: a walled garden under a toolsskybox shell. */
+const BACKYARD = join(FIXTURES, "hmcp_backyard.vmf");
 
 interface ViewOut {
   origin: number[];
   angles: number[];
   facesDrawn: number;
   skyFraction: number;
+  voidFraction: number;
   insideSolid: boolean;
   notes: string[];
   pngBytes: number;
@@ -25,6 +28,12 @@ interface ViewOut {
 const view = (args: Record<string, unknown> = {}): ViewOut =>
   renderVmfViewTool.handler(
     { path: PROBE, eyeHeight: 0, fov: 90, width: 160, height: 120, near: 4, ...args } as never,
+    ctx,
+  ) as unknown as ViewOut;
+
+const backyard = (args: Record<string, unknown> = {}): ViewOut =>
+  renderVmfViewTool.handler(
+    { path: BACKYARD, eyeHeight: 0, fov: 90, width: 160, height: 120, near: 4, ...args } as never,
     ctx,
   ) as unknown as ViewOut;
 
@@ -69,9 +78,34 @@ describe("render_vmf_view", () => {
   });
 
   it("warns when the camera is looking at nothing", () => {
+    // The void, which is not the sky: this frame shows no geometry at all, and a sealed
+    // map's sky is geometry -- a toolsskybox face like any other.
     const r = view({ origin: [6000, 0, 128], angles: [0, 0, 0] });
-    expect(r.skyFraction).toBeGreaterThan(0.95);
+    expect(r.voidFraction).toBeGreaterThan(0.95);
+    expect(r.skyFraction).toBe(0);
     expect(r.notes.join(" ")).toMatch(/no geometry/);
+  });
+
+  // #78. skyFraction counted pixels that hit nothing, which on a sealed map is zero by
+  // construction -- so it read 0 in a garden whose frame is a third toolsskybox, and read
+  // 1 outside the map where there is no sky at all. Both are the wrong way round.
+  describe("skyFraction (#78)", () => {
+    it("counts the sky a camera can actually see", () => {
+      const r = backyard({ origin: [224, 470, 0], stand: true, angles: [-18, -90, 0], fov: 100 });
+      expect(r.skyFraction).toBeGreaterThan(0.15);
+      expect(r.voidFraction).toBe(0);
+    });
+
+    it("is zero indoors, where there is no sky face to see", () => {
+      const r = backyard({ origin: [112, 112, 0], stand: true, angles: [0, 0, 0] });
+      expect(r.skyFraction).toBe(0);
+      expect(r.facesDrawn).toBeGreaterThan(0);
+    });
+
+    it("is nearly all of a frame looking straight up in the garden", () => {
+      const r = backyard({ origin: [224, 400, 0], stand: true, angles: [-89, 0, 0] });
+      expect(r.skyFraction).toBeGreaterThan(0.9);
+    });
   });
 
   it("never lets the picture pass for a screenshot", () => {
@@ -81,5 +115,35 @@ describe("render_vmf_view", () => {
     const r = view({ origin: [0, 0, 128], angles: [0, 0, 0] });
     expect(r.notes.join(" ")).toMatch(/does not show what the place looks like/);
     expect(r.notes.join(" ")).toMatch(/gmod-mcp/);
+  });
+});
+
+/**
+ * #79. `render_vmf_view` skipped every displaced brush and said so:
+ *
+ *   "4 displacement brush(es) are not drawn: their flat quad is not the surface the game
+ *    builds, so drawing it would show terrain that does not exist."
+ *
+ * Honest, and it left the only tool that LOOKS at a map blind to every piece of terrain in
+ * it. `hmcp_backyard`'s garden is 85 m² whose entire content is terrain: in every render it
+ * was a flat slab, because the terrain was not drawn and the sealing slab beneath it was.
+ * It produced a false reading in that round's own account, where the terrain was described
+ * as reading dead flat when it had not been drawn at all.
+ */
+describe("displacements are drawn (#79)", () => {
+  it("shows the terrain rather than the slab under it", () => {
+    // Straight down over the garden, where the only thing to see is its ground.
+    const r = backyard({ origin: [224, 400, 240], angles: [89, 0, 0], fov: 100 });
+    expect(r.facesDrawn).toBeGreaterThan(200);
+    expect(r.notes.join(" ")).not.toMatch(/are not drawn/);
+  });
+
+  it("says nothing at all about terrain on a map that has none", () => {
+    // Absence, not a rewording: `not.toMatch(/are not drawn/)` passed against a note reading
+    // "0 displacement brush(es) are drawn as 0 triangles", so it could only ever have caught
+    // the old sentence coming back. Sabotage found that; the assertion is now about the note
+    // existing at all.
+    const r = view({ origin: [0, 0, 128], angles: [0, 0, 0] });
+    expect(r.notes.filter((n) => n.includes("displacement"))).toEqual([]);
   });
 });

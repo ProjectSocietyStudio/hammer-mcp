@@ -17,6 +17,77 @@ MAX_TEXTURE_SCALE = 10.0
 UNIVERSAL_KEYS = {"classname", "id", "hammerid", "origin", "angles", "spawnflags"}
 
 
+def model_bounds(vmf: Any, game_dir: str | None) -> list[dict[str, Any]]:
+    """Every point entity carrying a model, with that model's own hull.
+
+    Split from the rules deliberately: whether a prop sinks into the floor is a question
+    about the floor, and the tracer that answers it lives in TypeScript. This returns the
+    half nothing there can get -- a `.mdl`'s bounds -- and lets the caller do the geometry.
+
+    A model's origin is wherever the artist put it. `props_c17/door01_left.mdl` has it at the
+    centre, `mins z -54.25`, so a door placed on a floor at z 0 is half underground; the
+    barrel `read_model_info` documents is the same story at 26. Bounds are cached per path
+    because a map places one model many times and opening a `.mdl` is not free.
+    """
+    if not game_dir:
+        return []
+    try:
+        from srctools.game import Game
+        from srctools.mdl import Model
+
+        fsys = Game(game_dir).get_filesystem()
+    except Exception:  # noqa: BLE001
+        return []
+
+    cache: dict[str, list[float] | None] = {}
+
+    def bounds_of(rel: str) -> list[float] | None:
+        if rel in cache:
+            return cache[rel]
+        got: list[float] | None = None
+        try:
+            mdl = Model(fsys, fsys[rel])
+            lo, hi = mdl.hull_min, mdl.hull_max
+            got = [
+                round(float(lo.x), 3), round(float(lo.y), 3), round(float(lo.z), 3),
+                round(float(hi.x), 3), round(float(hi.y), 3), round(float(hi.z), 3),
+            ]
+        except Exception:  # noqa: BLE001
+            got = None
+        cache[rel] = got
+        return got
+
+    out: list[dict[str, Any]] = []
+    for ent in vmf.entities:
+        # Brush entities carry their geometry, not a model: their `origin` is a pivot and
+        # sinking is meaningless for them.
+        if list(ent.solids):
+            continue
+        rel = str(ent["model", ""]).replace("\\", "/").strip()
+        # `*12` is a brush model index vbsp assigns, not a file.
+        if not rel or rel.startswith("*") or not rel.lower().endswith(".mdl"):
+            continue
+        got = bounds_of(rel)
+        if got is None:
+            continue
+        try:
+            o = ent.get_origin()
+            origin = [round(float(o.x), 3), round(float(o.y), 3), round(float(o.z), 3)]
+        except Exception:  # noqa: BLE001
+            continue
+        out.append(
+            {
+                "id": int(ent.id),
+                "classname": ent["classname", ""],
+                "model": rel,
+                "origin": origin,
+                "mins": got[:3],
+                "maxs": got[3:],
+            }
+        )
+    return out
+
+
 def _finding(
     severity: str, rule: str, message: str, **extra: Any
 ) -> dict[str, Any]:

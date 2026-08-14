@@ -18,7 +18,10 @@ import {
   traceRay,
   traceRayBruteForce,
 } from "../src/space/trace.js";
+import { findRooms } from "../src/space/rooms.js";
+import { voxelise } from "../src/space/voxel.js";
 import { insertSolids } from "../src/vmf/build.js";
+import { deleteSolids } from "../src/vmf/modify.js";
 import type { Vec3 } from "../src/vmf/solid.js";
 import { FIXTURES } from "./support/env.js";
 
@@ -50,6 +53,32 @@ describe("buildScene", () => {
   it("keeps only the owners asked for", () => {
     expect(buildScene(PROBE, probe(), { owners: ["func_detail"] }).brushes).toEqual([]);
     expect(buildScene(PROBE, probe(), { owners: ["world"] }).brushes).toHaveLength(6);
+  });
+});
+
+// #73. Found building hmcp_backyard: a rules file asked that the garden NOT be visible from
+// the living room, check_vmf_rules reported pass, and read_vmf_trace with mask "sight" set
+// explicitly named the window pane as what stopped it. A mustBe:"blocked" that passes because
+// of a window is a green asserting the opposite of the truth, and rp_nycity_day is a city of
+// shopfronts.
+describe("maskFor and glass (#73)", () => {
+  it("lets an eye through a pane while a body still stops at it", () => {
+    const m = maskFor("world", ["GLASS/GLASSWINDOW002A"]);
+    expect(m & MASK_SOLID).toBeTruthy();
+    expect(m & MASK_PLAYER).toBeTruthy();
+    expect(m & MASK_SIGHT).toBeFalsy();
+  });
+
+  it("does not make a wall see-through because one face of it is glazed", () => {
+    // A window frame textured glass on its reveal and brick everywhere else is a wall.
+    const m = maskFor("world", ["GLASS/GLASSWINDOW002A", "BRICK/BRICKWALL014A"]);
+    expect(m & MASK_SIGHT).toBeTruthy();
+  });
+
+  it("ignores nodraw beside the glass, which is how a pane is usually built", () => {
+    const m = maskFor("world", ["GLASS/GLASSWINDOW002A", "TOOLS/TOOLSNODRAW"]);
+    expect(m & MASK_SIGHT).toBeFalsy();
+    expect(m & MASK_SOLID).toBeTruthy();
   });
 });
 
@@ -356,3 +385,103 @@ function gapScene(width: number) {
   expect(gap.brushes).toHaveLength(2);
   return gap;
 }
+
+/**
+ * #73, end to end: a glazed partition across the probe.
+ *
+ * Found building `hmcp_backyard`, whose rules file asked that the garden not be visible from
+ * the living room. `check_vmf_rules` said pass; `read_vmf_trace` with `mask: "sight"` set
+ * explicitly named the window pane as what stopped it. A `mustBe: "blocked"` that passes
+ * because of a window is a green asserting the opposite of what a player sees, and
+ * `rp_nycity_day` is a city of shopfronts.
+ *
+ * Built here rather than measured on that map, so the assertion is about the tracer and not
+ * about one map's design.
+ */
+describe("a line of sight through glass (#73)", () => {
+  const glazed = (material: string): ReturnType<typeof buildScene> =>
+    buildScene(
+      PROBE,
+      insertSolids(probe(), [{ shape: "box", mins: [-8, -256, 0], maxs: [8, 256, 256] }], {
+        material,
+      }).text,
+    );
+
+  const across: [Vec3, Vec3] = [
+    [-128, 0, 64],
+    [128, 0, 64],
+  ];
+
+  it("passes an eye and stops a body", () => {
+    const scene = glazed("GLASS/GLASSWINDOW002A");
+    expect(isVisible(scene, ...across, MASK_SIGHT)).toBe(true);
+    expect(isVisible(scene, ...across, MASK_SOLID)).toBe(false);
+    expect(isVisible(scene, ...across, MASK_PLAYER)).toBe(false);
+  });
+
+  it("stops both when the same partition is brick", () => {
+    const scene = glazed("BRICK/BRICKWALL014A");
+    expect(isVisible(scene, ...across, MASK_SIGHT)).toBe(false);
+    expect(isVisible(scene, ...across, MASK_SOLID)).toBe(false);
+  });
+});
+
+/**
+ * #74, and the same defect #48 and #60 named from three other angles.
+ *
+ * Found building `hmcp_backyard`: one `write_vmf_fitting` call put a counter against a wall,
+ * 24 units deep -- `COUNTER.depth` from the toolkit's own measured table -- running from
+ * `y 40` to `y 200` in a room whose far wall is at 224. Nothing else changed, and
+ * `read_vmf_rooms` went from 3 rooms and 2 doorways to one room and none, with every merge
+ * reporting `bar: 16`.
+ *
+ * The 26 × 24 pocket left at the counter's end peaks at one cell of clearance. It merges as a
+ * not-a-constriction, which is right. What was wrong is what happened next: the merged region
+ * kept the POCKET's peak rather than the room's, so for the rest of that pass the bar for
+ * every boundary in the map was 16 -- and a doorway measuring 64 or 80 "narrows nothing"
+ * against 16. Nine merges, one room.
+ *
+ * `building.md` blamed furniture depth on this evidence and was wrong; 24 is under both
+ * numbers it gave. The variable was never depth.
+ */
+describe("a pocket must not set the merge bar for the whole map (#74)", () => {
+  const BACKYARD = join(FIXTURES, "hmcp_backyard.vmf");
+
+  /** The fixture with its wall-to-wall counter replaced by one that leaves an end pocket. */
+  const withPocket = (): string => {
+    const cut = deleteSolids(readFileSync(BACKYARD, "utf8"), {
+      within: { mins: [418, -2, -2], maxs: [450, 226, 60] },
+    }).text;
+    return insertSolids(
+      cut,
+      [
+        { shape: "box", mins: [426, 40, 0], maxs: [446, 200, 6] },
+        { shape: "box", mins: [422, 40, 6], maxs: [446, 200, 52] },
+        { shape: "box", mins: [420, 40, 52], maxs: [446, 200, 56] },
+      ],
+      { material: "WOOD/WOODWALL009A" },
+    ).text;
+  };
+
+  const rooms = (source: string): ReturnType<typeof findRooms> =>
+    findRooms(voxelise(buildScene("m.vmf", source), [[112, 112, 16]], { step: 16 }));
+
+  it("keeps every room and every doorway when a counter leaves a pocket", () => {
+    const r = rooms(withPocket());
+    expect(r.rooms).toHaveLength(3);
+    expect(r.portals).toHaveLength(2);
+  });
+
+  it("still merges the pocket itself, which is what the rule is for", () => {
+    // The pocket is not a room. It should be absorbed -- and say so -- without taking the
+    // map's doorways with it.
+    const r = rooms(withPocket());
+    expect(r.merges.some((m) => m.reason === "not-a-constriction")).toBe(true);
+  });
+
+  it("agrees with the same counter run wall to wall", () => {
+    const shipped = rooms(readFileSync(BACKYARD, "utf8"));
+    expect(shipped.rooms).toHaveLength(3);
+    expect(shipped.portals).toHaveLength(2);
+  });
+});

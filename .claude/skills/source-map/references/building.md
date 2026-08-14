@@ -70,36 +70,35 @@ have.
 
 ## The traps, each of which cost real time
 
-### The room pass segments at one cell size, and not the default
+### The room pass and the cell size — **fixed on 15/08/2026, and worth knowing what it was**
 
-This is the big one. It cost roughly two thirds of both builds.
+This was the big one. It cost roughly two thirds of two builds and most of a third.
 
-`read_vmf_rooms` and `check_vmf_rules` split space by a watershed on a voxel grid, and **the
-answer depends on the cell size in a way that is not monotone**. Measured on a shop of two
-256×224 rooms joined by a 64-wide doorway:
+`read_vmf_rooms` and `check_vmf_rules` split space by a watershed on a voxel grid, and the
+answer used to depend on the cell size **in a way that was not monotone**. Measured on a shop
+of two 256×224 rooms joined by a 64-wide doorway, before and after
+[#74](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/74):
 
-| `step` | rooms | portals |
+| `step` | rooms · portals, before | rooms · portals, now |
 |---|---|---|
-| 8 | 1 | 0 |
-| 16 (the default) | 1 | 0 |
-| **32** | **2** | **1** |
-| 64 | 1 | 0 |
+| 8 | 1 · 0 | **2 · 1** |
+| 16 (the default) | 1 · 0 | **2 · 1** |
+| 32 | **2 · 1** | 1 · 0 |
+| 64 | 1 · 0 | 1 · 0 |
 
-One working value, with failing neighbours on both sides. Neither "finer" nor "coarser"
-converges, and `step`'s own description — *"16 is the coarsest that resolves a 32-unit
-doorway"* — points the wrong way.
+One working value with failing neighbours on both sides, and no procedure that finds it from
+either side. Now it is monotone and right at the default: fine enough to resolve the doorway
+and it is found, too coarse and it is not — which is all a voxel method can honestly promise.
 
-**So: when a portal rule matches nothing, read the note first, then vary `step`.** The note
-now says whether a merge closed an opening and where — that is the geometry answer, and it is
-the one that was missing when a third builder spent five `step` calls on advice that is right
-often enough to be on this page and was wrong that time. If no merge closed anything, try 32,
-and bound that search: three or four values giving the same answer means it is **not** a
-resolution problem.
-`check_vmf_rules` now reports the `segmentation` it used and says so in a note, and both tools
-take `minRoomArea` so a diagnosis and the verdict it explains can be run at the same settings.
-Open as [#53](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/53); one builder
-rebuilt its divider three times and moved its shelving twice before finding that none of it
-was the problem.
+**The cause was never resolution.** A merged region inherited whichever of the two peaks had
+the lower union-find root, so which `step` happened to work was a fact about cell indices.
+See the next section.
+
+**What to do now when a portal rule matches nothing:** read the note, which says whether a
+merge closed an opening and where. Varying `step` is no longer the move — the answer is
+geometry, and a doorway that is at least two cells wide at the size you asked for will be
+found. `check_vmf_rules` reports the `segmentation` it used, and both tools take
+`minRoomArea` so a diagnosis and the verdict it explains run at the same settings.
 
 ### Read `merges`, not just the room count
 
@@ -117,14 +116,35 @@ wall and run a counter to the end of its wall unless you mean to divide the spac
 
 ⚠️ **Flush to a wall is not enough, and this page said it was.** A third builder followed that
 instruction exactly and still lost a doorway: three shelf runs, all against walls, none near
-the divider, turned `rooms: 2, portals: 1` into `rooms: 1, portals: 0`. The culprit was
-**depth**, not position — a run 48 units deep collapsed the segmentation where the same run at
-32 did not, from about 200 units away from the doorway that disappeared.
+the divider, turned `rooms: 2, portals: 1` into `rooms: 1, portals: 0`.
 
-So the rule to build is: **furniture deep enough to matter narrows the room it stands in**, and
-the room pass reads that narrowing as the map's real shape. If a portal disappears after a
-furniture change, suspect the furniture's *depth* before anything else — and note that the
-`step` sweep will not find it, because it is not a resolution problem.
+⚠️ **And this page then blamed the wrong thing, which cost a fourth builder eight calls.** It
+said the culprit was **depth** — 48 collapsing the segmentation where 32 did not. On
+`hmcp_backyard` a counter **24** deep, the depth `dimensions.ts` itself prescribes, collapsed
+`rooms: 3, portals: 2` into `rooms: 1, portals: 0`
+([the round-5 account](../../../../docs/dogfood/2026-08-14-backyard/findings.md)). Depth was
+never the variable.
+
+**The cause was a cascade through the merge bar, and it is fixed** (15/08/2026,
+[#74](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/74)). Kept here because the
+symptom is what a reader will meet in three old friction logs, and because the shape of it is
+worth carrying: the counter ran from `y 40` to `y 200` in a room whose far wall is at `y 224`,
+leaving a **26 × 24 pocket** at its end that peaks at one cell of clearance. A merged region
+used to inherit whichever peak had the lower union-find root, so the pocket became the peak of
+the room that absorbed it — and from then on the bar for *every* boundary in the map was 16.
+A doorway measuring 64 or 80 "narrows nothing" against 16 and was absorbed in turn. Nine
+merges, one room, on a map whose geometry was otherwise unchanged, from a brush 200 units
+away.
+
+The peak is now carried through the union and the criterion allows the one cell of slack the
+broken bookkeeping had been supplying by accident. The two `it.fails` that pinned #48 since
+round 1 are green: a nook in the corner scanned first no longer destroys a doorway on the far
+side of the map, and a plan and its mirror image count the same.
+
+**What survives as advice:** run casework wall to wall anyway. Not because the tool needs it
+now, but because a 26 × 24 pocket at the end of a worktop is a place nobody can stand and a
+mapper did not mean to build. And if a portal does disappear after a furniture change, read
+`merges` — it names the opening that stopped being reported and where.
 
 **`read_vmf_rooms` now reports the portal that stopped existing.** Every merge across a
 boundary carries `closed`: the width and position of the opening it swallowed, measured at the

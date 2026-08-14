@@ -25,7 +25,14 @@ interface SearchReply {
   total: number;
   shown?: number;
   truncated?: boolean;
-  results: Array<{ path: string; name?: string; shader?: string | null; toolTexture?: boolean }>;
+  results: Array<{
+    path: string;
+    name?: string;
+    shader?: string | null;
+    toolTexture?: boolean;
+    resolves?: boolean;
+    missingTextures?: string[];
+  }>;
   error?: string;
 }
 
@@ -105,6 +112,32 @@ describe("read_game_content", () => {
     const tool = await search({ pattern: "tools/toolsnodraw", details: true });
     expect(tool.results[0]!.toolTexture).toBe(true);
   }, VPK_SEARCH_TIMEOUT);
+
+  // #77. Found building hmcp_backyard: this tool listed NATURE/BLENDGRASSDIRT01 as present,
+  // it went onto the garden's displacements, and read_map_dependencies then reported three
+  // missing .vtf behind it. The .vmt ships with the game and its textures do not -- which is
+  // the purple checkerboard this tool exists to prevent, reported as fine.
+  describe("a material whose textures are absent (#77)", () => {
+    it.skipIf(!ready)("reports it as unresolvable, and names what is missing", async () => {
+      const r = await search({ pattern: "nature/blendgrassdirt01", details: true });
+      const row = r.results.find((x) => x.path === "materials/nature/blendgrassdirt01.vmt");
+      expect(row).toBeDefined();
+      expect(row!.resolves).toBe(false);
+      expect(row!.missingTextures).toContain("materials/nature/forest_grass_01.vtf");
+    }, VPK_SEARCH_TIMEOUT);
+
+    it.skipIf(!ready)("reports a material that does draw as resolvable", async () => {
+      const r = await search({ pattern: "brick/brickwall001a", details: true });
+      expect(r.results[0]!.resolves).toBe(true);
+      expect(r.results[0]!.missingTextures).toEqual([]);
+    }, VPK_SEARCH_TIMEOUT);
+
+    it.skipIf(!ready)("says nothing about resolution when details were not asked for", async () => {
+      // The default listing opens no VMT at all: a GMod install holds tens of thousands.
+      const r = await search({ pattern: "nature/blendgrassdirt01" });
+      expect(r.results[0]!.resolves).toBeUndefined();
+    }, VPK_SEARCH_TIMEOUT);
+  });
 
   it.skipIf(!ready)("finds models as well as materials", async () => {
     const r = await search({ pattern: "props_c17/oildrum001", kind: "model" });

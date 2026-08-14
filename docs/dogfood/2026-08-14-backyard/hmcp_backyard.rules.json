@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "map": "hmcp_backyard -- a small house with a walled garden behind it. The prose half of this brief is brief.md, beside it.",
+  "rules": [
+    {
+      "id": "doorways-wide-enough",
+      "what": "circulation_width",
+      "select": { "portal": "*" },
+      "min": 64,
+      "note": "Two people meeting at a doorway should not have to take turns."
+    },
+    {
+      "id": "rooms-not-pinched",
+      "what": "circulation_width",
+      "select": { "room": "*" },
+      "min": 64,
+      "note": "A room whose widest point is narrow is a corridor that has been mislabelled."
+    },
+    {
+      "id": "headroom",
+      "what": "headroom",
+      "select": { "room": "*" },
+      "min": 112,
+      "note": "Every place a person can stand, indoors or out. The garden's ceiling is the sky."
+    },
+    {
+      "id": "rooms-are-rooms",
+      "what": "room_area",
+      "select": { "room": "*" },
+      "min": 24000,
+      "note": "About 15 m2. Below that it is a cupboard, not a room -- and a yard that small is a light well."
+    },
+    {
+      "id": "room-at-the-sink",
+      "what": "clearance_in_front",
+      "select": { "targetname": "sink" },
+      "min": 48,
+      "note": "Somebody stands at the sink to use it. 48 units is one person."
+    },
+    {
+      "id": "the-door-sees-the-garden",
+      "what": "sightline",
+      "from": { "entity": "garden_door" },
+      "to": { "entity": "garden" },
+      "mustBe": "clear",
+      "note": "What the door is for. Traced with the door removed -- the tracer sees no props."
+    },
+    {
+      "id": "the-sofa-does-not",
+      "what": "sightline",
+      "from": { "entity": "sofa" },
+      "to": { "entity": "garden" },
+      "mustBe": "blocked",
+      "note": "You go through the kitchen to reach the garden. That is what puts the garden behind the house rather than beside it."
+    }
+  ]
+}
