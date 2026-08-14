@@ -4,6 +4,7 @@ import { buildTools } from "./build.js";
 import { clipTools } from "./clip.js";
 import { compileTools } from "./compile.js";
 import { contentTools } from "./content.js";
+import { cubemapTools } from "./cubemap.js";
 import { depsTools } from "./deps.js";
 import { displacementTools } from "./displacement.js";
 import { gmaTools } from "./gma.js";
@@ -66,5 +67,6 @@ export const allTools: AnyToolDef[] = [
   ...vmfEditTools,
   ...compileTools,
   ...renameTools,
+  ...cubemapTools,
   ...lmpTools,
 ];
