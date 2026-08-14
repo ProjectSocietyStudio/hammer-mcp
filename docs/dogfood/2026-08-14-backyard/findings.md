@@ -225,17 +225,52 @@ asset. 71 brushes, 11 entities, 3 rooms — living room 28.6 m², kitchen 22.8 m
 two 80-unit doorways, four displacements sewn with no seam, one working light switch, and a
 `prop_door_rotating` that no tool in this repository can look at.
 
-## The findings, sorted
+## The findings, sorted — and what happened to them
 
-| | Class | What happens |
-|---|---|---|
-| 1 · `mask: "sight"` is opaque to glass | **bug** | fix, with a test seen red first |
-| 2 · one alcove sets the merge bar for the whole map | **bug** | the sharpest statement yet of #48/#60 — and `building.md` is wrong about the cause today |
-| 3 · `door_frame`'s threshold defeats `check_vmf_rules` | **bug** | fix: measure from the surface stood on |
-| 4 · a prop sunk by its own origin passes everything | **gap** | a lint rule; the pieces all exist |
-| 5 · `read_game_content` does not resolve a material's textures | **bug** | walk one more level, as `read_map_dependencies` already does |
-| 6 · no renderer shows terrain, props or sky | **gap** | issue; the look-at-it step has holes |
+All seven issues were raised and all seven are closed, 15/08/2026, each with a test seen red
+first.
+
+| | Class | Issue | What landed |
+|---|---|---|---|
+| 1 · `mask: "sight"` is opaque to glass | **bug** | [#73](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/73) | a see-through class in `maskFor`, the mirror of a clip brush. It needs **every** face to agree, unlike the others: a window frame glazed on its reveal is a wall |
+| 2 · one pocket sets the merge bar for the whole map | **bug** | [#74](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/74) | the peak is carried through the union, and the criterion gets the one cell of slack the broken bookkeeping was supplying. **This closed #48 and #53 too** |
+| 3 · `door_frame`'s threshold defeats `check_vmf_rules` | **bug** | [#75](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/75) | the floor is found by sweeping the hull, not tracing a ray. A body stands on what its footprint hits |
+| 4 · a prop sunk by its own origin passes everything | **gap** | [#76](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/76) | a `prop-below-floor` lint rule: the sidecar returns the model bounds, this side finds the floor |
+| 5 · `read_game_content` does not resolve a material's textures | **bug** | [#77](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/77) | `details` now walks every texture parameter and reports `resolves` with what is missing |
+| 6a · `skyFraction` reads 0 in a frame that is a third sky | **bug** | [#78](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/78) | it counts sky faces; the old number kept its meaning as `voidFraction` |
+| 6b · no renderer draws terrain | **gap** | [#79](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/79) | displacement grids are triangulated from their own vertices and rasterised |
 
 Six findings, five of them reachable only from a map with an outside. The other reading is the one
 in the table at the top: **the toolkit no longer fails**, and every hour of this session went on
 the map's problems or on the toolkit's *judgement*, never on its plumbing.
+
+
+## What the second finding turned out to be worth
+
+Finding 2 was written up here as "the sharpest statement yet of #48/#60". It was better than
+that: it was the **cause**.
+
+`peak` is indexed by union-find root, and the union points the larger id at the smaller — so a
+merged region inherited whichever peak had the lower id, for the rest of that pass. Everything
+three rounds had recorded as separate symptoms is that one line:
+
+- **round 1** — the segmentation varies with cell *order*. It varies with cell *index*, which
+  is the same thing seen through the union-find.
+- **round 2** — it varies with cell *size*, non-monotonically. Which `step` worked was a fact
+  about which ids the cells happened to get. `hmcp_bodega` went from working at 32 and nowhere
+  else to monotone and right at the default. That was
+  [#53](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/53), and it cost round 2
+  most of its session.
+- **round 3** — geometry 200 units away destroys a doorway. A pocket anywhere lowered the bar
+  everywhere.
+- **round 5** — a counter at the depth of its own table. Same pocket, same bar.
+
+`test/watershed.test.ts` had pinned it since round 1 with two `it.fails` and a prediction: the
+one-line repair turns them green and breaks sixteen assertions, because the criterion had been
+calibrated against peaks that shrink. **That prediction was exact — sixteen, measured.** It
+also named where the real fix had to land, and it was right about that too. Both `it.fails`
+are now `it`.
+
+The lesson is about the method rather than the code. Round 1 could not have fixed this: it had
+the symptom and no mechanism. What made it possible was five accounts of the same defect from
+five different angles, plus a test that refused to go green on the wrong answer.
