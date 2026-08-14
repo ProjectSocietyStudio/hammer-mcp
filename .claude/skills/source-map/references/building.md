@@ -89,11 +89,12 @@ One working value, with failing neighbours on both sides. Neither "finer" nor "c
 converges, and `step`'s own description — *"16 is the coarsest that resolves a 32-unit
 doorway"* — points the wrong way.
 
-**So: when a portal rule matches nothing, vary `step` before touching the geometry.** Try 32.
-But bound that search: if three or four values all give the same answer, it is **not** a
-resolution problem and every further `step` is wasted — go and bisect the geometry instead. A
-third builder spent five calls here on advice that is right often enough to be on this page and
-was wrong that time.
+**So: when a portal rule matches nothing, read the note first, then vary `step`.** The note
+now says whether a merge closed an opening and where — that is the geometry answer, and it is
+the one that was missing when a third builder spent five `step` calls on advice that is right
+often enough to be on this page and was wrong that time. If no merge closed anything, try 32,
+and bound that search: three or four values giving the same answer means it is **not** a
+resolution problem.
 `check_vmf_rules` now reports the `segmentation` it used and says so in a note, and both tools
 take `minRoomArea` so a diagnosis and the verdict it explains can be run at the same settings.
 Open as [#53](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/53); one builder
@@ -125,9 +126,12 @@ the room pass reads that narrowing as the map's real shape. If a portal disappea
 furniture change, suspect the furniture's *depth* before anything else — and note that the
 `step` sweep will not find it, because it is not a resolution problem.
 
-Nothing reports a portal that stopped existing ([#60](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/60)),
-so bisection — delete one brush, re-read, put it back — is currently the only way. It took
-five wasted `step` calls before that.
+**`read_vmf_rooms` now reports the portal that stopped existing.** Every merge across a
+boundary carries `closed`: the width and position of the opening it swallowed, measured at the
+widest cell of that boundary. When no portal is reported at all and a merge closed one, both
+`read_vmf_rooms` and `check_vmf_rules` say so in a note, with the widest one's position —
+so the first move after a doorway goes quiet is to read that, not to sweep `step`. Bisection
+by deleting brushes is no longer the only way.
 
 A standable surface above the floor — a counter top, a ledge — is no longer reported as a room:
 it comes back under `unreachable`, because no walk of one cell reaches it. You no longer have

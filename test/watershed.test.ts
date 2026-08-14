@@ -123,6 +123,141 @@ describe("saying why it merged", () => {
     }
   });
 
+  /**
+   * Issue #60, and the half of #48 that stayed open.
+   *
+   * `merges` explains every merge it makes. What the caller notices is the *portal that
+   * stopped being reported*, which is the same event from the other side -- and on the
+   * round-3 map it was noticed by a rule about a doorway going quiet after three furniture
+   * brushes went in two hundred units away. Five `step` calls and four delete-and-recheck
+   * cycles to find the cause, none of which the output pointed at.
+   *
+   * The NOOK plan is that map in miniature: two rooms, one doorway, and a corner bitten out
+   * of the far side that collapses the segmentation.
+   */
+  it("names the doorway a merge stopped reporting", () => {
+    const result = findRooms(plan(NOOK), { minRoomArea: 0 });
+    // The premise: one room, so no portal is reported at all.
+    expect(result.rooms).toHaveLength(1);
+    expect(result.portals).toEqual([]);
+
+    const closed = result.merges.filter((m) => m.closed !== null);
+    expect(closed.length).toBeGreaterThan(0);
+
+    // Every number below comes from the plan, not from a previous run. The only way
+    // between the two halves is row 4, columns 6 to 8, and `cellCentre` is index x step --
+    // so the doorway's col is at y = 64, x between 96 and 128. The nook in the corner is
+    // closed by a merge of its own, hence "one of them" rather than "the first".
+    const doorway = closed.filter(
+      (m) => m.closed!.at[1] === 4 * 16 && m.closed!.at[0] >= 6 * 16 && m.closed!.at[0] <= 8 * 16,
+    );
+    expect(doorway.length).toBeGreaterThan(0);
+    for (const m of doorway) expect(m.closed!.approxWidthUnits).toBeGreaterThan(0);
+
+    // And every closed col names a real place: a merge that pointed at a wall would be
+    // worse than saying nothing.
+    for (const m of closed) expect(m.closed!.at[2]).toBe(0);
+  });
+
+  /**
+   * The col is the *widest* cell on the boundary, not the first one the scan met.
+   *
+   * The merge loop knows only the cell it is standing on when it decides, which is wherever
+   * the scan reached the boundary first -- on a wide opening, an edge of it. Reporting that
+   * as "the doorway that closed" understates the opening and points at the wrong place, and
+   * a plan where the two answers differ is the only way to know which one is being reported.
+   *
+   * This plan's wall is two cells with a four-cell gap between them, so the boundary is
+   * several cells long and its widest point is not its first.
+   */
+  it("reports the widest cell on the boundary as the col, not the first one scanned", () => {
+    const wideOpening = [
+      "############",
+      "#....#.....#",
+      "#..........#",
+      "#..........#",
+      "#..........#",
+      "#..........#",
+      "#....#.....#",
+      "############",
+    ];
+    const result = findRooms(plan(wideOpening), { minRoomArea: 0 });
+    expect(result.rooms).toHaveLength(1);
+
+    const closed = result.merges.filter((m) => m.closed !== null);
+    expect(closed.length).toBeGreaterThan(0);
+    for (const m of closed) {
+      // `measured` is the half-width at the cell the decision was taken on; the col is by
+      // definition at least as wide as that, and on this plan strictly wider. An
+      // implementation that reports the deciding cell as the col fails this.
+      expect(m.closed!.approxWidthUnits).toBeGreaterThanOrEqual(2 * m.measured);
+      expect(m.closed!.at).not.toEqual(m.at);
+      // And it is in the opening: rows 2 to 5, which are the ones the wall leaves free.
+      expect(m.closed!.at[1]).toBeGreaterThanOrEqual(2 * 16);
+      expect(m.closed!.at[1]).toBeLessThanOrEqual(5 * 16);
+    }
+  });
+
+  it("makes every merge's `into` a room the same result reports", () => {
+    // `absorbed` cannot be looked up -- the region is gone. `into` is the whole point of
+    // the field and used to be an internal number whenever a merge chained: absorbed in
+    // one pass, absorbed again in the next, and mapped through a table that only holds
+    // survivors. A huge threshold forces exactly those chains.
+    for (const [rows, minRoomArea] of [
+      [NOOK, 0],
+      [NOOK, 1e9],
+      [
+        [
+          "###############",
+          "#.....###.....#",
+          "#.....###.....#",
+          "#.....###.....#",
+          "#.............#",
+          "#.....###.....#",
+          "#.....###.....#",
+          "#.....###.....#",
+          "###############",
+        ],
+        1e9,
+      ],
+    ] as Array<[string[], number]>) {
+      const result = findRooms(plan(rows), { minRoomArea });
+      const ids = new Set([...result.rooms, ...result.unreachable].map((r) => r.id));
+      expect(result.merges.length).toBeGreaterThan(0);
+      for (const m of result.merges) expect(ids.has(m.into)).toBe(true);
+    }
+  });
+
+  it("puts an offcut's point in the offcut, not at the corner it was scanned from", () => {
+    // The right half of this plan is 5 cells wide by 7 tall. Its widest cell is in the
+    // middle of it; the first cell in scan order is the top-left corner, which is where
+    // this used to point -- a place a reader looks at and sees a wall.
+    const twoBoxes = [
+      "###############",
+      "#.....###.....#",
+      "#.....###.....#",
+      "#.....###.....#",
+      "#.............#",
+      "#.....###.....#",
+      "#.....###.....#",
+      "#.....###.....#",
+      "###############",
+    ];
+    const offcuts = findRooms(plan(twoBoxes), { minRoomArea: 1e9 }).merges.filter(
+      (m) => m.reason === "offcut" && m.at !== null,
+    );
+    expect(offcuts.length).toBeGreaterThan(0);
+    for (const m of offcuts) {
+      const [x, y] = m.at!;
+      // Off every wall of the plan by a full cell. The open cells run from index 1 to 13
+      // across and 1 to 7 down, so a corner cell cannot satisfy this.
+      expect(x).toBeGreaterThan(1 * 16);
+      expect(x).toBeLessThan(13 * 16);
+      expect(y).toBeGreaterThan(1 * 16);
+      expect(y).toBeLessThan(7 * 16);
+    }
+  });
+
   it("reports no merges at all for a plan that needs none", () => {
     const result = findRooms(
       plan(["#########", "#.......#", "#.......#", "#.......#", "#########"]),

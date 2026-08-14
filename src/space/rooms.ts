@@ -80,9 +80,23 @@ export interface Portal {
  * The algorithm has all of this in hand at the moment it decides; it simply never said it.
  */
 export interface Merge {
-  /** The region that stopped existing. */
+  /**
+   * The region that stopped existing.
+   *
+   * An internal number, and it cannot be anything else: the region is gone, so no reported
+   * room carries this id. It is here to tell two merges apart and to be counted, never to be
+   * looked up.
+   */
   absorbed: number;
-  /** The region it became part of. */
+  /**
+   * The room it is part of now -- a `rooms[]` or `unreachable[]` id, always.
+   *
+   * Followed through to the survivor rather than recorded as it stood: a region absorbed in
+   * pass 2 can itself be absorbed in pass 3, and the id recorded at the moment of the first
+   * decision then matches nothing in the output. Before this, `into` was mapped through a
+   * table that only holds surviving regions, so those chains came back as raw internal
+   * numbers -- indistinguishable from real ids, and the half of #48 that stayed open.
+   */
   into: number;
   /** Why: a constriction that did not constrict, or a region too small to be a room. */
   reason: "not-a-constriction" | "offcut";
@@ -96,6 +110,22 @@ export interface Merge {
    */
   measured: number;
   bar: number;
+  /**
+   * The opening this merge stopped reporting -- the doorway that was there and is not now.
+   *
+   * `merges` explains every merge it *makes*; what a caller notices is the portal that
+   * vanished, which is the same event seen from the other side. Adding three furniture
+   * brushes, all flush to walls and none within 200 units of the divider, turned
+   * `rooms: 2, portals: 1` into `rooms: 1, portals: 0`, and the only way to find out which
+   * brush did it was to delete them one at a time (issue #60, measured 13/08/2026).
+   *
+   * `null` for an offcut, which absorbs a corner rather than closing a way through.
+   *
+   * Note the units: `approxWidthUnits` is a width, on the same scale as
+   * `Portal.approxWidthUnits` -- the number a rule about a doorway is compared against.
+   * `measured` and `bar` above are the algorithm's own comparison, which is a half-width.
+   */
+  closed: { at: Vec3; approxWidthUnits: number } | null;
 }
 
 export interface RoomsResult {
@@ -379,6 +409,28 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
     return r;
   };
 
+  // The col between each pair of *base* regions, before any of them are merged away.
+  //
+  // Computed once, from the regions the flood produced, rather than per decision: the merge
+  // loop knows only the boundary cell it happens to be standing on, which is wherever the
+  // scan met the boundary first and not the widest point of it. One extra pass over the
+  // cells buys every merge the same "widest cell on the boundary" the portal pass uses, so
+  // the opening a merge closed is reported the way the opening would have been reported.
+  const baseCols = new Map<string, number>();
+  for (const at of cells) {
+    const [x, y, z] = at3(at);
+    const mine = regionOf[at]!;
+    for (const [dx, dy] of DIRECTIONS) {
+      const nat = walkTo(grid, x, y, z, dx, dy);
+      if (nat < 0) continue;
+      const theirs = regionOf[nat]!;
+      if (theirs < 0 || theirs === mine) continue;
+      const key = mine < theirs ? `${mine}:${theirs}` : `${theirs}:${mine}`;
+      const prev = baseCols.get(key);
+      if (prev === undefined || clearance[at]! > clearance[prev]!) baseCols.set(key, at);
+    }
+  }
+
   const merged: Merge[] = [];
   for (let pass = 0; pass < 8; pass++) {
     const peak = new Int32Array(nextRegion);
@@ -397,6 +449,11 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
         // cell wide reads as clearance 1 from whichever side you stand on.
         const through = Math.max(clearance[at]!, clearance[n]!);
         if (through < narrower) continue;
+        // The widest cell on the boundary between the two regions this cell belongs to,
+        // which is where a doorway between them would have been reported.
+        const a0 = regionOf[at]!;
+        const b0 = regionOf[n]!;
+        const col = baseCols.get(a0 < b0 ? `${a0}:${b0}` : `${b0}:${a0}`) ?? at;
         merged.push({
           absorbed: Math.max(mine, theirs),
           into: Math.min(mine, theirs),
@@ -404,6 +461,10 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
           at: cellCentre(grid, ...at3(at)),
           measured: through * grid.step,
           bar: narrower * grid.step,
+          closed: {
+            at: cellCentre(grid, ...at3(col)),
+            approxWidthUnits: 2 * clearance[col]! * grid.step,
+          },
         });
         parent[Math.max(mine, theirs)] = Math.min(mine, theirs);
         joined += 1;
@@ -438,14 +499,24 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
       let into = options[0]!;
       for (const n of options) if (count[n]! > count[into]!) into = n;
       if (into === r) continue;
-      const where = cells.find((at) => regionOf[at] === r);
+      // The region's own widest cell, which is the same point `Room.centre` reports for a
+      // region that survives. It used to be the first cell in scan order -- a corner of the
+      // offcut, at whatever end of it the scan started from, which sends a reader looking
+      // at the wrong place for a region a few cells across.
+      let where = -1;
+      for (const at of cells) {
+        if (regionOf[at] !== r) continue;
+        if (where < 0 || clearance[at]! > clearance[where]!) where = at;
+      }
       merged.push({
         absorbed: r,
         into,
         reason: "offcut",
-        at: where === undefined ? null : cellCentre(grid, ...at3(where)),
+        at: where < 0 ? null : cellCentre(grid, ...at3(where)),
         measured: count[r]! * areaOfCell,
         bar: minArea,
+        // An offcut is a corner absorbed into the space it opens onto; nothing was closed.
+        closed: null,
       });
       for (const at of cells) if (regionOf[at] === r) regionOf[at] = into;
       count[into]! += count[r]!;
@@ -616,9 +687,46 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
   const seen = new Set<number>();
   const merged1 = merged.filter((m) => !seen.has(m.absorbed) && seen.add(m.absorbed) !== null);
 
-  // Merges are recorded against internal region ids; the surviving ones are renumbered at
-  // the end, so `into` is mapped through to the id the caller will actually see.
-  for (const m of merged1) m.into = remap.get(m.into) ?? m.into;
+  // Merges are recorded against internal region ids, and the surviving ones are renumbered
+  // at the end -- so `into` has to be mapped through to the id the caller will actually see.
+  //
+  // Following the chain first is the part that was missing. A region absorbed in one pass
+  // can be absorbed again in the next, and `remap` only holds regions that survived, so
+  // `remap.get(into) ?? into` left those merges carrying an internal number that looks
+  // exactly like a room id and matches no room. Walk to the survivor, then map.
+  const absorbedInto = new Map<number, number>();
+  for (const m of merged1) absorbedInto.set(m.absorbed, m.into);
+  const survivor = (id: number): number => {
+    let at = id;
+    // Bounded by the number of merges: each step moves to a region absorbed later, and a
+    // region is absorbed once. The guard is against a cycle that should not exist.
+    for (let i = 0; i <= merged1.length; i++) {
+      const next = absorbedInto.get(at);
+      if (next === undefined || next === at) break;
+      at = next;
+    }
+    return at;
+  };
+  for (const m of merged1) m.into = remap.get(survivor(m.into)) ?? m.into;
+
+  // The negative of the question the room pass already answers, and the one a caller
+  // actually asks: not "what did you merge" but "where did my doorway go" (issue #60).
+  const closedCols = merged1.filter((m) => m.closed !== null);
+  if (portals.length === 0 && closedCols.length > 0) {
+    const worst = closedCols.reduce((a, b) =>
+      b.closed!.approxWidthUnits > a.closed!.approxWidthUnits ? b : a,
+    );
+    notes.push(
+      `No doorway is reported, and ${closedCols.length} merge(s) closed one: the widest was ` +
+        `about ${worst.closed!.approxWidthUnits} units at ` +
+        `[${worst.closed!.at.map((n) => Math.round(n)).join(", ")}], merged because the ` +
+        `opening measured ${worst.measured} where the narrower of the two spaces is ` +
+        `${worst.bar}. That is geometry, not resolution: something narrowed one of those ` +
+        `two spaces until the opening stopped being a constriction, and it need not be ` +
+        `anywhere near the opening. Furniture depth is the usual cause, and varying 'step' ` +
+        `will not find it.`,
+    );
+  }
 
   return {
     rooms: walkable,

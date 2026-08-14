@@ -467,15 +467,36 @@ export function checkRules(
   );
 
   // A portal rule that matched nothing on a map the pass split into one room is not a
-  // finding about the rules: it is the segmentation, and this is where to say so. The
-  // cell size is the thing to vary, and it is not monotone -- see issue #53.
+  // finding about the rules: it is the segmentation, and this is where to say so.
+  //
+  // What this note used to say, and why it changed: "try another 'step'". The cell size is
+  // not monotone (issue #53) so that advice is right often enough to be worth giving -- but
+  // on 13/08/2026 a builder followed it through five values, all returning one room, because
+  // the cause was a shelf 48 units deep two hundred units from the doorway. The advice
+  // pointed away from the cause and cost five calls. So the merge that closed the opening
+  // now comes first, and the `step` sweep second, with a stopping rule on it.
   const wantedPortals = file.rules.some((r) => r.select?.portal !== undefined);
   if (rooms && wantedPortals && rooms.portals.length === 0) {
+    const closed = rooms.merges.filter((m) => m.closed !== null);
+    const worst = closed.reduce<(typeof closed)[number] | null>(
+      (a, b) => (a === null || b.closed!.approxWidthUnits > a.closed!.approxWidthUnits ? b : a),
+      null,
+    );
     notes.push(
       `The room pass found ${rooms.rooms.length} room(s) and no doorways at step ${step}, ` +
         `so every rule about a portal matched nothing. That is about the segmentation, not ` +
-        `about the rules file: try another 'step'. Larger can help where smaller does not, ` +
-        `and read_vmf_rooms at the same step shows the merges that produced this.`,
+        `about the rules file. ` +
+        (worst
+          ? `${closed.length} merge(s) closed an opening; the widest was about ` +
+            `${worst.closed!.approxWidthUnits} units at ` +
+            `[${worst.closed!.at.map((n) => Math.round(n)).join(", ")}]. Look there first: ` +
+            `something narrowed one of the two spaces until that opening stopped being a ` +
+            `constriction, and it need not be anywhere near it -- furniture depth is the ` +
+            `usual cause. Varying 'step' will not find that. `
+          : ``) +
+        `If the geometry is not the cause, try another 'step': larger can help where smaller ` +
+        `does not, and read_vmf_rooms at the same step shows every merge. Three or four ` +
+        `values giving the same answer means it is not a resolution problem.`,
     );
   }
 

@@ -267,6 +267,29 @@ The last one is a statement about the map rather than a threshold tuned until th
 passed: a doorway is a *constriction*, and if an opening is as wide as the narrower of the two
 spaces it joins, they are one space.
 
+### Every merge says what it closed
+
+That criterion is also the whole reason a room count surprises people, so every merge is
+reported: the two regions, the comparison that decided it, the cell, and — for a merge across
+a boundary — **the opening that stopped being reported**, with its own width and position.
+
+The last field is the one a caller actually asks for. `merges` explains each merge it *makes*;
+what a builder notices is a rule about a doorway going quiet. On 13/08/2026 three furniture
+brushes, all flush to walls and none within 200 units of the divider, turned `rooms: 2,
+portals: 1` into `rooms: 1, portals: 0`, and finding the cause meant deleting brushes one at a
+time — five `step` values first, all of which returned the same thing, because the cause was
+geometry rather than resolution.
+
+Two properties worth knowing about those fields:
+
+- **`closed.at` is the widest cell on the boundary**, not the cell the merge happened to be
+  standing on when it decided. The two differ on any opening more than a cell or two across,
+  and the deciding cell is wherever the scan met the boundary first — an edge of the opening,
+  which understates it.
+- **`into` is always a reported room id**, followed through the chain of absorptions. A region
+  absorbed in one pass can be absorbed again in the next, and the id as recorded then matched
+  no room in the output while looking exactly like one.
+
 ## How it is proven
 
 `test/support/rooms.ts` builds a map whose dimensions **are** the expected answers: two rooms
