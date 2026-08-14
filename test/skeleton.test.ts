@@ -20,6 +20,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { writeVmfSolidTool } from "../src/tools/build.js";
 import { runCompile } from "../src/tools/compile.js";
+import { readGameContentTool } from "../src/tools/content.js";
 import { editVmf, writeVmf } from "../src/tools/vmfedit.js";
 import { readVmfLeakTool } from "../src/tools/scene.js";
 import { DEFAULT_SKYNAME, emptyVmf } from "../src/vmf/skeleton.js";
@@ -31,8 +32,23 @@ const ctx = sharedCtx as unknown as ToolContext;
 const scratch = mkdtempSync(join(tmpdir(), "hammer-skeleton-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-const create = (name: string, over: Record<string, unknown> = {}) =>
-  writeVmf.handler(
+interface Created {
+  path: string;
+  written: boolean;
+  bytes: number;
+  skyname: string;
+  skybox: {
+    checked: boolean;
+    found: boolean | null;
+    missingSides: string[];
+    alternatives: string[];
+    note: string;
+  };
+  note: string;
+}
+
+const create = async (name: string, over: Record<string, unknown> = {}): Promise<Created> =>
+  (await writeVmf.handler(
     {
       path: join(scratch, name),
       skyname: DEFAULT_SKYNAME,
@@ -42,7 +58,7 @@ const create = (name: string, over: Record<string, unknown> = {}) =>
       ...over,
     } as never,
     ctx,
-  ) as unknown as { path: string; written: boolean; bytes: number; skyname: string };
+  )) as unknown as Created;
 
 describe("the empty map", () => {
   it("has the five blocks Hammer writes, and a worldspawn", () => {
@@ -76,25 +92,82 @@ describe("the empty map", () => {
 });
 
 describe("write_vmf", () => {
-  it("creates a file that was not there", () => {
-    const r = create("fresh.vmf");
+  it("creates a file that was not there", async () => {
+    const r = await create("fresh.vmf");
     expect(r.written).toBe(true);
     expect(existsSync(r.path)).toBe(true);
     expect(readFileSync(r.path, "utf8")).toBe(emptyVmf());
     expect(r.bytes).toBeGreaterThan(0);
   });
 
-  it("refuses to overwrite, because the alternative is deleting a map", () => {
+  it("refuses to overwrite, because the alternative is deleting a map", async () => {
     const path = join(scratch, "occupied.vmf");
     writeFileSync(path, "hours of work\n");
-    expect(() => create("occupied.vmf")).toThrow(/already exists/);
+    await expect(create("occupied.vmf")).rejects.toThrow(/already exists/);
     expect(readFileSync(path, "utf8")).toBe("hours of work\n");
   });
 
-  it("writes nothing on a dry run", () => {
-    const r = create("dry.vmf", { dryRun: true });
+  it("writes nothing on a dry run", async () => {
+    const r = await create("dry.vmf", { dryRun: true });
     expect(r.written).toBe(false);
     expect(existsSync(join(scratch, "dry.vmf"))).toBe(false);
+  });
+
+  it("says the sky was not checked, rather than implying it was", async () => {
+    // No game configured is a normal case -- a map for a game this machine does not have
+    // is still a map -- and `found: null` is the honest answer for it. Absent and unknown
+    // are different, and a boolean cannot hold both.
+    const r = await create("nogame.vmf", { game: undefined });
+    expect(typeof r.skybox.checked).toBe("boolean");
+    if (!r.skybox.checked) {
+      expect(r.skybox.found).toBeNull();
+      expect(r.skybox.note).toMatch(/not checked/);
+    }
+    // Either way the note reaches the caller, which is the whole point of #62.
+    expect(r.note).toContain(r.skybox.note);
+  });
+
+  describe("checking the sky against the game", () => {
+    const ready = has.sidecar && has.gameContent;
+
+    it.skipIf(!ready)("confirms the default is a sky the game really has", async () => {
+      const r = await create("default-sky.vmf");
+      expect(r.skybox.checked).toBe(true);
+      expect(r.skybox.found).toBe(true);
+      expect(r.skybox.missingSides).toEqual([]);
+      // What the check does NOT prove, said out loud: the two vbsp "default cubemap"
+      // lines are about the .vtf headers, which nothing here reads.
+      expect(r.skybox.note).toMatch(/default cubemap/);
+    });
+
+    it.skipIf(!ready)("names skies the game has when the one asked for is absent", async () => {
+      const r = await create("made-up-sky.vmf", { skyname: "sky_not_a_real_sky_at_all" });
+      expect(r.skybox.checked).toBe(true);
+      expect(r.skybox.found).toBe(false);
+      expect(r.skybox.missingSides).toHaveLength(6);
+      expect(r.skybox.alternatives.length).toBeGreaterThan(0);
+      expect(r.skybox.alternatives).not.toContain("sky_not_a_real_sky_at_all");
+
+      // The alternatives have to be real, or this is worse than saying nothing -- and
+      // "real" is checked against the game through a different tool, not against the
+      // list this one just built. Note the first one found here is `painted`, which is a
+      // complete sky whose name does not begin with "sky": a name-shaped assertion would
+      // have passed for the wrong reason.
+      const first = r.skybox.alternatives[0]!;
+      const found = (await readGameContentTool.handler(
+        { pattern: `skybox/${first}*`, kind: "material", limit: 100 } as never,
+        ctx,
+      )) as unknown as { results: Array<{ path: string }> };
+      const sides = new Set(
+        found.results
+          .map((row) => /skybox\/(.+?)(rt|lf|bk|ft|up|dn)\.vmt$/i.exec(row.path))
+          .filter((m): m is RegExpExecArray => m !== null && m[1] === first)
+          .map((m) => m[2]!),
+      );
+      expect([...sides].sort()).toEqual(["bk", "dn", "ft", "lf", "rt", "up"]);
+      // And the file is still written: this reports, it does not refuse.
+      expect(r.written).toBe(true);
+    });
   });
 });
 
@@ -113,7 +186,7 @@ describe("a map created and built through tools alone", () => {
   ];
 
   const build = async (name: string, shell: typeof SHELL): Promise<string> => {
-    const { path } = create(name);
+    const { path } = await create(name);
     for (const solid of shell) {
       await writeVmfSolidTool.handler(
         {

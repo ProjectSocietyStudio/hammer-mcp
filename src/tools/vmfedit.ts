@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
 import { writeGuarded } from "../fs/write.js";
+import { gameFor } from "../games/resolve.js";
+import { checkSkybox } from "../games/skybox.js";
 import { defineTool } from "../mcp/registry.js";
 import { applyVmfOps } from "../vmf/edit.js";
 import type { VmfOp } from "../vmf/edit.js";
 import { DEFAULT_GRID, DEFAULT_SKYNAME, emptyVmf } from "../vmf/skeleton.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, GAME, resolveInput } from "./paths.js";
 
 const MATCH = z
   .object({
@@ -175,6 +177,7 @@ export const writeVmf = defineTool({
       .max(1024)
       .default(DEFAULT_GRID)
       .describe("The grid an editor opens the file showing. Cosmetic; nothing compiles from it."),
+    game: GAME,
     dryRun: DRY_RUN,
     confirm: CONFIRM,
   },
@@ -184,9 +187,23 @@ export const writeVmf = defineTool({
     written: z.boolean(),
     bytes: z.number(),
     skyname: z.string(),
+    /**
+     * Whether the sky this tool just wrote is one the game actually has.
+     *
+     * The check the tool that *chose* the value could always have made, and did not:
+     * three builders read vbsp's two "default cubemap" lines about the default before
+     * concluding they did not matter (issue #62).
+     */
+    skybox: z.object({
+      checked: z.boolean(),
+      found: z.boolean().nullable(),
+      missingSides: z.array(z.string()),
+      alternatives: z.array(z.string()),
+      note: z.string(),
+    }),
     note: z.string(),
   },
-  handler: (args, ctx) => {
+  handler: async (args, ctx) => {
     const path = resolveInput(args.path, ctx.config);
     // Refused rather than backed up. `edit_vmf` backs up because it is editing something
     // it was pointed at on purpose; this one would be replacing a map with an empty one,
@@ -197,6 +214,12 @@ export const writeVmf = defineTool({
           `really mean to start over, or use edit_vmf and the geometry writers to change it.`,
       );
     }
+
+    // Checked, never enforced. A mapper may be writing a map for a game this machine does
+    // not have installed, and refusing the write over a sky would make the one tool that
+    // can start a map unusable there.
+    const { game } = gameFor(ctx.config, args.game);
+    const skybox = await checkSkybox(args.skyname, game.gameDir, ctx.config);
 
     const text = emptyVmf({ skyname: args.skyname, gridSpacing: args.gridSpacing });
     const write = writeGuarded(path, text, ctx.config, { dryRun: args.dryRun });
@@ -212,7 +235,9 @@ export const writeVmf = defineTool({
       written: write.written,
       bytes: Buffer.byteLength(text),
       skyname: args.skyname,
+      skybox,
       note:
+        `${skybox.note} ` +
         "Empty: no geometry, no entities, and therefore not sealed. write_vmf_solid adds " +
         "brushes, edit_vmf adds entities, read_vmf_leak says when it holds. A map with no " +
         "info_player_start has no seed for the room pass, so read_vmf_rooms and the room " +
