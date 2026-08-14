@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 14/08/2026: **74 tools**.
+Last checked against the tool list on 14/08/2026: **76 tools**.
 
 ## The file itself
 
@@ -159,7 +159,7 @@ with these tools and nothing else.
 
 ## Beyond Hammer
 
-Thirty-five of the tools here answer questions Hammer never asked. They are not parity and
+Thirty-seven of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -173,6 +173,8 @@ map and looking, or by not happening at all.
 | `read_map_geometry` | nothing — how full each lump is against vbsp's ceiling |
 | `read_prop_survey` | nothing |
 | `read_pakfile` | nothing |
+| `run_pakfile_extract` | nothing: a compiled map's packed content could be listed and never opened |
+| `run_cubemap2hdr` | nothing offline. The engine builds cubemaps in whichever mode it is running |
 | `read_sightlines` | the eye, standing in the map |
 | `read_vmf_rooms` | nothing: Hammer has no idea what a room is |
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |
