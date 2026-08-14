@@ -104,6 +104,23 @@ export const checkVmfRulesTool = defineTool({
         at: z.array(z.number()).nullable(),
         message: z.string(),
         note: z.string().optional(),
+        // How the measurement was taken, for the checks where a bare number is ambiguous.
+        // Absent for the ones where it is not (headroom, room area, sightline).
+        evidence: z
+          .object({
+            hullFits: z.boolean(),
+            startsInside: z
+              .object({ brushId: z.number(), owner: z.string() })
+              .nullable(),
+            blockedBy: z
+              .object({ brushId: z.number().nullable(), material: z.string().nullable() })
+              .nullable()
+              .optional(),
+            facing: z.array(z.number()).optional(),
+            yawDegrees: z.number().optional(),
+            assumedHull: z.array(z.number()),
+          })
+          .optional(),
       }),
     ),
     notes: z.array(z.string()),
@@ -189,6 +206,15 @@ export const checkVmfRulesTool = defineTool({
         at: v.at ? [...v.at] : null,
         message: v.message,
         ...(v.note === undefined ? {} : { note: v.note }),
+        ...(v.evidence === undefined
+          ? {}
+          : {
+              evidence: {
+                ...v.evidence,
+                ...(v.evidence.facing ? { facing: [...v.evidence.facing] } : {}),
+                assumedHull: [...v.evidence.assumedHull],
+              },
+            }),
       })),
       notes: report.notes,
     };

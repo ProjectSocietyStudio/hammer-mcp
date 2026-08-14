@@ -32,6 +32,18 @@ writeFileSync(
       op: "add",
       keyvalues: { classname: "info_target", targetname: "reception", origin: "-768 256 0" },
     },
+    // The round-3 register: a marker in open floor by every appearance, 8 units from the
+    // corridor's south wall -- so the 32-wide hull centred on it already overlaps that wall.
+    // The clearance measured from it is 0 for a reason that is not about the room ahead.
+    {
+      op: "add",
+      keyvalues: {
+        classname: "info_target",
+        targetname: "register",
+        origin: "0 -376 0",
+        angles: "0 180 0",
+      },
+    },
   ]).text,
 );
 
@@ -58,6 +70,14 @@ interface Report {
     subject: string;
     message: string;
     note?: string;
+    evidence?: {
+      hullFits: boolean;
+      startsInside: { brushId: number; owner: string } | null;
+      blockedBy?: { brushId: number | null; material: string | null } | null;
+      facing?: number[];
+      yawDegrees?: number;
+      assumedHull: number[];
+    };
   }>;
   notes: string[];
 }
@@ -196,6 +216,52 @@ describe("checking a map against its rules", () => {
     expect(r.violations[0]!.measured).toBeCloseTo(112, 0);
     expect(r.violations[0]!.subject).toMatch(/front_door/);
     expect(r.violations[0]!.note).toMatch(/stand in front of a door/);
+
+    // The direction taken and what stopped it, both of which the number alone leaves open.
+    // The door's yaw is 90, so the sweep runs +y.
+    const e = r.violations[0]!.evidence!;
+    expect(e.hullFits).toBe(true);
+    expect(e.yawDegrees).toBe(90);
+    expect(e.facing![1]).toBeCloseTo(1, 6);
+    expect(e.blockedBy!.brushId).not.toBeNull();
+    expect(r.violations[0]!.message).toMatch(/from yaw 90/);
+  });
+
+  it("says the hull did not fit, rather than reporting a bare zero", () => {
+    // Issue #59, measured 13/08/2026: a register standing 8 units off a counter measured
+    // "clearance in front is 0 units" -- the identical output a wrong yaw convention would
+    // have produced, which is the hypothesis the builder spent first. The sweep never
+    // happened: the hull was inside the wall before it started.
+    const r = check(writeRules("register.json", [
+      { id: "till", what: "clearance_in_front", select: { targetname: "register" }, min: 48 },
+    ]));
+    expect(r.violations).toHaveLength(1);
+    const v = r.violations[0]!;
+
+    // Null, not zero. A number here would be read as a measurement of the room.
+    expect(v.measured).toBeNull();
+    expect(v.evidence!.hullFits).toBe(false);
+    expect(v.evidence!.startsInside).not.toBeNull();
+    expect(v.evidence!.startsInside!.owner).toBe("world");
+    expect(v.evidence!.assumedHull).toEqual([16, 16, 36]);
+
+    // And the yaw, which is the thing that was guessed at: 180 is -x.
+    expect(v.evidence!.yawDegrees).toBe(180);
+    expect(v.evidence!.facing![0]).toBeCloseTo(-1, 6);
+    expect(v.message).toMatch(/no body fits/);
+    expect(v.message).toMatch(/already inside brush \d+ \(world\)/);
+  });
+
+  it("says which way it swept when the subject has no yaw of its own", () => {
+    // A room and a doorway have no `angles`, so the sweep runs +x -- a direction nobody
+    // chose. Reporting the number without it is how "0" reads as a fact about the map.
+    const r = check(writeRules("roomfront.json", [
+      { id: "room-front", what: "clearance_in_front", select: { room: "*" }, min: 99999 },
+    ]));
+    expect(r.violations.length).toBeGreaterThan(0);
+    const withYaw = r.violations.filter((v) => v.evidence?.yawDegrees === 0);
+    expect(withYaw.length).toBe(r.violations.length);
+    expect(r.violations[0]!.message).toMatch(/no yaw of its own/);
   });
 
   it("checks a sight line between two things the map names", () => {
