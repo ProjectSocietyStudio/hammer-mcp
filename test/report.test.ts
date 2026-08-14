@@ -155,6 +155,37 @@ describe("read_map_report", () => {
     expect(all.filteredOut).toBeUndefined();
   });
 
+  /**
+   * #85. Found building `hmcp_tenement`: three criteria printed `null of 16777216` beside a
+   * fraction that had plainly been computed from something. They are exactly the three lumps
+   * whose ceiling is denominated in **bytes** rather than in records -- LIGHTING, VISIBILITY
+   * and TEXDATA_STRING_DATA -- where there is no record count to print and the numerator is
+   * the lump's own length.
+   *
+   * It matters more than a cosmetic slip on the one map that needs it most: MAX_MAP_LIGHTING
+   * is byte-denominated, `rp_nycity_day` sits at 264% of it, and that is precisely the number
+   * this message would not print.
+   */
+  it("prints the byte count a byte-denominated lump's fraction was computed from", () => {
+    const r = reportMap(PROBE, SOURCE_STOCK);
+    for (const name of ["LIGHTING", "VISIBILITY", "TEXDATA_STRING_DATA"]) {
+      const c = find(r, `lump-fill:${name}`);
+      expect(c, name).toBeDefined();
+      expect(c!.message, name).not.toMatch(/null/);
+      // The evidence has to reconstruct the verdict: numerator over ceiling IS the fraction.
+      const m = c!.message.match(/^([\d]+) bytes of ([\d]+)/);
+      expect(m, `${name}: ${c!.message}`).not.toBeNull();
+      const [, used, limit] = m!;
+      expect(Math.round((Number(used) / Number(limit)) * 1000) / 1000, name).toBe(c!.value);
+    }
+  });
+
+  it("still prints a record count for the lumps that have one", () => {
+    const r = reportMap(PROBE, SOURCE_STOCK);
+    const planes = find(r, "lump-fill:PLANES");
+    expect(planes!.message).toMatch(/^\d+ of 65536\./);
+  });
+
   it.skipIf(!has.prodMap)("on the production map, reports MODELS past its stock ceiling", () => {
     const r = reportMap(paths.prodMap, SOURCE_STOCK);
     const models = find(r, "lump-fill:MODELS");

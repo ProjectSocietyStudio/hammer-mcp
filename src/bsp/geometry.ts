@@ -90,6 +90,16 @@ export interface LumpReport {
   count: number | null;
   limit?: number;
   limitName?: string;
+  /**
+   * The numerator `usedFraction` was computed from, and what it counts.
+   *
+   * Two different quantities share one fraction: a record count for most lumps, and the
+   * lump's own byte length for the three whose ceiling is denominated in bytes
+   * (MAX_MAP_LIGHTING, MAX_MAP_VISIBILITY, MAX_MAP_TEXDATA_STRING_DATA). Reporting the
+   * fraction without saying which produced it left read_map_report printing `null of
+   * 16777216` beside a verdict -- evidence a reader cannot check (#85).
+   */
+  used?: { value: number; unit: "records" | "bytes" };
   /** Fraction of the compile-time ceiling used, when both are known. */
   usedFraction?: number;
   /** Set when a count could not be derived, and why. */
@@ -176,6 +186,7 @@ export function readGeometry(path: string): GeometryReport {
         `cannot derive from lump length; use read_bsp_entities for the real count`;
     }
     if (used !== null && spec.limit !== undefined) {
+      report.used = { value: used, unit: spec.limitUnit === "bytes" ? "bytes" : "records" };
       report.usedFraction = Math.round((used / spec.limit) * 1000) / 1000;
       if (used > spec.limit) {
         // Measured on rp_nycity_day, which ships 1218 models against a stock ceiling
