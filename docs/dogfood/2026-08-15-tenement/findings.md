@@ -138,22 +138,36 @@ invisible while every map was one storey, because on one floor every id happens 
 portals at z 176 and drops three room labels for overlapping — because it is drawing two storeys
 on top of each other. Its own description calls it *"the drawing you can measure with"*.
 
-### 3 · A portal's col can land inside solid geometry — **bug**
+### 3 · "No body fits" is a measurement, and was reported as a failure to take one — **bug**
 
-Before the stair was moved against the north wall, `check_vmf_rules` returned `fail`:
+⚠️ **This finding was wrong as first written, and reproducing it is what said so.** The first
+version claimed the portal's col landed inside the staircase and called the doorway a phantom.
+It is neither. The col is in open air, and the opening is real.
+
+The staircase, standing mid-wing, left a **32-unit gap** between its flank and a wall. The room
+pass found it and described it exactly: `approxWidthUnits: 32`, `widthUnits: null`. The brief asks
+for 64. So the map genuinely violated its own brief, and `check_vmf_rules` was right to fail.
+
+What it said instead:
 
 ```
 doorway 1-2: measured: null, at [432, 416, 36.531]
-"the hull ... is already inside brush 401 (world)"
+"no body fits where this would be measured ... Move the point clear of that brush, or measure
+ with read_vmf_nearest_surface to find how far the open space is."
 ```
 
-Brush 401 is the **top step of the staircase**. The segmentation put a boundary along the stair's
-flank and reported the col inside it — a doorway that is not a doorway, at a point that is not
-open, failing a rule on a map with no defect.
+A message about the *check* failing, and an instruction to the caller to go and measure by hand —
+for an opening the same reply had already measured.
 
-The #75 fix (sweep the hull to find the floor) is working here — it is the reason the message names
-the brush — but it cannot help when the col itself is inside a solid. A portal whose col fails
-`pointInSolid` is not a portal and should not be reported.
+**"No body fits here" is the strongest possible measurement against a minimum**: a gap a 32-wide
+hull cannot enter is not 64 wide. The #59 distinction between *I could not measure* and *I measured
+0* is right and must stay — it cost round 3 a whole hypothesis — but a portal is the one subject
+where the two collapse, because the voxel pass reports its width in the same object as the
+complaint.
+
+The cost, and the reason this is a bug and not a wording preference: **I moved a staircase to make
+the message go away, and the staircase was fine.** A tool that reports its own inability where it
+holds an answer makes a mapper edit geometry that was never the problem.
 
 ### 4 · `unreachable` does not answer the question it states, and ignores `seeds` — **bug**
 
