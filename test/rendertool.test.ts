@@ -117,3 +117,29 @@ describe("render_vmf_view", () => {
     expect(r.notes.join(" ")).toMatch(/gmod-mcp/);
   });
 });
+
+/**
+ * #79. `render_vmf_view` skipped every displaced brush and said so:
+ *
+ *   "4 displacement brush(es) are not drawn: their flat quad is not the surface the game
+ *    builds, so drawing it would show terrain that does not exist."
+ *
+ * Honest, and it left the only tool that LOOKS at a map blind to every piece of terrain in
+ * it. `hmcp_backyard`'s garden is 85 m² whose entire content is terrain: in every render it
+ * was a flat slab, because the terrain was not drawn and the sealing slab beneath it was.
+ * It produced a false reading in that round's own account, where the terrain was described
+ * as reading dead flat when it had not been drawn at all.
+ */
+describe("displacements are drawn (#79)", () => {
+  it("shows the terrain rather than the slab under it", () => {
+    // Straight down over the garden, where the only thing to see is its ground.
+    const r = backyard({ origin: [224, 400, 240], angles: [89, 0, 0], fov: 100 });
+    expect(r.facesDrawn).toBeGreaterThan(200);
+    expect(r.notes.join(" ")).not.toMatch(/are not drawn/);
+  });
+
+  it("is still honest about a map that has none", () => {
+    const r = view({ origin: [0, 0, 128], angles: [0, 0, 0] });
+    expect(r.notes.join(" ")).not.toMatch(/are not drawn/);
+  });
+});

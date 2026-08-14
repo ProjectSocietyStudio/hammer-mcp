@@ -47,7 +47,7 @@ function sceneFor(path: string): Scene {
   const source = readFileSync(path, "utf8");
   const hit = cache.get(path);
   if (hit && hit.source === source) return hit.scene;
-  const scene = buildScene(path, source);
+  const scene = buildScene(path, source, { withTerrain: true });
   cache.set(path, { source, scene });
   return scene;
 }
@@ -223,11 +223,11 @@ export const renderVmfViewTool = defineTool({
           `probably outside the map or facing away from it.`,
       );
     }
-    if (scene.excluded.displacement > 0) {
+    if (scene.terrain.length > 0) {
       notes.push(
-        `${scene.excluded.displacement} displacement brush(es) are not drawn: their flat ` +
-          `quad is not the surface the game builds, so drawing it would show terrain that ` +
-          `does not exist.`,
+        `${scene.excluded.displacement} displacement brush(es) are drawn as ` +
+          `${scene.terrain.length} triangles from their own vertices. They are terrain in ` +
+          `the picture and not in the tracer: read_vmf_trace still does not see them.`,
       );
     }
     notes.push(

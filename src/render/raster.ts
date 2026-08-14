@@ -214,6 +214,31 @@ export function displayList(scene: Scene, camera: Camera): {
     }
   }
 
+  // Terrain, when the scene was built with it (#79). Not backface-culled: a displacement is
+  // a surface rather than the boundary of a solid, and the engine draws it from both sides.
+  // Shading takes the normal's absolute Lambert for the same reason -- a triangle wound away
+  // from the light is still lit ground, not the inside of a wall.
+  for (const tri of scene.terrain) {
+    considered += 1;
+    const view = tri.points.map((p) => toView(camera, basis, p));
+    const clipped = clipNear(view, camera.near);
+    if (clipped.length < 3) {
+      behind += 1;
+      continue;
+    }
+    const n = tri.normal;
+    const lambert = Math.abs(n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
+    faces.push({
+      brushId: tri.solidId,
+      sideId: null,
+      material: tri.material,
+      points: clipped,
+      shade: 0.45 + 0.55 * lambert,
+      colour: colourFor(tri.material),
+      sky: false,
+    });
+  }
+
   return { faces, considered, culled, behind };
 }
 

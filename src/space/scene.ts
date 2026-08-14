@@ -33,6 +33,7 @@
  */
 import { children, get, parse } from "../kv/parse.js";
 import type { KvBlock } from "../kv/parse.js";
+import { readDisplacements } from "../vmf/displacement.js";
 import { checkSolid, ON_EPSILON, orderedLoop } from "../vmf/solid.js";
 import type { Plane, SolidCheck, Vec3 } from "../vmf/solid.js";
 import { buildBvh } from "./bvh.js";
@@ -178,6 +179,25 @@ export interface Scene {
   maxs: Vec3;
   /** Solids read but excluded from every mask, with why. Reported by every tool. */
   excluded: { displacement: number; nonSolid: number; invalid: number };
+  /**
+   * The terrain, as triangles in world space. Empty unless `withTerrain` was asked for.
+   *
+   * Not part of the tracing scene and deliberately kept out of `brushes`: a displacement is
+   * not a convex hull and every mask here is about hulls. This exists for the renderers
+   * (#79), which until it did could not draw a single piece of terrain and said so in a note
+   * nobody was going to act on. `read_vmf_trace` is a separate problem and not solved here.
+   */
+  terrain: TerrainTriangle[];
+}
+
+/** One triangle of a displacement grid, with the material of the face it came from. */
+export interface TerrainTriangle {
+  /** The solid the displaced side belongs to, so a pixel can still name a brush. */
+  solidId: number;
+  material: string;
+  points: [Vec3, Vec3, Vec3];
+  /** Unit normal, from the winding. Terrain is two-sided in the engine; this is for shading. */
+  normal: Vec3;
 }
 
 export interface SceneOptions {
@@ -188,6 +208,13 @@ export interface SceneOptions {
   owners?: string[];
   /** Include brushes whose sides carry a displacement. Off, and off for a reason. */
   includeDisplacements?: boolean;
+  /**
+   * Also read every displacement grid into `terrain`, as triangles.
+   *
+   * Off by default because it costs a second parse of the file and nothing that traces wants
+   * it. The renderers ask for it; `read_vmf_leak` and the room pass do not.
+   */
+  withTerrain?: boolean;
 }
 
 const toolName = (material: string): string => {
@@ -323,5 +350,68 @@ export function buildScene(path: string, source: string, options: SceneOptions =
     maxs[0] = maxs[1] = maxs[2] = 0;
   }
 
-  return { path, brushes, bvh: buildBvh(brushes), mins, maxs, excluded };
+  const terrain = options.withTerrain ? terrainOf(source) : [];
+  return { path, brushes, bvh: buildBvh(brushes), mins, maxs, excluded, terrain };
+}
+
+/**
+ * Every displacement grid of a file, triangulated in world space.
+ *
+ * A displacement of power *n* is a regular (2^n+1)^2 lattice whose vertices already carry
+ * their world positions -- `readDisplacements` computes them, and `sculpt_displacement` and
+ * `sew_displacements` agree with it to a thirty-second of a unit. So there is nothing to
+ * derive here: walk the lattice and emit two triangles per cell.
+ *
+ * Power 4, the largest Source accepts, is 512 triangles. A hillside of thirty of them is
+ * fifteen thousand, which is nothing beside the face count of a real map.
+ */
+function terrainOf(source: string): TerrainTriangle[] {
+  const out: TerrainTriangle[] = [];
+  let displacements;
+  try {
+    ({ displacements } = readDisplacements(source));
+  } catch {
+    // A file this parser cannot read is one the renderers draw without its terrain, exactly
+    // as before. Failing the whole scene over the picture would be the wrong trade.
+    return out;
+  }
+
+  for (const disp of displacements) {
+    const n = disp.size;
+    const at = new Map<number, Vec3>();
+    for (const v of disp.vertices) at.set(v.y * n + v.x, v.position);
+
+    for (let y = 0; y < n - 1; y += 1) {
+      for (let x = 0; x < n - 1; x += 1) {
+        const a = at.get(y * n + x);
+        const b = at.get(y * n + x + 1);
+        const c = at.get((y + 1) * n + x + 1);
+        const d = at.get((y + 1) * n + x);
+        if (!a || !b || !c || !d) continue;
+        for (const tri of [
+          [a, b, c],
+          [a, c, d],
+        ] as Array<[Vec3, Vec3, Vec3]>) {
+          const normal = triangleNormal(tri);
+          if (normal === null) continue;
+          out.push({ solidId: disp.solidId, material: disp.material, points: tri, normal });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Unit normal of a triangle, or null when it is degenerate. */
+function triangleNormal([a, b, c]: [Vec3, Vec3, Vec3]): Vec3 | null {
+  const u: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const v: Vec3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n: Vec3 = [
+    u[1] * v[2] - u[2] * v[1],
+    u[2] * v[0] - u[0] * v[2],
+    u[0] * v[1] - u[1] * v[0],
+  ];
+  const len = Math.hypot(n[0], n[1], n[2]);
+  if (len < ON_EPSILON) return null;
+  return [n[0] / len, n[1] / len, n[2] / len];
 }
