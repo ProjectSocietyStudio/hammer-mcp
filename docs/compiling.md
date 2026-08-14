@@ -122,6 +122,13 @@ That last one cost a correction: it was also triggering the generic "missing mat
 advice — pack the asset — was wrong. Rule matching became **first match wins**, specific before
 generic.
 
+It also cost three builders a moment each, which is why `write_vmf` now checks the sky it writes
+against the game's own content and says what it found. Note what that check settles and what it
+does not: it proves the **six sides exist**, mounting the same VPK chain the engine reads. Whether
+they share a size and flags — which is what vbsp actually needs to build the default cubemap —
+lives in the `.vtf` headers, and nothing in this server reads those. A sky can pass the check and
+still draw these two lines, so the tool says so rather than implying a guarantee it has not earned.
+
 ## run_pack does not believe its own exit code
 
 `bspzip` exits 0 whether or not it added anything. So `run_pack` counts the pakfile contents before
