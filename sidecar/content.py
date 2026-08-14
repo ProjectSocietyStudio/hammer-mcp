@@ -95,12 +95,37 @@ def _vmf_name(rel: str) -> str:
     return re.sub(r"\.vmt$", "", stem, flags=re.IGNORECASE).upper()
 
 
+def _present(fsys: Any, path: str) -> bool:
+    """Whether the mounted chain has this file. `in` is not part of the filesystem API."""
+    try:
+        fsys[path]
+    except (KeyError, FileNotFoundError):
+        return False
+    except Exception:  # noqa: BLE001
+        return False
+    return True
+
+
 def _material_details(fsys: Any, rel: str) -> dict[str, Any]:
-    """Shader, base texture and surface properties of one material."""
+    """Shader, base texture, surface properties -- and whether the thing will actually draw.
+
+    That last part is #77, and it is why this function is not just a VMT reader. A `.vmt`
+    present in the game says nothing about the `.vtf` it points at. `NATURE/BLENDGRASSDIRT01`
+    ships with Garry's Mod; its `forest_grass_01`, `forest_dirt_02` and `blendtexture01` do
+    not, and a garden built on it is the purple checkerboard this whole tool exists to
+    prevent -- reported as present.
+
+    The resolution is `dependencies.py`'s, imported rather than restated: the two must not be
+    able to disagree about what is installed, which is the same reason both mount through
+    `Game(dir).get_filesystem()`.
+    """
     out: dict[str, Any] = {"shader": None, "basetexture": None, "surfaceprop": None,
-                           "translucent": False, "toolTexture": False, "error": None}
+                           "translucent": False, "toolTexture": False,
+                           "resolves": True, "missingTextures": [], "error": None}
     try:
         from srctools.vmt import Material
+
+        from dependencies import ENVMAP_KEYWORDS, TEXTURE_PARAMS, _under_materials
 
         with fsys[rel].open_str() as fh:
             mat = Material.parse(fh, rel)
@@ -116,8 +141,31 @@ def _material_details(fsys: Any, rel: str) -> dict[str, Any]:
                 out["surfaceprop"] = str(val)
             elif key in ("$translucent", "$alphatest") and str(val).strip() not in ("0", ""):
                 out["translucent"] = True
+
+        # Every texture the material names, not just the base one: a blend draws its second
+        # texture wherever alpha is 255, so a missing `$basetexture2` is half a terrain.
+        missing: list[str] = []
+        seen: set[str] = set()
+        for key, value in mat.items():
+            low = key.lower()
+            if not isinstance(value, str) or not value.strip():
+                continue
+            if low in TEXTURE_PARAMS or (
+                low == "$envmap" and value.lower() not in ENVMAP_KEYWORDS
+            ):
+                tex = _under_materials(value.strip(), ".vtf")
+                if tex in seen:
+                    continue
+                seen.add(tex)
+                if not _present(fsys, tex):
+                    missing.append(tex)
+        out["missingTextures"] = sorted(missing)
+        out["resolves"] = not missing
     except Exception as exc:  # noqa: BLE001
         out["error"] = f"{type(exc).__name__}: {exc}"
+        # A VMT this parser cannot read is not evidence that its textures are absent. Saying
+        # `resolves: false` there would turn "I could not tell" into "it is broken".
+        out["resolves"] = None
     out["toolTexture"] = rel.lower().startswith("materials/tools/")
     return out
 

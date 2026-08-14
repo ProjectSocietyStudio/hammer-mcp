@@ -15,7 +15,10 @@ export const readGameContentTool = defineTool({
     "suffix -- which is exactly what set_face_material takes. A pattern with * or ? is a " +
     "glob; anything else is a substring. Mounts the same VPK-and-loose chain the engine " +
     "reads through, so this and read_map_dependencies cannot disagree about what exists. " +
-    "Needs the Python sidecar; see health.",
+    "A .vmt being present is NOT the same as the material drawing: NATURE/BLENDGRASSDIRT01 " +
+    "ships with Garry's Mod and the three .vtf it points at do not, which is the same purple " +
+    "checkerboard by another route. Pass details to resolve every texture a material names " +
+    "and get `resolves` with what is missing. Needs the Python sidecar; see health.",
   realm: "map",
   inputSchema: {
     pattern: z
@@ -29,9 +32,10 @@ export const readGameContentTool = defineTool({
       .boolean()
       .optional()
       .describe(
-        "Read the .vmt of each result for its shader, base texture and surface property. " +
-          "Off by default: a Garry's Mod install holds tens of thousands, and parsing them " +
-          "all to answer one search would cost seconds.",
+        "Read the .vmt of each result for its shader, its surface property, and whether " +
+          "every texture it names actually exists in this install. Off by default: a " +
+          "Garry's Mod install holds tens of thousands, and parsing them all to answer one " +
+          "search would cost seconds.",
       ),
     limit: z.number().int().min(1).max(1000).default(100),
     game: GAME,
@@ -57,6 +61,15 @@ export const readGameContentTool = defineTool({
         surfaceprop: z.string().nullable().optional(),
         translucent: z.boolean().optional(),
         toolTexture: z.boolean().optional(),
+        /**
+         * Whether every .vtf this material names is installed. `details` only.
+         *
+         * `null` means the .vmt could not be parsed, which is not evidence either way --
+         * see `error` beside it.
+         */
+        resolves: z.boolean().nullable().optional(),
+        /** The .vtf this material names and the install does not have. `details` only. */
+        missingTextures: z.array(z.string()).optional(),
         error: z.string().nullable().optional(),
       }),
     ),
