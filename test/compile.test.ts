@@ -2,10 +2,12 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { readGeometry } from "../src/bsp/geometry.js";
 import { locateLeak, readPointfile } from "../src/compile/leak.js";
 import { parseCompileLog } from "../src/compile/log.js";
 import {
+  chooseToolchain,
   compilerExe,
   runCompiler,
   ToolchainError,
@@ -302,6 +304,63 @@ describe("choosing the Hammer++ toolchain", () => {
     expect(countOf(on, "FACES")).toBe(countOf(off, "FACES"));
     expect(countOf(on, "TEXINFO")).toBe(countOf(off, "TEXINFO"));
   }, 600_000);
+
+  it("picks the ++ chain when it is there, and says so", () => {
+    // The default this repository compiles with. `chooseToolchain` is what run_compile
+    // asks, so testing it here tests the decision rather than a copy of it.
+    const chosen = chooseToolchain(config, "plusplus", ["vbsp", "vvis", "vrad"]);
+    expect(chosen.requested).toBe("plusplus");
+    if (hasPlus) {
+      expect(chosen.chain).toBe("plusplus");
+      expect(chosen.missing).toEqual([]);
+      expect(chosen.note).toBeNull();
+    }
+  });
+
+  it("falls back to stock when the ++ chain is absent, and names what is missing", () => {
+    // A default that cannot run without Hammer++ would take CI and every fresh clone
+    // with it. Falling back is right; falling back in silence is not -- without the
+    // note and `toolchainRequested`, nobody could tell which compilers made a .bsp.
+    const absent = { ...config, gmodBinPlusPlus: join(scratch, "no-such-toolchain") };
+    const chosen = chooseToolchain(absent, "plusplus", ["vbsp", "vvis"]);
+    expect(chosen.chain).toBe("stock");
+    expect(chosen.requested).toBe("plusplus");
+    expect(chosen.missing).toEqual(["vbspplusplus.exe", "vvisplusplus.exe"]);
+    expect(chosen.note).toMatch(/not installed/);
+    expect(chosen.note).toMatch(/tools_plusplus\.zip/);
+  });
+
+  it("does not dress a stock request up as a fallback", () => {
+    // Asking for stock is a real request -- it is what a comparison between the two
+    // chains needs -- so it never carries a note about anything being missing.
+    const chosen = chooseToolchain(config, "stock", ["vbsp"]);
+    expect(chosen.chain).toBe("stock");
+    expect(chosen.note).toBeNull();
+  });
+
+  it.skipIf(!hasPlus)("compiles on the ++ chain, with culling, when asked for neither", async () => {
+    // The switch itself: a call with no `toolchain` and no `cull` at all. Parsed through
+    // the tool's own input schema rather than handed to the handler directly, because the
+    // default lives in the schema -- which is also where the server applies it.
+    const vmf = join(scratch, "default-chain.vmf");
+    copyFileSync(join(FIXTURES, "hmcp_probe.vmf"), vmf);
+    const args = z
+      .object(runCompile.inputSchema!)
+      .parse({ vmf, stages: ["vbsp"], timeoutMinutes: 10, confirm: true });
+    expect(args.toolchain).toBe("plusplus");
+    expect(args.cull).toBeUndefined();
+
+    const r = (await runCompile.handler(args as never, ctx)) as unknown as {
+      toolchain: string;
+      toolchainRequested: string;
+      cull: boolean;
+      ok: boolean;
+    };
+    expect(r.toolchainRequested).toBe("plusplus");
+    expect(r.toolchain).toBe("plusplus");
+    expect(r.cull).toBe(true);
+    expect(r.ok).toBe(true);
+  }, 300_000);
 
   it("refuses cull on the stock chain instead of dropping it", async () => {
     // vbsp accepts unknown flags in silence. Ignoring cull here would produce a compile

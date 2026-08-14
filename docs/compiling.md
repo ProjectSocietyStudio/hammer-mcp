@@ -13,21 +13,32 @@ computing a visibility set that means nothing.
 
 ## Choosing a toolchain
 
-`run_compile` and `run_pack` take `toolchain`. **The default is `stock`, and that is not
-timidity**: the only way to know whether the `++` chain changed something it should not have is to
-recompile the same source with the stock chain and compare. A default nobody chose would remove
-that comparison without it being visible.
+`run_compile` and `run_pack` take `toolchain`, and **the default is `plusplus`** — ficool2's
+Hammer++ rebuild of the SDK 2013 compilers. It is the better compiler: much faster vvis, and the
+culling flags exist nowhere else. `cull` is on by default with it, for the same reason.
+
+This reverses an earlier decision, and the argument that decision rested on is still true, so it is
+worth saying what changed. The argument was: the only way to know whether the `++` chain altered
+something it should not have is to recompile the same source with the stock chain and compare, and
+a default nobody chose would remove that comparison invisibly. What serves that argument is **every
+result naming the chain that actually ran** (`toolchain`, `toolchainRequested`, `cull`), not making
+the slower chain the one everybody gets by accident.
 
 | Situation | Chain |
 |---|---|
-| Iterating, shipping, everyday work | `stock` |
-| vvis is taking hours | `plusplus` — that is where the gain is |
-| A map is hitting a `MAX_MAP_*` ceiling | `plusplus` + `cull` |
-| Doubt about a result the `++` chain returned | recompile `stock` and compare |
+| Iterating, shipping, everyday work | the default — `plusplus` |
+| Doubt about a result the `++` chain returned | `toolchain: "stock"`, recompile, compare |
+| A compile that must not prune anything | `cull: false` |
+| No Hammer++ on the machine | nothing to do — it falls back and says so |
 
-The `++` binaries are optional. `health` says whether they are there; absent, only
-`toolchain: "plusplus"` fails, and it fails naming the chain rather than looking like a broken game
-install.
+The `++` binaries stay optional. `health` says whether they are there; absent, `run_compile` and
+`run_pack` **fall back to the stock chain** and report it in `toolchainNote` with the binaries that
+were missing. The fallback is never silent: a `.bsp` whose compiler cannot be identified afterwards
+is exactly what the old default existed to prevent.
+
+`cull` on the stock chain is still **refused** rather than ignored — but only when a caller asks
+for it explicitly. Leaving it out on a stock compile means "no culling", because that is the only
+thing stock can do.
 
 ## What the Hammer++ chain buys, and what it does not
 

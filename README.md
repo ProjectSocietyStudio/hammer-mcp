@@ -5,7 +5,8 @@
 
 An MCP server for Source-engine map work. It reads `.vmf` and `.bsp` files, lints a map against
 the game's own FGD, edits a `.vmf` without reformatting it, patches a compiled map's entities
-without recompiling, drives the compilers under Wine — stock **or Hammer++** — and measures a map
+without recompiling, drives the compilers under Wine — **Hammer++ by default**, stock on demand or
+as a fallback — and measures a map
 against the limits of the format.
 
 **It never talks to a running engine.** It reads and writes files and runs compilers, and nothing
@@ -525,7 +526,7 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `check_vmf_rules` | `map` | | Checks a map against **its own** `<map>.rules.json`. Reports; never refuses. A run where a rule matched nothing is `skipped`, never `pass`, and it says what segmentation the verdict rests on. A width or clearance violation carries `evidence`: the direction swept, the yaw it came from, what stopped it — and `measured: null` rather than a bare zero when no body fits where it would have measured |
 | `write_vmf` | `map` | ● | Creates an empty `.vmf` — Hammer's File > New. Refuses to overwrite. Checks the `skyname` it writes against the game's own content, and names complete skies the game has when that one is absent |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
-| `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. `toolchain: "plusplus"` for Hammer++ |
+| `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. Drives the **Hammer++ chain by default**, with its culling flags; falls back to the stock compilers when Hammer++ is absent and says which one ran |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
 | `read_leak` | `map` | | Turns `**** leaked ****` into a position and a named entity |
 | `read_map_dependencies` | `map` | | Every asset a map references, and whether each will be there: packed, from the game, or missing |
