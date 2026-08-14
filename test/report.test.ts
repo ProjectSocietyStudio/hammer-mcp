@@ -180,10 +180,14 @@ describe("read_map_report", () => {
     }
   });
 
-  it("still prints a record count for the lumps that have one", () => {
+  it("still prints a record count, not a byte count, for the lumps that have one", () => {
+    // The regression this guards is the fix spilling: every criterion suddenly denominated
+    // in bytes. PLANES is 174 records of 20 bytes, so the two numbers differ by 20x and the
+    // word `bytes` has no business here.
     const r = reportMap(PROBE, SOURCE_STOCK);
     const planes = find(r, "lump-fill:PLANES");
     expect(planes!.message).toMatch(/^\d+ of 65536\./);
+    expect(planes!.message).not.toMatch(/bytes/);
   });
 
   it.skipIf(!has.prodMap)("on the production map, reports MODELS past its stock ceiling", () => {

@@ -524,8 +524,12 @@ describe("a walk climbs Source's step, not one cell (#81)", () => {
         material: "DEV/DEV_MEASUREGENERIC01",
       }).text,
     );
-    const r = findRooms(voxelise(scene, [[-128, 0, 16]], { step: 32 }));
+    // At step 16 the allowance is one cell, 16 units, and the ledge is 30: unreachable. A
+    // sabotage that widens the allowance -- which is exactly what the constant did -- makes
+    // it reachable and turns this red. At step 32 it could not: one cell is already 32.
+    const r = findRooms(voxelise(scene, [[-128, 0, 16]], { step: 16 }));
     const onTheLedge = [...r.rooms, ...r.unreachable].filter((x) => x.mins[2] > 24);
+    expect(onTheLedge.length, "the ledge has to be a region for this to say anything").toBeGreaterThan(0);
     expect(onTheLedge.every((x) => r.unreachable.includes(x))).toBe(true);
   });
 });
