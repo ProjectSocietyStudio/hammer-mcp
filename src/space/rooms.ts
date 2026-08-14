@@ -650,8 +650,14 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
 
   const portals: Portal[] = [];
   for (const { a, b, at } of collectPortals().values()) {
-    const ra = remap.get(a) ?? a;
-    const rb = remap.get(b) ?? b;
+    // `regionOf` was renumbered in place above, so these are already the dense ids a reader
+    // sees. Mapping them again looked a dense id up in a table keyed by raw ones (#82): a
+    // miss fell back to the raw value and was right by accident, a hit returned a different
+    // region entirely and was indistinguishable from a real answer. On one storey the two
+    // spaces happened to line up, which is why five maps never showed it; on a two-storey
+    // map it produced portals joining rooms 150 units apart in z.
+    const ra = a;
+    const rb = b;
     if (ra === rb) continue;
     const [x, y, z] = at3(at);
     const width = 2 * clearance[at]! * grid.step;
@@ -696,7 +702,9 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
     for (let z = sz; z >= 0; z--) {
       const r = regionOf[cellIndex(grid, sx, sy, z)]!;
       if (r >= 0) {
-        seededRegions.add(remap.get(r) ?? r);
+        // Dense already, for the same reason as the portal loop above (#84). Remapping here
+        // could seed the walk from a region the caller never stood in.
+        seededRegions.add(r);
         break;
       }
     }

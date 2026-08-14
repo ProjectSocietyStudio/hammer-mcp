@@ -529,3 +529,84 @@ describe("a walk climbs Source's step, not one cell (#81)", () => {
     expect(onTheLedge.every((x) => r.unreachable.includes(x))).toBe(true);
   });
 });
+
+/**
+ * #82 and #84, which are one defect: `remap` applied to ids that had already been remapped.
+ *
+ * `regionOf` is renumbered in place to a dense 0..n-1 so the ids mean something to a reader.
+ * Two places downstream then looked those dense ids up in `remap` again -- a table keyed by
+ * the *raw* ids -- and fell back to the raw value on a miss. A double remap either misses
+ * (right by accident) or hits a different region's entry (wrong, and indistinguishable).
+ *
+ * On one storey every id happened to line up and six rounds never saw it. On `hmcp_tenement`
+ * it produced portals joining rooms 150 units apart in z, and a reachability walk that
+ * returned the same answer whatever seed it was given.
+ *
+ * Same shape as round 1's finding about `into` carrying an internal number that looks exactly
+ * like a room id -- the fix for which is three lines further down this same file.
+ */
+describe("region ids survive being reported (#82, #84)", () => {
+  const TENEMENT = join(FIXTURES, "hmcp_tenement.vmf");
+
+  const rooms = (path: string, seeds: Vec3[], step = 16): ReturnType<typeof findRooms> =>
+    findRooms(voxelise(buildScene(path, readFileSync(path, "utf8")), seeds, { step }));
+
+  it("puts every portal inside both of the rooms it says it joins", () => {
+    const r = rooms(TENEMENT, [[320, 88, 16]]);
+    const byId = new Map([...r.rooms, ...r.unreachable].map((x) => [x.id, x]));
+    expect(r.portals.length).toBeGreaterThan(0);
+    for (const p of r.portals) {
+      for (const id of p.between) {
+        const room = byId.get(id);
+        expect(room, `portal ${p.between} names room ${id}, which is not reported`).toBeDefined();
+        for (const axis of [0, 1, 2] as const) {
+          // One cell of slack: the col sits on the boundary between the two, and a room's
+          // bounds are cell centres.
+          expect(p.at[axis]!, `portal ${p.between} at axis ${axis}`).toBeGreaterThanOrEqual(
+            room!.mins[axis]! - 16,
+          );
+          expect(p.at[axis]!, `portal ${p.between} at axis ${axis}`).toBeLessThanOrEqual(
+            room!.maxs[axis]! + 16,
+          );
+        }
+      }
+    }
+  });
+
+  it("answers a different question when given a different seed", () => {
+    // Two standable places with no walk between them: the probe's floor, and a platform 64
+    // tall in one corner -- past Source's 18 by a long way, so nobody climbs it.
+    const split = insertSolids(
+      probe(),
+      [{ shape: "box", mins: [64, 64, 0], maxs: [256, 256, 64] }],
+      { material: "DEV/DEV_MEASUREGENERIC01" },
+    ).text;
+    const path = join(FIXTURES, "hmcp_probe.vmf");
+    const scene = buildScene(path, split);
+
+    const fromFloor = findRooms(voxelise(scene, [[-128, -128, 16]], { step: 16 }));
+    const fromLedge = findRooms(voxelise(scene, [[160, 160, 80]], { step: 16 }));
+
+    const reachable = (r: ReturnType<typeof findRooms>): number[] =>
+      r.rooms.map((x) => Math.round(x.mins[2])).sort((a, b) => a - b);
+
+    // Standing on the floor, the ledge is not a room. Standing on the ledge, the floor is not.
+    expect(reachable(fromFloor)).not.toEqual(reachable(fromLedge));
+
+    // The invariant the seed lookup exists to hold, and the one a double remap breaks: the
+    // region you are standing in is reachable. Asserted rather than inferred from the pair
+    // above, because two answers can differ and both still be about the wrong region.
+    const holds = (r: ReturnType<typeof findRooms>, at: Vec3): boolean =>
+      r.rooms.some(
+        (room) =>
+          at[0] >= room.mins[0] - 16 &&
+          at[0] <= room.maxs[0] + 16 &&
+          at[1] >= room.mins[1] - 16 &&
+          at[1] <= room.maxs[1] + 16 &&
+          at[2] >= room.mins[2] - 16 &&
+          at[2] <= room.maxs[2] + 48,
+      );
+    expect(holds(fromFloor, [-128, -128, 16]), "the floor you seeded from").toBe(true);
+    expect(holds(fromLedge, [160, 160, 80]), "the ledge you seeded from").toBe(true);
+  });
+});
