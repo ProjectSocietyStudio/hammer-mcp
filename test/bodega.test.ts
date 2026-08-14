@@ -54,7 +54,7 @@ describe("hmcp_bodega, the first map built with these tools", () => {
       {
         path: MAP,
         severity: "all",
-        step: 32,
+        step: 16,
         minRoomArea: 4096,
         maxCells: 4_000_000,
         limit: 100,
@@ -68,20 +68,30 @@ describe("hmcp_bodega, the first map built with these tools", () => {
   });
 
   /**
-   * The measured behaviour, not the desired one.
+   * What #53 was, and what it is now.
    *
-   * Two rooms and one doorway is what the map is. The pass finds them at a cell size of 32
-   * and at no other value tried — 8, 16 and 64 all return one room and no portal, so the
-   * response is not even monotone and there is no procedure that finds 32 from either side.
+   * Two rooms and one doorway is what the map is. The pass used to find them at a cell size
+   * of **32 and nowhere else** -- 8, 16 and 64 all returned one room and no portal, so the
+   * response was not monotone and no procedure finds 32 from either side. That cost round 2
+   * of the dogfood most of its session, and this test asserted the defect so a fix would
+   * announce itself by breaking it.
    *
-   * Asserting it pins the defect where a reader will meet it, and makes the fix for #53
-   * announce itself by breaking this test.
+   * It broke. The cause was #74: a merged region inherited whichever peak had the lower
+   * union-find root, so which value of `step` happened to work was a fact about cell indices.
+   * With the peak carried correctly the response is monotone, which is all a voxel method can
+   * honestly promise: fine enough to resolve the doorway and it is found, too coarse and it
+   * is not. The tool's own description says 16 is the coarsest that resolves a 32-unit
+   * doorway; this doorway is 64 and it survives to 16.
    */
-  it("only segments at one cell size, which is the defect in #53", () => {
-    expect(rooms(32).roomCount).toBe(2);
-    expect(rooms(32).portals).toHaveLength(1);
+  it("segments at every cell size fine enough to resolve its doorway (#53, #74)", () => {
+    for (const step of [8, 16]) {
+      expect(rooms(step).roomCount).toBe(2);
+      expect(rooms(step).portals).toHaveLength(1);
+    }
 
-    for (const step of [8, 16, 64]) {
+    // Under-resolved rather than wrong: a 64-unit doorway is two cells at 32 and one at 64,
+    // and a cell counts as free only when its whole interior is.
+    for (const step of [32, 64]) {
       expect(rooms(step).roomCount).toBe(1);
       expect(rooms(step).portals).toHaveLength(0);
     }
