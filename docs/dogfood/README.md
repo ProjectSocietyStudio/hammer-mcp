@@ -60,4 +60,19 @@ Without the second round we would have fixed things without knowing whether it h
 
 | Round | Subject | Where |
 |---|---|---|
-| 1 | a corner shop — `hmcp_bodega` | [`2026-08-13-bodega/`](2026-08-13-bodega/) |
+| 1–3 | a corner shop — `hmcp_bodega` | [`2026-08-13-bodega/`](2026-08-13-bodega/) |
+| 5 | a house and its garden — `hmcp_backyard` | [`2026-08-14-backyard/`](2026-08-14-backyard/) |
+
+Round 4 was written and never run: its brief is in the bodega folder, and what it asked for —
+finish, not just measurement — was folded into round 5's brief instead.
+
+**Round 5 changes the subject, deliberately.** Three runs of the same interior box had stopped
+producing findings; the round-4 brief says so itself. `hmcp_backyard` is the first map here with
+an **outside** — a `toolsskybox` shell, terrain as displacements, a door that is an entity rather
+than a hole, and a building seen from the garden. Five of its six findings are reachable only from
+a map that has one.
+
+It also changes the *builder*: the session had read rounds 1 to 3 first, so its call count is not
+comparable with theirs. What it measures is different and worth having — **what the toolkit still
+costs somebody who knows every trap it has already produced** — and two of its findings are places
+where that knowledge turned out to be wrong.
