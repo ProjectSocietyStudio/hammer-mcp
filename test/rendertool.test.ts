@@ -138,8 +138,12 @@ describe("displacements are drawn (#79)", () => {
     expect(r.notes.join(" ")).not.toMatch(/are not drawn/);
   });
 
-  it("is still honest about a map that has none", () => {
+  it("says nothing at all about terrain on a map that has none", () => {
+    // Absence, not a rewording: `not.toMatch(/are not drawn/)` passed against a note reading
+    // "0 displacement brush(es) are drawn as 0 triangles", so it could only ever have caught
+    // the old sentence coming back. Sabotage found that; the assertion is now about the note
+    // existing at all.
     const r = view({ origin: [0, 0, 128], angles: [0, 0, 0] });
-    expect(r.notes.join(" ")).not.toMatch(/are not drawn/);
+    expect(r.notes.filter((n) => n.includes("displacement"))).toEqual([]);
   });
 });

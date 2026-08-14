@@ -217,8 +217,8 @@ describe("read_vmf_lint on a real Hammer-written map", () => {
 describe("a prop sunk by its own model origin (#76)", () => {
   const both = ready && has.gameContent;
 
-  /** The probe with one door prop at a given z. Its floor is at z 0. */
-  const withDoor = (name: string, z: number): string =>
+  /** The probe with one door prop at a given origin. Its floor is at z 0. */
+  const withDoor = (name: string, z: number, x = 0): string =>
     broken(name, (s) =>
       s.replace(
         /^entity$/m,
@@ -227,7 +227,7 @@ describe("a prop sunk by its own model origin (#76)", () => {
 	"id" "9001"
 	"classname" "prop_door_rotating"
 	"model" "models/props_c17/door01_left.mdl"
-	"origin" "0 0 ${z}"
+	"origin" "${x} 0 ${z}"
 }
 entity`,
       ),
@@ -251,16 +251,18 @@ entity`,
   }, 120_000);
 
   it.skipIf(!both)("says nothing about a prop with no floor under it at all", async () => {
-    // Outside the probe's shell entirely: nothing below to be under. A prop hung on a wall
-    // or flying over a pit is not a sunk prop, and floorUnder cannot tell the difference --
-    // it returns the point's own z when it finds nothing, which is also what standing
-    // exactly on a floor looks like.
-    const r = await lint(withDoor("floating-prop", 6000));
+    // Beside the probe, not above it: a prop at z 6000 over the map still has the shell's
+    // roof under it and never reaches this branch, which sabotage is what showed. Out here
+    // the downward trace hits nothing at all -- a prop hung on a wall or flying over a pit --
+    // and that is not a sunk prop. `floorUnder` cannot tell it from standing exactly on a
+    // floor, since it returns the point's own z either way; the trace's `hit` can.
+    const r = await lint(withDoor("floating-prop", 64, 6000));
     expect(r.byRule["prop-below-floor"] ?? 0).toBe(0);
   }, 120_000);
 
-  it.skipIf(!ready)("costs nothing on a map with no models at all", async () => {
-    const r = await lint(PROBE_VMF);
-    expect(r.byRule["prop-below-floor"] ?? 0).toBe(0);
-  }, 120_000);
+  // A third test stood here: "costs nothing on a map with no models at all", asserting the
+  // rule reports nothing on the probe. Sabotage showed it could not fail -- the probe has no
+  // props, so no sabotage of the rule reaches it, and the performance claim in its name was
+  // not something it checked. Deleted rather than kept: a test that cannot go red inflates a
+  // count and proves nothing, which is this repository's first rule.
 });
