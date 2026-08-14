@@ -47,6 +47,8 @@ export interface Framebuffer {
   rgb: Uint8Array;
   /** Brush id per pixel, or NO_BRUSH. The oracle's half of the output. */
   ids: Int32Array;
+  /** 1 where the winning face carries a sky material. See isSkyMaterial. */
+  sky: Uint8Array;
   /** 1/z per pixel, for the depth test. Zero where nothing was drawn. */
   invDepth: Float32Array;
 }
@@ -61,6 +63,21 @@ export interface DisplayFace {
   /** 0..1, the Lambert term. */
   shade: number;
   colour: [number, number, number];
+  /** Whether this face is a piece of sky rather than a piece of the world. */
+  sky: boolean;
+}
+
+/**
+ * Whether a material is the sky rather than a surface.
+ *
+ * The engine's own test is the `SURF_SKY` flag vbsp derives from the material's
+ * `%compileSky`, which this renderer never compiles and so cannot read. The tool textures
+ * that carry it are two, they are named in `tools/`, and a map that reaches the sky by any
+ * other route has not been built for Source. Matching on the name is the whole of it.
+ */
+export function isSkyMaterial(material: string): boolean {
+  const name = material.toLowerCase().replace(/\\/g, "/");
+  return name.endsWith("tools/toolsskybox") || name.endsWith("tools/toolsskybox2d");
 }
 
 export interface RenderResult extends Framebuffer {
@@ -192,6 +209,7 @@ export function displayList(scene: Scene, camera: Camera): {
         points: clipped,
         shade,
         colour: colourFor(face.material),
+        sky: isSkyMaterial(face.material),
       });
     }
   }
@@ -265,6 +283,7 @@ function fillFace(fb: Framebuffer, camera: Camera, face: DisplayFace): boolean {
       if (invZ <= fb.invDepth[at]!) continue;
       fb.invDepth[at] = invZ;
       fb.ids[at] = face.brushId;
+      fb.sky[at] = face.sky ? 1 : 0;
       fb.rgb[at * 3] = r;
       fb.rgb[at * 3 + 1] = g;
       fb.rgb[at * 3 + 2] = b;
@@ -283,6 +302,7 @@ export function render(scene: Scene, camera: Camera): RenderResult {
     height: camera.height,
     rgb: new Uint8Array(camera.width * camera.height * 3),
     ids: new Int32Array(camera.width * camera.height).fill(NO_BRUSH),
+    sky: new Uint8Array(camera.width * camera.height),
     invDepth: new Float32Array(camera.width * camera.height),
   };
   for (let i = 0; i < camera.width * camera.height; i++) {

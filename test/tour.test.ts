@@ -32,6 +32,7 @@ const frame = (w: number, h: number): Framebuffer => ({
   height: h,
   rgb: new Uint8Array(w * h * 3),
   ids: new Int32Array(w * h),
+  sky: new Uint8Array(w * h),
   invDepth: new Float32Array(w * h),
 });
 const tile = (label: string, w = 16, h = 12): Tile => ({ label, frame: frame(w, h) });

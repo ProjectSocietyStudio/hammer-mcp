@@ -3,7 +3,7 @@ import { IMAGE_KEY } from "@projectsociety/mcp-core";
 import { z } from "zod";
 import { defineTool } from "../mcp/registry.js";
 import { encodePng } from "../render/png.js";
-import { frameBox, render } from "../render/raster.js";
+import { frameBox, NO_BRUSH, render } from "../render/raster.js";
 import { contactSheet } from "../render/sheet.js";
 import type { Tile } from "../render/sheet.js";
 import { anglesTowards } from "../render/camera.js";
@@ -18,6 +18,28 @@ import { readEntities } from "../vmf/edit.js";
 import type { Vec3 } from "../vmf/solid.js";
 import { resolveInput } from "./paths.js";
 import { seedsFor } from "./scene.js";
+
+/**
+ * How much of a frame is sky, and how much of it is nothing at all.
+ *
+ * These were one number until #78, and it was the wrong one: it counted pixels that hit no
+ * geometry, which on a sealed map is zero by construction. So it read 0 in a garden whose
+ * frame is a third `toolsskybox` and 1 outside the map, where there is no sky whatever --
+ * exactly backwards on both. A sealed map's sky IS geometry, and the void is the leak.
+ */
+function coverage(fb: { ids: Int32Array; sky: Uint8Array }): {
+  skyFraction: number;
+  voidFraction: number;
+} {
+  let sky = 0;
+  let empty = 0;
+  for (let i = 0; i < fb.ids.length; i++) {
+    if (fb.ids[i] === NO_BRUSH) empty += 1;
+    else if (fb.sky[i] === 1) sky += 1;
+  }
+  const round = (n: number): number => Math.round((n / fb.ids.length) * 1000) / 1000;
+  return { skyFraction: round(sky), voidFraction: round(empty) };
+}
 
 const cache = new Map<string, { source: string; scene: Scene }>();
 
@@ -110,8 +132,10 @@ export const renderVmfViewTool = defineTool({
     facesDrawn: z.number(),
     facesCulled: z.number(),
     facesBehind: z.number(),
-    /** Fraction of the frame with no geometry: 1 means the camera is looking at nothing. */
+    /** Fraction of the frame drawn from a sky material -- how much sky the camera sees. */
     skyFraction: z.number(),
+    /** Fraction of the frame with no geometry at all. On a sealed map this is 0. */
+    voidFraction: z.number(),
     insideSolid: z
       .boolean()
       .describe("The eye is inside a brush, so the picture is the inside of a wall."),
@@ -191,13 +215,11 @@ export const renderVmfViewTool = defineTool({
     const fb = render(scene, camera);
     const png = encodePng(fb.rgb, fb.width, fb.height);
 
-    let sky = 0;
-    for (let i = 0; i < fb.ids.length; i++) if (fb.ids[i] === -1) sky += 1;
-    const skyFraction = Math.round((sky / fb.ids.length) * 1000) / 1000;
+    const { skyFraction, voidFraction } = coverage(fb);
 
-    if (skyFraction > 0.95) {
+    if (voidFraction > 0.95) {
       notes.push(
-        `${Math.round(skyFraction * 100)}% of the frame has no geometry. The camera is ` +
+        `${Math.round(voidFraction * 100)}% of the frame has no geometry. The camera is ` +
           `probably outside the map or facing away from it.`,
       );
     }
@@ -236,6 +258,7 @@ export const renderVmfViewTool = defineTool({
       facesCulled: fb.facesCulled,
       facesBehind: fb.facesBehind,
       skyFraction,
+      voidFraction,
       insideSolid,
       brushCount: scene.brushes.length,
       notes,
@@ -286,6 +309,7 @@ export const renderVmfTourTool = defineTool({
         origin: z.array(z.number()),
         angles: z.array(z.number()),
         skyFraction: z.number(),
+        voidFraction: z.number(),
         insideSolid: z.boolean(),
       }),
     ),
@@ -379,6 +403,7 @@ export const renderVmfTourTool = defineTool({
       origin: number[];
       angles: number[];
       skyFraction: number;
+      voidFraction: number;
       insideSolid: boolean;
     }[] = [];
     const tiles: Tile[] = [];
@@ -395,13 +420,11 @@ export const renderVmfTourTool = defineTool({
         near: 4,
       };
       const fb = render(scene, camera);
-      let sky = 0;
-      for (let i = 0; i < fb.ids.length; i++) if (fb.ids[i] === -1) sky += 1;
       views.push({
         label: w.label,
         origin: [...origin],
         angles: [...angles],
-        skyFraction: Math.round((sky / fb.ids.length) * 1000) / 1000,
+        ...coverage(fb),
         insideSolid: pointInSolid(scene, origin) !== null,
       });
       tiles.push({ label: w.label, frame: fb });
