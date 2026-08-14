@@ -234,12 +234,24 @@ export const readVmfRoomsTool = defineTool({
      */
     merges: z.array(
       z.object({
+        /** Internal: the region is gone, so no reported room carries this id. */
         absorbed: z.number(),
+        /** A `rooms` or `unreachable` id, always. */
         into: z.number(),
         reason: z.string(),
         at: z.array(z.number()).nullable(),
         measured: z.number(),
         bar: z.number(),
+        /**
+         * The doorway this merge stopped reporting, if it closed one.
+         *
+         * The question a caller actually asks after a room count changes -- and the one
+         * nothing answered until now, which cost a builder five `step` calls and four
+         * delete-and-recheck cycles on a shelf 200 units from the doorway it killed.
+         */
+        closed: z
+          .object({ at: z.array(z.number()), approxWidthUnits: z.number() })
+          .nullable(),
         why: z.string(),
       }),
     ),
@@ -301,12 +313,20 @@ export const readVmfRoomsTool = defineTool({
         at: m.at ? [...m.at] : null,
         measured: m.measured,
         bar: m.bar,
+        closed: m.closed
+          ? { at: [...m.closed.at], approxWidthUnits: m.closed.approxWidthUnits }
+          : null,
         why:
           m.reason === "not-a-constriction"
-            ? `region ${m.absorbed} was merged into ${m.into}: the opening between them is ` +
-              `${m.measured} units where the narrower of the two spaces is ${m.bar}, so it ` +
-              `narrows nothing and they are one space.`
-            : `region ${m.absorbed} was merged into ${m.into}: ${m.measured} square units is ` +
+            ? `region ${m.absorbed} was merged into room ${m.into}: the opening between them ` +
+              `is ${m.measured} units where the narrower of the two spaces is ${m.bar}, so it ` +
+              `narrows nothing and they are one space.` +
+              (m.closed
+                ? ` A doorway about ${m.closed.approxWidthUnits} units wide at ` +
+                  `[${m.closed.at.map((n) => Math.round(n)).join(", ")}] is what stopped ` +
+                  `being reported because of it.`
+                : ``)
+            : `region ${m.absorbed} was merged into room ${m.into}: ${m.measured} square units is ` +
               `below the ${m.bar} an offcut has to clear to count as a room. Raise ` +
               `minRoomArea to keep it, or lower it to ${m.measured} to see it separately.`,
       })),
