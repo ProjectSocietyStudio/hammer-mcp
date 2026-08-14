@@ -526,6 +526,7 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `check_vmf_rules` | `map` | | Checks a map against **its own** `<map>.rules.json`. Reports; never refuses. A run where a rule matched nothing is `skipped`, never `pass`, and it says what segmentation the verdict rests on. A width or clearance violation carries `evidence`: the direction swept, the yaw it came from, what stopped it — and `measured: null` rather than a bare zero when no body fits where it would have measured |
 | `write_vmf` | `map` | ● | Creates an empty `.vmf` — Hammer's File > New. Refuses to overwrite. Checks the `skyname` it writes against the game's own content, and names complete skies the game has when that one is absent |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
+| `run_bsp_rename` | `local` | ● | Renames a compiled `.bsp` **and the content packed inside it** — the nodegraph, cubemap patches, soundscripts. Drives ficool2's `bsp_rename`, a separate download; `health` says whether it is there |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. Drives the **Hammer++ chain by default**, with its culling flags; falls back to the stock compilers when Hammer++ is absent and says which one ran |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
 | `read_leak` | `map` | | Turns `**** leaked ****` into a position and a named entity |
@@ -586,6 +587,7 @@ The dated record of what was tried, measured, and got wrong:
 | `backend` | `wine` |
 | `winePrefix` | `~/.wine` |
 | `sidecarPython` | `<stateDir>/sidecar-venv/bin/python` |
+| `externalToolsDir` | `<stateDir>/tools` — standalone tools this server drives, such as ficool2's `bsp_rename.exe`. They belong to no game install, so nothing can discover them; `health` lists which are present |
 | `toolAllowlist` | `[]` |
 
 **Normally there is nothing to configure**: paths come from discovery. `gameProfiles` is for what

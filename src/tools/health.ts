@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { externalToolPresent } from "../compile/external.js";
 import { toolchainDir } from "../compile/wine.js";
 import { allGames, gameFor } from "../games/resolve.js";
 import { defineTool } from "../mcp/registry.js";
 import { run } from "../proc/run.js";
 import { probeSidecar } from "../sidecar/client.js";
+import { externalTools } from "./rename.js";
 import { buildFreshness, VERSION } from "../version.js";
 
 /**
@@ -141,6 +143,21 @@ export const health = defineTool({
           "substituting in silence. So absent is workable, not broken: it costs a much " +
           "slower vvis and the culling flags. From tools_plusplus.zip (ficool2/misc_tools); " +
           "they require the x86-64 beta branch of GMod.",
+      },
+      // Standalone tools that belong to no game install, so nothing can discover them.
+      // Absent is the normal state and the tools that need them say where to get them;
+      // reported here so that is knowable before a call rather than at one.
+      externalTools: {
+        dir: config.externalToolsDir,
+        present: existsSync(config.externalToolsDir!),
+        tools: externalTools.map((t) => ({
+          exe: t.exe,
+          tool: t.tool,
+          installed: externalToolPresent(config, t.exe),
+        })),
+        note:
+          "From ficool2's tools page (https://ficool2.github.io/HammerPlusPlus-Website/" +
+          "tools.html). Put the .exe in the directory above, or set externalToolsDir.",
       },
       backend: {
         kind: config.backend,

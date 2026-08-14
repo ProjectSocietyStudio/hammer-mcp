@@ -5,6 +5,8 @@
   "gmodGameDir": "/home/you/.steam/steam/steamapps/common/GarrysMod/garrysmod",
   "gmodBinPlusPlus": "/home/you/.steam/steam/steamapps/common/GarrysMod/bin/win64",
 
+  "externalToolsDir": "/home/you/tools/source",
+
   "backend": "wine",
   "winePrefix": "/home/you/.wine",
 

@@ -20,6 +20,7 @@ import { modifyTools } from "./modify.js";
 import { optimiseTools } from "./optimise.js";
 import { organiseTools } from "./organise.js";
 import { planTools } from "./plan.js";
+import { renameTools } from "./rename.js";
 import { renderTools } from "./render.js";
 import { reportTools } from "./report.js";
 import { rulesTools } from "./rules.js";
@@ -64,5 +65,6 @@ export const allTools: AnyToolDef[] = [
   ...wiringTools,
   ...vmfEditTools,
   ...compileTools,
+  ...renameTools,
   ...lmpTools,
 ];
