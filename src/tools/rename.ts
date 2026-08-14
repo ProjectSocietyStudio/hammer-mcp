@@ -19,6 +19,7 @@ import { z } from "zod";
 import { runExternalTool } from "../compile/external.js";
 import { defineTool } from "../mcp/registry.js";
 import { assertWritable } from "../fs/guard.js";
+import { TGA2SKYBOX_EXE } from "./cubemap.js";
 import { CONFIRM, resolveInput } from "./paths.js";
 
 /** The tool's own filename, as its author ships it. */
@@ -139,7 +140,15 @@ export const runBspRename = defineTool({
   },
 });
 
-/** Reported by health, so an absent tool is a state rather than a surprise at call time. */
-export const externalTools = [{ exe: BSP_RENAME_EXE, tool: "run_bsp_rename" }] as const;
+/**
+ * Reported by health, so an absent tool is a state rather than a surprise at call time.
+ *
+ * Lives here rather than beside each tool because health needs one list, and a list
+ * assembled from several modules is one a new tool can be left out of in silence.
+ */
+export const externalTools = [
+  { exe: BSP_RENAME_EXE, tool: "run_bsp_rename" },
+  { exe: TGA2SKYBOX_EXE, tool: "run_tga2skybox" },
+] as const;
 
 export const renameTools = [runBspRename];

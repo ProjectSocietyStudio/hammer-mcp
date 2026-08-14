@@ -97,6 +97,10 @@ export const has = {
   bspRename: existsSync(
     join(config.externalToolsDir ?? join(config.stateDir, "tools"), "bsp_rename.exe"),
   ),
+  /** ficool2's tga2skybox, same story as bsp_rename: a separate download. */
+  tga2skybox: existsSync(
+    join(config.externalToolsDir ?? join(config.stateDir, "tools"), "tga2skybox.exe"),
+  ),
 } as const;
 
 const LABELS: Record<keyof typeof has, string> = {
@@ -112,6 +116,7 @@ const LABELS: Record<keyof typeof has, string> = {
   luaEntities: "a GMod Lua entity tree",
   gameContent: `the game's own content (${config.gmodGameDir})`,
   bspRename: `ficool2's bsp_rename.exe in ${config.externalToolsDir} (optional)`,
+  tga2skybox: `ficool2's tga2skybox.exe in ${config.externalToolsDir} (optional)`,
 };
 
 let announced = false;
