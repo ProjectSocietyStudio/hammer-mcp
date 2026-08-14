@@ -31,8 +31,11 @@ function sceneFor(path: string): { scene: Scene; source: string } {
  * `info_player_start` is the one point a map's author has guaranteed is inside: a map that
  * spawns players in the void does not work at all, so this is not a guess. Falling back to
  * the middle of the map's own bounds is a guess, and it is reported as one.
+ *
+ * Exported because `render_vmf_tour` floods the same space to decide where to stand, and two
+ * ways of finding a spawn are two ways of disagreeing about where a map begins.
  */
-function seedsFor(source: string, scene: Scene, given?: number[][]): { seeds: Vec3[]; note: string | null } {
+export function seedsFor(source: string, scene: Scene, given?: number[][]): { seeds: Vec3[]; note: string | null } {
   if (given && given.length > 0) {
     return { seeds: given.map((p) => [p[0]!, p[1]!, p[2]!] as Vec3), note: null };
   }

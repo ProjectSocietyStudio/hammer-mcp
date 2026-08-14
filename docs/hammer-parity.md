@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 13/08/2026: **70 tools**.
+Last checked against the tool list on 13/08/2026: **72 tools**.
 
 ## The file itself
 
@@ -158,7 +158,7 @@ with these tools and nothing else.
 
 ## Beyond Hammer
 
-Thirty-one of the tools here answer questions Hammer never asked. They are not parity and
+Thirty-three of the tools here answer questions Hammer never asked. They are not parity and
 they are not gaps: they are the half of a mapper's work that used to happen by loading the
 map and looking, or by not happening at all.
 
@@ -177,6 +177,7 @@ map and looking, or by not happening at all.
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |
 | `render_vmf_view` | the 3D viewport, which needs a person at a mouse |
 | `render_vmf_plan` | the 2D view, which has no dimensions on it and no idea what a room is |
+| `render_vmf_tour` | walking the map yourself, after a compile. Nothing offline shows a whole place in one look |
 | `measure_vmf_clearance` | the tape measure tool, which measures between two points you pick — not the free width at a place |
 | `measure_vmf_approach` | nothing: no editor asks whether a person fits in front of a door |
 | `read_vmf_sightlines` | the eye again, and only after a compile |
@@ -189,6 +190,7 @@ map and looking, or by not happening at all.
 | `read_fgd_class` | the entity dialog, one class at a time |
 | `read_vmf_solids` | the red "invalid solid" outline, and no reason |
 | `read_vmf_lint` | nothing |
+| `write_vmf_fitting` | prefabs, which are a saved lump of geometry at whatever size somebody once drew it. Nothing in Hammer knows how tall a counter is |
 | `write_hint_brush` | a brush you texture yourself and hope |
 | `read_gma` | nothing: a Workshop archive is opaque |
 | `run_gma_extract` | nothing |

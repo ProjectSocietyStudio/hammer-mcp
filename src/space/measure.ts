@@ -111,9 +111,29 @@ export function sweep(
  * why it is one function rather than a line repeated at each call site.
  */
 export function standingAt(scene: Scene, at: Vec3, half: Vec3 = HULL_STANDING): Vec3 {
+  return [at[0], at[1], floorUnder(scene, at) + half[2] + 0.5];
+}
+
+/** The height of the floor beneath a place, or the place's own z if there is none. */
+export function floorUnder(scene: Scene, at: Vec3): number {
   const down = traceRay(scene, at, [at[0], at[1], at[2] - REACH], MASK_SOLID);
-  const floorZ = down.hit && !down.startSolid ? down.point[2] : at[2];
-  return [at[0], at[1], floorZ + half[2] + 0.5];
+  return down.hit && !down.startSolid ? down.point[2] : at[2];
+}
+
+/**
+ * Where a standing person's eyes are, at a place.
+ *
+ * Not the same point as {@link standingAt}, and the difference is 27 units -- which is the
+ * whole face. `standingAt` returns the *centre* of the hull, because that is what a swept
+ * measurement is centred on; a camera wants the eye, which Source puts at 64 above the
+ * floor against a hull half-height of 36.
+ *
+ * Found by looking: the first sheet `render_vmf_tour` produced stood every camera at z 37,
+ * a foot below where the player's head is, and the frames were subtly wrong in a way no
+ * number in the output disclosed. Two different questions had been sharing one answer.
+ */
+export function eyeAt(scene: Scene, at: Vec3, eyeHeight = 64): Vec3 {
+  return [at[0], at[1], floorUnder(scene, at) + eyeHeight];
 }
 
 export interface WidthMeasurement {
