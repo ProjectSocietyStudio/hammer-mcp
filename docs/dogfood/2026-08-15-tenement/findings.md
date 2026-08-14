@@ -209,16 +209,48 @@ vbsp/vvis/vrad all exit 0 on a full compile, no pointfile. `read_map_report`: 23
 73 leaves, 23 clusters, 327 bytes of visibility, 16 216 luxels. Five rooms: hall 65.7 m², west and
 north 59.8, east 46.3, light well 20.6, first floor 65.6.
 
-## The findings, sorted
+## The findings, sorted — and what happened to them
 
-| | Class | Reachable from a one-storey map? |
-|---|---|---|
-| 1 · the walkable step scales with `step` | **bug** | no |
-| 2 · portals reported outside the rooms they join | **bug** | no |
-| 3 · a portal's col inside solid geometry | **bug** | no |
-| 4 · `unreachable` ignores `seeds` and contradicts itself | **bug** | no |
-| 5 · `read_map_report` prints `null` for byte lumps | **bug** | yes — never looked |
-| 6 · the tour cannot show two storeys | **gap** | no |
+All six issues raised, all six closed on 15/08/2026, each with a test seen red first.
 
-Five of six need a second floor to appear at all. The sixth needed only for somebody to call the
+| | Class | Issue | What landed |
+|---|---|---|---|
+| 1 · the walkable step scales with `step` | **bug** | [#81](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/81) | the allowance comes from `STEP_HEIGHT` and the cell size; above 18 no arithmetic helps, so it says so in a note |
+| 2 · portals reported outside the rooms they join | **bug** | [#82](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/82) | stop remapping ids that were already remapped |
+| 3 · **corrected** — "no body fits" reported as a failure to measure | **bug** | [#83](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/83) | a portal answers with its voxel width instead of `null` |
+| 4 · the seed lookup remaps a dense id | **bug** | [#84](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/84) | same line class as #82, fixed with it |
+| 5 · `read_map_report` prints `null` for byte lumps | **bug** | [#85](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/85) | `LumpReport` carries the numerator its fraction came from |
+| 6 · the tour cannot show two storeys | **gap** | [#86](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/86) | a room taller than it is wide is aimed up the shaft, and the camera loop stops flattening every target |
+
+Five of six need a second floor to appear at all. The fifth needed only for somebody to call the
 tool, which in seventy-four tools and six rounds nobody had.
+
+## Two corrections this round owes its own account
+
+**Finding 3 was wrong as first written, and reproducing it is what said so.** The write-up called
+the portal a phantom whose col landed inside the staircase. Reproduced, the col is in open air and
+the opening is real: a 32-unit gap between the stair's flank and a wall, which genuinely violates a
+brief asking for 64. What was wrong is narrower and more useful — `check_vmf_rules` answered
+`measured: null` and told the reader to go and measure it by hand, when *no body fits* is the
+strongest possible measurement against a minimum and the number was already in the same reply.
+
+The cost is worth recording: **I moved a staircase to silence that message, and the staircase was
+fine.** A tool that reports its own inability where it has an answer makes a mapper edit geometry
+that was never the problem. The issue was rewritten before the fix.
+
+**Findings 2 and 4 turned out to be one defect**, and one this repository has now met three times:
+`remap.get(x) ?? x` applied to an `x` that has already been remapped. Round 1 found it in `into`;
+the fix for that sits thirty lines below the two lines fixed here. On a single storey the raw and
+dense id spaces happened to line up, which is why five maps never showed it.
+
+Finding 6's duplicate labels were fixed by #82 as a side effect: two distinct portals no longer
+share a pair of room ids. What remained was the camera, and the fix that mattered was not detecting
+shafts — it was that the camera loop flattened **every** target to eye height, so a view aimed at
+its own ceiling still came out looking at a wall.
+
+## The map, after
+
+`hmcp_tenement` passes its brief at the default `step`, and so do the two maps before it —
+`hmcp_backyard` and `hmcp_bodega`, rechecked with every fix in place. The tenement's own room count
+moved from 5 to 4 with correct portal ids, which is the segmentation telling the truth about a
+building whose two upper wings are one space.
