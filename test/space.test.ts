@@ -485,3 +485,47 @@ describe("a pocket must not set the merge bar for the whole map (#74)", () => {
     expect(shipped.portals).toHaveLength(2);
   });
 });
+
+/**
+ * #81. Found building `hmcp_tenement`, the first map here with a staircase.
+ *
+ * `STEP_CELLS = 1` let a walk climb **one cell**, and its comment said that was Source's
+ * 18 — which is true at `step: 16` and at no other value. The allowance scaled with the
+ * segmentation parameter, so a stair of 10 rise on 16 run was walked at 16 and fragmented
+ * into three unreachable slivers at 8, while at 32 a 30-unit ledge nobody can climb would
+ * have read as walkable.
+ *
+ * `step` is documented as a resolution knob. It was also, silently, the body's step height.
+ */
+describe("a walk climbs Source's step, not one cell (#81)", () => {
+  const TENEMENT = join(FIXTURES, "hmcp_tenement.vmf");
+
+  /** The tallest z extent of any REACHED region: how far one walk climbs. */
+  const tallestWalk = (step: number): number => {
+    const scene = buildScene(TENEMENT, readFileSync(TENEMENT, "utf8"));
+    const r = findRooms(voxelise(scene, [[320, 88, 16]], { step }));
+    return Math.max(...r.rooms.map((room) => room.maxs[2] - room.mins[2]));
+  };
+
+  it("walks the same staircase at every cell size fine enough to resolve it", () => {
+    // The stair rises 160 over 16 treads. A walk that climbs it spans far more than the
+    // 16-24 units a single-storey region does.
+    for (const step of [16, 8]) {
+      expect(tallestWalk(step), `step ${step}`).toBeGreaterThan(48);
+    }
+  });
+
+  it("does not let a walk climb what a player cannot", () => {
+    // A 30-unit rise is past Source's 18: no cell size may make it walkable, and a coarse
+    // grid must not buy the allowance back by having big cells.
+    const scene = buildScene(
+      PROBE,
+      insertSolids(probe(), [{ shape: "box", mins: [0, -256, 0], maxs: [256, 256, 30] }], {
+        material: "DEV/DEV_MEASUREGENERIC01",
+      }).text,
+    );
+    const r = findRooms(voxelise(scene, [[-128, 0, 16]], { step: 32 }));
+    const onTheLedge = [...r.rooms, ...r.unreachable].filter((x) => x.mins[2] > 24);
+    expect(onTheLedge.every((x) => r.unreachable.includes(x))).toBe(true);
+  });
+});

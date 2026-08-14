@@ -33,6 +33,7 @@
  * jumping. So a staircase is one region rather than a row of tiny ones, and a 32-unit ledge
  * is correctly two.
  */
+import { STEP_HEIGHT } from "./measure.js";
 import { cellCentre, cellIndex } from "./voxel.js";
 import type { VoxelGrid } from "./voxel.js";
 import type { Vec3 } from "../vmf/solid.js";
@@ -177,8 +178,25 @@ const PLATEAU_DIRECTIONS: Array<[number, number]> = [
   [-1, -1],
 ];
 
-/** How many cells up or down a walk may step. One cell of 16 is under Source's 18. */
-const STEP_CELLS = 1;
+/**
+ * How many cells up or down a walk may step, at a given cell size.
+ *
+ * This was the constant 1, with a comment saying that a cell of 16 is under Source's 18. True
+ * at 16 and at no other value: one *cell* is 8 units at `step: 8` and 32 at `step: 32`, so the
+ * body's step height silently followed the segmentation parameter (#81). Measured on
+ * `hmcp_tenement`'s stair, 16 treads of 10 rise: walked at 16, and fragmented into three
+ * unreachable slivers at 8.
+ *
+ * `step` is documented as a resolution knob. It must not also be the body model.
+ *
+ * ⚠️ **It cannot be honest above 18.** At `step: 32` the floor of one cell is already 32, and
+ * the clamp to 1 makes the walk more generous than a player -- a 30-unit ledge reads as
+ * climbable. That is a limit of the grid and `findRooms` says so in a note rather than
+ * implying a body model it is not using.
+ */
+function stepCellsFor(step: number): number {
+  return Math.max(1, Math.floor(STEP_HEIGHT / step));
+}
 
 /**
  * Where a walk in one direction lands, or -1 if it cannot go that way.
@@ -206,11 +224,16 @@ function walkTo(
   const nx = x + dx;
   const ny = y + dy;
   if (nx < 0 || ny < 0 || nx >= grid.dims[0] || ny >= grid.dims[1]) return -1;
-  for (const dz of [0, STEP_CELLS, -STEP_CELLS]) {
-    const nz = z + dz;
-    if (nz < 0 || nz >= grid.dims[2]) continue;
-    const at = cellIndex(grid, nx, ny, nz);
-    if (grid.standable[at] === 1) return at;
+  // Level first, then up, then down, one cell at a time outward: on a staircase every one of
+  // them is standable and preferring the nearest keeps a walk on the treads.
+  const reach = stepCellsFor(grid.step);
+  for (let d = 0; d <= reach; d += 1) {
+    for (const dz of d === 0 ? [0] : [d, -d]) {
+      const nz = z + dz;
+      if (nz < 0 || nz >= grid.dims[2]) continue;
+      const at = cellIndex(grid, nx, ny, nz);
+      if (grid.standable[at] === 1) return at;
+    }
   }
   return -1;
 }
@@ -273,6 +296,18 @@ export function findRooms(grid: VoxelGrid, options: RoomOptions = {}): RoomsResu
   const total = grid.dims[0] * grid.dims[1] * grid.dims[2];
   const regionOf = new Int32Array(total).fill(-1);
   const notes: string[] = [];
+
+  // Said rather than implied. The walk climbs whole cells, so at a cell size past Source's
+  // own step it is more generous than a player and no arithmetic here can fix that -- only a
+  // finer grid can (#81).
+  if (grid.step > STEP_HEIGHT) {
+    notes.push(
+      `${grid.step}-unit cells are taller than Source's ${STEP_HEIGHT}-unit step, so a walk ` +
+        `here climbs ${grid.step} units where a player climbs ${STEP_HEIGHT}. A ledge between ` +
+        `those two heights reads as reachable and is not. Use a step of ${STEP_HEIGHT} or less ` +
+        `for any question about what can be walked to.`,
+    );
+  }
 
   const cells: number[] = [];
   for (let i = 0; i < total; i++) if (clearance[i]! > 0) cells.push(i);
