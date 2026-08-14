@@ -20,6 +20,7 @@ import { runExternalTool } from "../compile/external.js";
 import { defineTool } from "../mcp/registry.js";
 import { assertWritable } from "../fs/guard.js";
 import { CUBEMAP2HDR_EXE, TGA2SKYBOX_EXE } from "./cubemap.js";
+import { VTFCMD_EXE } from "./vtf.js";
 import { CONFIRM, resolveInput } from "./paths.js";
 
 /** The tool's own filename, as its author ships it. */
@@ -150,6 +151,7 @@ export const externalTools = [
   { exe: BSP_RENAME_EXE, tool: "run_bsp_rename" },
   { exe: TGA2SKYBOX_EXE, tool: "run_tga2skybox" },
   { exe: CUBEMAP2HDR_EXE, tool: "run_cubemap2hdr" },
+  { exe: VTFCMD_EXE, tool: "run_vtf_convert" },
 ] as const;
 
 export const renameTools = [runBspRename];
