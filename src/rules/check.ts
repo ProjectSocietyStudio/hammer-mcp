@@ -323,7 +323,7 @@ export function checkRules(
     }
 
     // Everything else is a bound on a measurement, over a set of subjects.
-    const subjects: Array<{ at: Vec3; name: string; yaw?: number }> = [];
+    const subjects: Array<{ at: Vec3; name: string; yaw?: number; voxelWidth?: number }> = [];
 
     if (rule.select?.classname || rule.select?.targetname) {
       for (const e of entities) {
@@ -361,6 +361,9 @@ export function checkRules(
         subjects.push({
           at: [portal.at[0], portal.at[1], portal.at[2] + 32],
           name: `doorway ${portal.between.join("-")}`,
+          // The voxel pass already measured this opening. Carried so that a hull which does
+          // not fit can still be answered with a number rather than a shrug (#83).
+          voxelWidth: portal.approxWidthUnits,
         });
       }
     }
@@ -379,6 +382,32 @@ export function checkRules(
         const from = standingAt(scene, subject.at, half);
         const fit = bodyFits(scene, from, half, MASK_PLAYER);
         if (!fit.fits) {
+          // For a doorway, no body fitting IS the measurement (#83). A gap a 32-wide hull
+          // cannot enter is not 64 wide, and the voxel pass reported its width in the same
+          // object the complaint came from. Answering `measured: null` there sent a reader
+          // off to measure by hand a map the tool had already judged -- and cost a
+          // staircase, moved to silence a message about geometry that was fine.
+          //
+          // Everywhere else this stays exactly as #59 left it: at an entity-anchored
+          // subject, a hull inside a brush means the point is wrong, not the room.
+          if (subject.voxelWidth !== undefined) {
+            value = subject.voxelWidth;
+            at = from;
+            evidence = { hullFits: false, startsInside: fit.insideOf, assumedHull: half };
+            report({
+              required: boundText(rule, unit),
+              measured: value,
+              at,
+              subject: subject.name,
+              message:
+                `${subject.name}: no body fits through it. The opening measures about ` +
+                `${value} units on the voxel grid -- an estimate, because the exact sweep ` +
+                `needs a hull that fits -- and the rule asks for ${boundText(rule, unit)}. ` +
+                `A gap a ${half[0] * 2}-unit hull cannot enter is not wider than that.`,
+              evidence,
+            });
+            continue;
+          }
           report(noBodyFits(rule, subject.name, from, fit, half, unit));
           continue;
         }
