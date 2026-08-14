@@ -11,7 +11,7 @@
  * is it.
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { readVtfHeader } from "../bsp/vtf.js";
 import { runExternalTool } from "../compile/external.js";
@@ -167,4 +167,122 @@ export const runTga2Skybox = defineTool({
   },
 });
 
-export const cubemapTools = [runTga2Skybox];
+export const CUBEMAP2HDR_EXE = "cubemap2hdr.exe";
+
+export const runCubemap2Hdr = defineTool({
+  name: "run_cubemap2hdr",
+  description:
+    "Converts an LDR cubemap .vtf into the HDR one Source loads in HDR mode, writing " +
+    "<name>.hdr.vtf beside it. A map compiled without -both, or one whose cubemaps were " +
+    "built in LDR, renders its reflections from the LDR set in both modes; this is the " +
+    "offline way to produce the missing half without going back into the game. Input must " +
+    "be DXT1 -- the tool refuses anything else, and this says so before running. Extract " +
+    "one from a map with run_pakfile_extract. Drives ficool2's cubemap2hdr, a separate " +
+    "download; health says whether it is installed.",
+  realm: "local",
+  guarded: true,
+  inputSchema: {
+    vtf: z.string().describe("Path to the LDR cubemap .vtf, absolute or repo-relative."),
+    confirm: CONFIRM,
+  },
+  outputSchema: {
+    vtf: z.string(),
+    hdrVtf: z.string(),
+    /** The input's own header, read before running: this is what the refusal rests on. */
+    source: z
+      .object({
+        version: z.string(),
+        width: z.number(),
+        height: z.number(),
+        cubemap: z.boolean(),
+        format: z.string(),
+      })
+      .nullable(),
+    header: z
+      .object({
+        version: z.string(),
+        width: z.number(),
+        height: z.number(),
+        cubemap: z.boolean(),
+        format: z.string(),
+      })
+      .nullable(),
+    written: z.boolean(),
+    bytes: z.number().nullable(),
+    exitCode: z.number().nullable(),
+    ok: z.boolean(),
+    tool: z.string(),
+    stdoutTail: z.string(),
+    note: z.string(),
+  },
+  handler: async (args, ctx) => {
+    const vtf = resolveInput(args.vtf, ctx.config);
+    if (!existsSync(vtf)) throw new Error(`${vtf} does not exist`);
+
+    const source = readVtfHeader(readFileSync(vtf));
+    if (source === null) throw new Error(`${vtf} is not a .vtf: no VTF signature`);
+
+    // Refused here, with the file's own format in the message. The tool's own refusal is
+    // "ERROR: Unsupported VTF format. Supported formats: DXT1" on stdout, followed by
+    // "Done!" and exit code 0 -- which reads as a success to anything checking the code.
+    if (source.format !== "DXT1") {
+      throw new Error(
+        `${vtf} is ${source.format}, and cubemap2hdr only converts DXT1. The cubemaps a ` +
+          `compiled map packs are DXT1; a cubemap written by tga2skybox is not, and neither ` +
+          `is cubemapdefault.vtf.`,
+      );
+    }
+    if (!source.cubemap) {
+      throw new Error(
+        `${vtf} is a plain texture, not a cubemap: TEXTUREFLAGS_ENVMAP is not set. There is ` +
+          `nothing here to convert into an HDR cubemap.`,
+      );
+    }
+
+    const hdrVtf = join(dirname(vtf), `${basename(vtf, ".vtf")}.hdr.vtf`);
+    assertWritable(hdrVtf, ctx.config);
+
+    const run = await runExternalTool(ctx.config, CUBEMAP2HDR_EXE, [], {
+      // Bare filename from the file's own directory, the same rule the rest of these
+      // tools follow -- and the same reason: what they do with a path is their own.
+      stdin: `${basename(vtf)}\n\n`,
+      where: dirname(vtf),
+      timeoutMs: 300_000,
+    });
+
+    const header = existsSync(hdrVtf) ? readVtfHeader(readFileSync(hdrVtf)) : null;
+    const written = header !== null;
+    ctx.audit.record({ kind: "file_write", data: { path: hdrVtf, written, created: true } });
+
+    const brief = (h: ReturnType<typeof readVtfHeader>) =>
+      h === null
+        ? null
+        : {
+            version: h.version,
+            width: h.width,
+            height: h.height,
+            cubemap: h.cubemap,
+            format: h.format,
+          };
+
+    return {
+      vtf,
+      hdrVtf,
+      source: brief(source),
+      header: brief(header),
+      written,
+      bytes: written ? statSync(hdrVtf).size : null,
+      exitCode: run.code,
+      // A float format is the point of the conversion: an HDR file in an integer format
+      // would be an LDR copy under an .hdr name, which is worse than not converting.
+      ok: written && header!.cubemap && header!.format.includes("F"),
+      tool: run.binary,
+      stdoutTail: run.stdout.split(/\r?\n/).slice(-20).join("\n").slice(0, 2000),
+      note:
+        `Written beside the source, not into the map. run_pack puts it back under the same ` +
+        `in-map path with .hdr before the extension, which is how Source pairs the two.`,
+    };
+  },
+});
+
+export const cubemapTools = [runTga2Skybox, runCubemap2Hdr];

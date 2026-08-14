@@ -15,7 +15,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { readVtfHeader, VTF_ENVMAP } from "../src/bsp/vtf.js";
 import type { ToolContext } from "../src/mcp/registry.js";
-import { runTga2Skybox, SKY_FACES } from "../src/tools/cubemap.js";
+import { runCubemap2Hdr, runTga2Skybox, SKY_FACES } from "../src/tools/cubemap.js";
+import { runPakfileExtract } from "../src/tools/pakfile.js";
 import { ctx as sharedCtx, has } from "./support/env.js";
 
 const ctx = sharedCtx as unknown as ToolContext;
@@ -106,4 +107,71 @@ describe("run_tga2skybox", () => {
     expect(r.hdrHeader.cubemap).toBe(true);
     expect(r.hdrHeader.format).toBe("RGBA16161616F");
   }, 120_000);
+});
+
+describe("run_cubemap2hdr", () => {
+  it("refuses a format the tool cannot convert, before running it", async () => {
+    // cubemap2hdr answers an unsupported format with a line on stdout, "Done!", and exit
+    // code 0 -- so a caller checking the code reads a refusal as a success. The check is
+    // therefore ours, and it names the format the file actually is.
+    const dir = join(scratch, "wrong-format");
+    writeFaces(dir, "sky_ldr", 32);
+    if (!has.tga2skybox) return;
+    const made = (await runTga2Skybox.handler(
+      { dir, base: "sky_ldr", confirm: true } as never,
+      ctx,
+    )) as unknown as { vtf: string };
+    await expect(
+      runCubemap2Hdr.handler({ vtf: made.vtf, confirm: true } as never, ctx),
+    ).rejects.toThrow(/only converts DXT1/);
+  }, 120_000);
+
+  it("refuses a .vtf that is not a cubemap at all", async () => {
+    const notATexture = join(scratch, "not-a-vtf.vtf");
+    writeFileSync(notATexture, "this is not a texture");
+    await expect(
+      runCubemap2Hdr.handler({ vtf: notATexture, confirm: true } as never, ctx),
+    ).rejects.toThrow(/not a \.vtf/);
+  });
+
+  it.skipIf(!has.cubemap2hdr || !has.sidecar || !has.navPair)(
+    "converts a cubemap a real map packed, into a float format",
+    async () => {
+      // The input has to be a DXT1 cubemap, and the only ones on this machine are inside
+      // a shipped map -- which is why run_pakfile_extract had to exist first.
+      const into = join(scratch, "from-map");
+      const x = (await runPakfileExtract.handler(
+        {
+          bsp: join(process.cwd(), "..", "srcds", "garrysmod", "maps", "gm_construct.bsp"),
+          into,
+          pattern: "materials/maps/*/c[0-9-]*.vtf",
+          limit: 40,
+          overwrite: false,
+          confirm: true,
+        } as never,
+        ctx,
+      )) as unknown as { written: Array<{ name: string; path: string }> };
+
+      const ldr = x.written.filter((f) => !f.name.includes(".hdr."));
+      expect(ldr.length).toBeGreaterThan(0);
+
+      const r = (await runCubemap2Hdr.handler(
+        { vtf: ldr[0]!.path, confirm: true } as never,
+        ctx,
+      )) as unknown as {
+        ok: boolean;
+        source: { format: string; cubemap: boolean };
+        header: { format: string; cubemap: boolean };
+      };
+
+      expect(r.source.format).toBe("DXT1");
+      expect(r.source.cubemap).toBe(true);
+      // The whole point: an integer format under an .hdr name is an LDR copy, and Source
+      // would load it in HDR mode and render the reflections wrong.
+      expect(r.header.format).toBe("RGBA16161616F");
+      expect(r.header.cubemap).toBe(true);
+      expect(r.ok).toBe(true);
+    },
+    240_000,
+  );
 });

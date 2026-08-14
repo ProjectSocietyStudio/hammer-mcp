@@ -99,6 +99,75 @@ def _pakfile(req: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@verb("pakfile_extract")
+def _pakfile_extract(req: dict[str, Any]) -> dict[str, Any]:
+    """Pulls files out of lump 40, the map's embedded pakfile.
+
+    `read_pakfile` says what is in there; nothing could get it out, so anything packed
+    inside a map -- a cubemap, a soundscript, a custom material -- was readable only by
+    unpacking the map by hand. That is the gap this closes.
+
+    Two refusals, both about writing somewhere the caller did not ask for:
+
+    * an entry whose name escapes the destination (`../`, an absolute path, a drive
+      letter) is refused rather than sanitised. A pakfile is content that came from
+      somewhere else, and quietly rewriting a path to something safe would extract a file
+      the caller cannot then find by name.
+    * an existing file is never overwritten. `overwrite` says otherwise explicitly.
+    """
+    import fnmatch
+    import os
+
+    from srctools.bsp import BSP
+
+    path = req["path"]
+    into = req["into"]
+    pattern = req.get("pattern")
+    limit = int(req.get("limit", 200))
+    overwrite = bool(req.get("overwrite", False))
+
+    bsp = BSP(path)
+    root = os.path.realpath(into)
+    os.makedirs(root, exist_ok=True)
+
+    written: list[dict[str, Any]] = []
+    refused: list[dict[str, str]] = []
+    skipped = 0
+    matched = 0
+
+    for info in bsp.pakfile.infolist():
+        name = info.filename
+        if pattern and not fnmatch.fnmatch(name.lower(), pattern.lower()):
+            continue
+        matched += 1
+        if len(written) >= limit:
+            skipped += 1
+            continue
+
+        target = os.path.realpath(os.path.join(root, name))
+        if target != root and not target.startswith(root + os.sep):
+            refused.append({"name": name, "why": "escapes the destination directory"})
+            continue
+        if os.path.exists(target) and not overwrite:
+            refused.append({"name": name, "why": "already exists; pass overwrite to replace"})
+            continue
+
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        data = bsp.pakfile.read(name)
+        with open(target, "wb") as fh:
+            fh.write(data)
+        written.append({"name": name, "path": target, "bytes": len(data)})
+
+    return {
+        "path": path,
+        "into": root,
+        "matched": matched,
+        "written": written,
+        "refused": refused,
+        "skippedOverLimit": skipped,
+    }
+
+
 def _fgd_names(req: dict[str, Any]) -> tuple[str, ...]:
     """Which FGDs to check against, relative to `binDir`.
 

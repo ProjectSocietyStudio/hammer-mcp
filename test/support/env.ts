@@ -101,6 +101,10 @@ export const has = {
   tga2skybox: existsSync(
     join(config.externalToolsDir ?? join(config.stateDir, "tools"), "tga2skybox.exe"),
   ),
+  /** ficool2's cubemap2hdr. Its input has to come out of a map, so it also needs navPair. */
+  cubemap2hdr: existsSync(
+    join(config.externalToolsDir ?? join(config.stateDir, "tools"), "cubemap2hdr.exe"),
+  ),
 } as const;
 
 const LABELS: Record<keyof typeof has, string> = {
@@ -117,6 +121,7 @@ const LABELS: Record<keyof typeof has, string> = {
   gameContent: `the game's own content (${config.gmodGameDir})`,
   bspRename: `ficool2's bsp_rename.exe in ${config.externalToolsDir} (optional)`,
   tga2skybox: `ficool2's tga2skybox.exe in ${config.externalToolsDir} (optional)`,
+  cubemap2hdr: `ficool2's cubemap2hdr.exe in ${config.externalToolsDir} (optional)`,
 };
 
 let announced = false;

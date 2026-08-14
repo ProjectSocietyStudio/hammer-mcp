@@ -19,7 +19,7 @@ import { z } from "zod";
 import { runExternalTool } from "../compile/external.js";
 import { defineTool } from "../mcp/registry.js";
 import { assertWritable } from "../fs/guard.js";
-import { TGA2SKYBOX_EXE } from "./cubemap.js";
+import { CUBEMAP2HDR_EXE, TGA2SKYBOX_EXE } from "./cubemap.js";
 import { CONFIRM, resolveInput } from "./paths.js";
 
 /** The tool's own filename, as its author ships it. */
@@ -149,6 +149,7 @@ export const runBspRename = defineTool({
 export const externalTools = [
   { exe: BSP_RENAME_EXE, tool: "run_bsp_rename" },
   { exe: TGA2SKYBOX_EXE, tool: "run_tga2skybox" },
+  { exe: CUBEMAP2HDR_EXE, tool: "run_cubemap2hdr" },
 ] as const;
 
 export const renameTools = [runBspRename];

@@ -20,6 +20,7 @@ import { measureTools2 } from "./measurespace.js";
 import { modifyTools } from "./modify.js";
 import { optimiseTools } from "./optimise.js";
 import { organiseTools } from "./organise.js";
+import { pakfileTools } from "./pakfile.js";
 import { planTools } from "./plan.js";
 import { renameTools } from "./rename.js";
 import { renderTools } from "./render.js";
@@ -68,5 +69,6 @@ export const allTools: AnyToolDef[] = [
   ...compileTools,
   ...renameTools,
   ...cubemapTools,
+  ...pakfileTools,
   ...lmpTools,
 ];
