@@ -117,14 +117,32 @@ wall and run a counter to the end of its wall unless you mean to divide the spac
 
 ⚠️ **Flush to a wall is not enough, and this page said it was.** A third builder followed that
 instruction exactly and still lost a doorway: three shelf runs, all against walls, none near
-the divider, turned `rooms: 2, portals: 1` into `rooms: 1, portals: 0`. The culprit was
-**depth**, not position — a run 48 units deep collapsed the segmentation where the same run at
-32 did not, from about 200 units away from the doorway that disappeared.
+the divider, turned `rooms: 2, portals: 1` into `rooms: 1, portals: 0`.
 
-So the rule to build is: **furniture deep enough to matter narrows the room it stands in**, and
-the room pass reads that narrowing as the map's real shape. If a portal disappears after a
-furniture change, suspect the furniture's *depth* before anything else — and note that the
-`step` sweep will not find it, because it is not a resolution problem.
+⚠️ **And this page then blamed the wrong thing, which cost a fourth builder eight calls.** It
+said the culprit was **depth** — 48 collapsing the segmentation where 32 did not. On
+`hmcp_backyard` a counter **24** deep, the depth `dimensions.ts` itself prescribes, collapsed
+`rooms: 3, portals: 2` into `rooms: 1, portals: 0`
+([the round-5 account](../../../../docs/dogfood/2026-08-14-backyard/findings.md)). Depth was
+never the variable.
+
+**What actually happens is a cascade through the merge bar, and it is global.** The counter ran
+from `y 40` to `y 200` in a room whose far wall is at `y 224`, leaving a **26 × 24 alcove** at
+its end. That alcove peaks at one cell of clearance — 16. It merges as a not-a-constriction, and
+from then on the bar for *every* boundary in the map is 16: a doorway measuring 64 or 80
+"narrows nothing" against it and is absorbed in turn. Nine merges, one room, on a map whose
+geometry was otherwise unchanged.
+
+So the rule to build is:
+
+> **A single small alcove anywhere lowers the merge bar for every boundary in the map.** Once one
+> region peaks at one cell, no doorway is a constriction any more — and the alcove need not be
+> anywhere near what it destroys.
+
+The practical instruction is the one this page already gave, for a better reason: **run casework
+wall to wall.** Leave no pocket at either end. If a portal disappears after a furniture change,
+look for the *pocket* the furniture left, not for its depth — and the `step` sweep will not find
+either, because neither is a resolution problem.
 
 **`read_vmf_rooms` now reports the portal that stopped existing.** Every merge across a
 boundary carries `closed`: the width and position of the opening it swallowed, measured at the
