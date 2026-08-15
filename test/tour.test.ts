@@ -226,3 +226,38 @@ describe("a tour of a map with two storeys (#86)", () => {
     for (const v of tourOf(BODEGA).views) expect(Math.abs(v.angles[0]!)).toBeLessThan(20);
   });
 });
+
+/**
+ * #90. Found building `hmcp_rotunda`, the first map here whose centre is solid.
+ *
+ * A doorway view was placed half way from the room's centre to the col, with a comment saying
+ * a point on that line *"is inside the room by construction"*. True of a convex room. A
+ * rotunda's centre is the pier holding its roof up; a hall's is as likely to be a column, an
+ * atrium's a lift core, a courtyard's a monument.
+ *
+ * One frame in seven was the inside of the pier. The reporting was already right --
+ * `insideSolid: true` and an unprompted note naming the frame -- and the tile was still spent,
+ * on a nine-tile sheet that is the only look anybody takes at the map.
+ */
+describe("a tour of a room whose centre is solid (#90)", () => {
+  const ROTUNDA = join(FIXTURES, "hmcp_rotunda.vmf");
+
+  const tourOf = (path: string) =>
+    renderVmfTourTool.handler(
+      { path, step: 16, maxCells: 4_000_000, minRoomArea: 4096, fov: 90, width: 160, height: 120 },
+      ctx,
+    ) as unknown as { views: { label: string; insideSolid: boolean }[] };
+
+  it("stands no camera inside a brush", () => {
+    const inside = tourOf(ROTUNDA).views.filter((v) => v.insideSolid);
+    expect(inside.map((v) => v.label)).toEqual([]);
+  });
+
+  it("leaves a map whose first guess was already clear exactly as it was", () => {
+    // The bodega and the tenement are convex-ish rooms with nothing in the middle. Walking
+    // the point must not move a camera that never needed moving.
+    for (const map of [BODEGA, join(FIXTURES, "hmcp_tenement.vmf")]) {
+      expect(tourOf(map).views.some((v) => v.insideSolid), map).toBe(false);
+    }
+  });
+});
