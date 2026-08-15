@@ -1,30 +1,50 @@
 # `rp_eastcoast_v4c` — what the reading means
 
 Derived from [`reading-eastcoast.md`](reading-eastcoast.md), which is authoritative on every
-number. Anything wrong here can be corrected without touching what was measured — and one thing
-already was, below.
+number. Anything wrong here can be corrected without touching what was measured — and **three
+things already have been**: the lighting overflow, the edict count, and the headline conclusion
+itself, which a measurement taken the same day refuted outright.
 
 The question this was commissioned to answer: **is this map worth improving, and where.**
 
 ---
 
-## The one fact that governs every plan
+## ⚠️ The fact this analysis said governs every plan does not
+
+**Corrected 15/08/2026, by measurement.** What follows first is what was written, then what
+refuted it, because the wrong version is the useful half.
 
 ```
 BRUSHES   8192 of 8192   MAX_MAP_BRUSHES
 ```
 
-Not near the ceiling. **On it, exactly.** A map cannot exceed `MAX_MAP_BRUSHES` on the stock
-compilers — vbsp refuses — so this was built either with a raised limit or by a mapper who
-stopped the moment it filled.
+This was read as *on the hard ceiling, exactly* — and therefore as the fact governing every
+decision: the map could not gain a single world brush, a decompile-and-rebuild would start at
+100% of a limit, and nothing could be promised until somebody established whether the Hammer++
+chain raised it.
 
-Either way the consequence is the same and it comes before any other decision: **this map cannot
-gain a single world brush without a compiler whose limit is raised.** ficool2's Hammer++ chain,
-which this repository already drives by default, is the obvious candidate — and whether it
-raises *this* limit is a thing to verify before promising anything, not to assume.
+**Nobody had to.** Neither compiler available here enforces `MAX_MAP_BRUSHES` at all. Measured on
+a purpose-built map — the table and its method are in
+[`docs/compiling.md`](../../compiling.md#the-limits-this-repository-reports-are-not-the-limits-it-compiles-against):
 
-Everything downstream inherits it. A decompile-and-rebuild starts at 100% of a hard ceiling.
-BRUSHSIDES at 89% and OVERLAYS at 96% say the same in a quieter voice.
+| brushes · brushsides | stock `vbsp.exe` | `vbspplusplus.exe` |
+|---|---|---|
+| 9 267 · 55 602 | compiles | compiles |
+| 27 006 · 162 036 | compiles | refuses, `MAX_MAP_BRUSHSIDES` |
+
+The 8192 in `read_map_report` is `source-sdk-2013/src/public/bspfile.h`'s, and neither binary
+here is SDK 2013 — the stock one calls itself *Garry's Mod Edition*. And the Hammer++ chain
+turns out to be the **stricter** of the two, which is the reverse of the assumption the original
+paragraph was built on.
+
+**So this map is not against a wall, and the question that was going to gate every other
+decision does not exist.** What remains true is narrower and still worth knowing: it sits at
+exactly the SDK-2013 value, which is a striking number to land on by chance and which this
+audit cannot explain. The compiler that built it in 2018 may have enforced what today's does
+not. That is a hypothesis, and nothing here tests it.
+
+`BRUSHSIDES` at 58 389 of 65 536 is the number to watch instead — 89% of a limit the ++ chain
+**does** enforce, on a map that would be recompiled with ++ if it is recompiled at all.
 
 ## The edict number is not what the verdict says it is
 
@@ -124,8 +144,9 @@ visgroup.** They are not in the `.bsp` and no reader here will recover them. So:
 
 ## Where the work is, in order
 
-1. **Establish the brush ceiling.** Whether the ++ chain raises `MAX_MAP_BRUSHES`, measured
-   rather than assumed. Nothing else can be promised until this is known.
+1. ~~**Establish the brush ceiling.**~~ **Done, 15/08/2026, and the answer dissolves the
+   question**: neither compiler enforces `MAX_MAP_BRUSHES`. Watch `BRUSHSIDES` instead — 89% of
+   a ceiling the ++ chain does enforce.
 2. **Settle the edict count in the engine**, not in the entity lump. It is the difference
    between "over budget before the gamemode starts" and "comfortable", and the audit cannot
    close it.
@@ -148,4 +169,5 @@ visgroup.** They are not in the `.bsp` and no reader here will recover them. So:
   string at offset 61907"* — where `read_bsp_entities` reads all 3942 entities from the same
   bytes. A production map broke one of two readers, which is what a production map is for.
 
-Neither is worth fixing before question 1 is answered.
+Question 1 is answered, so neither is blocked any longer. Both are worth fixing before a
+decompile: one of them is the only thing standing between this repository and any Workshop map.
