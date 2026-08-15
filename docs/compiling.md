@@ -131,7 +131,8 @@ Each such verdict already carries the caveat verbatim — *"either the compilers
 raise it, or vbsp would have refused. Do not read it as 'this map is broken' without checking
 which toolchain produced it"* — and this is the measurement behind that sentence.
 
-⚠️ **What this does not license is reading a percentage against the wrong ceiling.** A map at 89%
+⚠️ **What this does not license is reading a percentage against the wrong ceiling**
+([#101](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/101)). A map at 89%
 of `BRUSHSIDES` as this repository reports it is at **45%** of what ++ enforces, and at no known
 fraction of anything on stock. The percentages are useful as a relative signal and are not a
 distance to a wall.
