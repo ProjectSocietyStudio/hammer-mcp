@@ -7,7 +7,7 @@ import { defineTool } from "../mcp/registry.js";
 import { applyVmfOps } from "../vmf/edit.js";
 import type { VmfOp } from "../vmf/edit.js";
 import { DEFAULT_GRID, DEFAULT_SKYNAME, emptyVmf } from "../vmf/skeleton.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, GAME, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, GAME, resolveInput, resolveVmfInput } from "./paths.js";
 
 const MATCH = z
   .object({
@@ -102,7 +102,7 @@ export const editVmf = defineTool({
     note: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     if (!existsSync(path)) throw new Error(`${path} does not exist`);
 
     const before = readFileSync(path, "utf8");
@@ -204,7 +204,7 @@ export const writeVmf = defineTool({
     note: z.string(),
   },
   handler: async (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     // Refused rather than backed up. `edit_vmf` backs up because it is editing something
     // it was pointed at on purpose; this one would be replacing a map with an empty one,
     // and no flag makes that a thing a caller meant.

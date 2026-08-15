@@ -1,27 +1,89 @@
 import { readFileSync } from "node:fs";
+import type { Config } from "../config.js";
 import { z } from "zod";
 import { gameBlock } from "../games/resolve.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
-import { checkWiring, entityReport, readConnections } from "../vmf/wiring.js";
-import type { ClassSchema } from "../vmf/wiring.js";
+import { readEntityLump, wirableFromLump, withOutputsSplit } from "../bsp/entities.js";
+import { checkEntityWiring, connectionsOf, entityRows } from "../entity/wiring.js";
+import type {
+  ClassSchema,
+  EntityRow,
+  EntityRowFilter,
+  WirableEntity,
+} from "../entity/wiring.js";
+import { readEntities } from "../vmf/edit.js";
+import { entityReport, wirableEntities } from "../vmf/wiring.js";
 import { writeGuarded } from "../fs/write.js";
 import { setMapProperties, writePortal } from "../vmf/portals.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, GAME, GAME_BLOCK, resolveInput } from "./paths.js";
+import {
+  BACKUP,
+  BACKUP_PATH,
+  CONFIRM,
+  DRY_RUN,
+  GAME,
+  GAME_BLOCK,
+  magicOf,
+  resolveInput,
+  resolveVmfInput,
+} from "./paths.js";
 import { fgdContext } from "./vmf.js";
+
+/**
+ * Opens a path that may be either format, and hands back the two things both tools need.
+ *
+ * The dispatch is the first four bytes, not the extension: a `.bsp` renamed is still a
+ * compiled map, and this server's whole reason for reading by offset is that guessing
+ * wrong about a 1.13 GB file is not a recoverable mistake. The VMF branch reads the file
+ * whole because a VMF is source and that is what source is for; the BSP branch reads lump
+ * 0 and nothing else.
+ */
+function openEitherFormat(
+  given: string,
+  config: Config,
+): {
+  path: string;
+  format: "vmf" | "bsp";
+  entities: WirableEntity[];
+  rows: (filter: EntityRowFilter) => EntityRow[];
+} {
+  const path = resolveInput(given, config);
+  if (magicOf(path) === "VBSP") {
+    const lump = readEntityLump(path);
+    const split = withOutputsSplit(lump.entities);
+    return {
+      path,
+      format: "bsp",
+      entities: wirableFromLump(lump.entities),
+      rows: (filter) => entityRows(split, filter),
+    };
+  }
+  const source = readFileSync(path, "utf8");
+  const { entities } = readEntities(source);
+  return {
+    path,
+    format: "vmf",
+    entities: wirableEntities(source),
+    rows: (filter) => entityReport(source, filter),
+  };
+}
 
 export const readEntityReportTool = defineTool({
   name: "read_entity_report",
   description:
-    "Hammer's Entity Report: every entity of a .vmf with its keyvalues, filterable by " +
-    "classname, targetname or the presence of a key. read_vmf counts entities by classname " +
-    "and read_bsp_entities reads a compiled map; neither answers 'which entity has " +
-    "spawnflags 512', which is the question the report exists for and how a mapper finds " +
-    "the one door of forty that was left locked.",
+    "Hammer's Entity Report: every entity with its keyvalues, filterable by classname, " +
+    "targetname or the presence of a key. Takes a .vmf or a compiled .bsp -- on a map with " +
+    "no source this is not a convenience, it is the only way to ask. read_vmf counts " +
+    "entities by classname and read_bsp_entities gives a histogram; neither answers 'which " +
+    "entity has spawnflags 512', which is the question the report exists for and how a " +
+    "mapper finds the one door of forty that was left locked. A compiled entity has no " +
+    "Hammer id and owns no solids inline, so id is null and solidCount is 0 there.",
   realm: "map",
   inputSchema: {
-    path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
+    path: z
+      .string()
+      .describe("Path to the .vmf or .bsp, absolute or relative to the repo root."),
     classname: z.string().optional().describe("Substring, case-insensitive."),
     targetname: z.string().optional().describe("Substring, case-insensitive."),
     hasKey: z.string().optional().describe("Only entities carrying this keyvalue."),
@@ -46,17 +108,19 @@ export const readEntityReportTool = defineTool({
     ),
     /** Every classname in the map, with how many there are. */
     byClassname: z.record(z.string(), z.number()),
+    /** Which of the two the path turned out to be. */
+    format: z.enum(["vmf", "bsp"]),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
-    const source = readFileSync(path, "utf8");
-    const rows = entityReport(source, {
+    const { path, format, rows: report } = openEitherFormat(args.path, ctx.config);
+    const filter = {
       ...(args.classname !== undefined ? { classname: args.classname } : {}),
       ...(args.targetname !== undefined ? { targetname: args.targetname } : {}),
       ...(args.hasKey !== undefined ? { hasKey: args.hasKey } : {}),
       ...(args.keyValue !== undefined ? { keyValue: args.keyValue } : {}),
-    });
-    const all = entityReport(source);
+    };
+    const rows = report(filter);
+    const all = report({});
     const byClassname: Record<string, number> = {};
     for (const e of all) byClassname[e.classname] = (byClassname[e.classname] ?? 0) + 1;
 
@@ -66,6 +130,7 @@ export const readEntityReportTool = defineTool({
       returned: Math.min(rows.length, args.limit),
       entities: rows.slice(0, args.limit),
       byClassname,
+      format,
     };
   },
 });
@@ -83,13 +148,17 @@ export const validateIoTool = defineTool({
     "definition is not evidence of a fault. Needs the Python sidecar and the game's FGD.",
   realm: "map",
   inputSchema: {
-    path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
+    path: z
+      .string()
+      .describe("Path to the .vmf or .bsp, absolute or relative to the repo root."),
     game: GAME,
     limit: z.number().int().min(1).max(500).default(100),
   },
   outputSchema: {
     game: GAME_BLOCK,
     path: z.string(),
+    /** Which of the two the path turned out to be. */
+    format: z.enum(["vmf", "bsp"]),
     connectionCount: z.number(),
     /** Classes whose schema was loaded, so it is clear what was judged. */
     classesChecked: z.number(),
@@ -110,17 +179,15 @@ export const validateIoTool = defineTool({
     nextStep: z.string(),
   },
   handler: async (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
-    const source = readFileSync(path, "utf8");
+    const { path, format, entities } = openEitherFormat(args.path, ctx.config);
     const { game, from, binDir, fgd } = fgdContext(ctx.config, args.game);
 
     // Only the classes this map actually uses, and only those on either end of a wire.
     // Loading the whole FGD to judge nine connections would cost seconds and answer the
     // same question.
-    const rows = entityReport(source);
-    const { connections } = readConnections(source);
+    const { connections } = connectionsOf(entities);
     const byName = new Map<string, Set<string>>();
-    for (const e of rows) {
+    for (const e of entities) {
       if (!e.targetname) continue;
       const key = e.targetname.toLowerCase();
       byName.set(key, (byName.get(key) ?? new Set<string>()).add(e.classname));
@@ -159,13 +226,30 @@ export const validateIoTool = defineTool({
       });
     }
 
-    const report = checkWiring(source, schemas);
+    const report = checkEntityWiring(entities, schemas);
     const errors = report.findings.filter((f) => f.severity === "error");
     const warns = report.findings.filter((f) => f.severity === "warning");
+
+    // On a compiled map an output is recognised by its name and by its value parsing as a
+    // connection. Now that the FGD is loaded, say what that convention missed rather than
+    // leaving the caller to assume it missed nothing.
+    const missed: string[] = [];
+    if (format === "bsp") {
+      const seen = new Set(connections.map((c) => `${c.fromClassname}/${c.output}`.toLowerCase()));
+      for (const e of entities) {
+        const schema = schemas.get(e.classname.toLowerCase());
+        if (!schema) continue;
+        for (const [key] of e.connections) {
+          if (!schema.outputs.has(key.toLowerCase())) continue;
+          if (!seen.has(`${e.classname}/${key}`.toLowerCase())) missed.push(`${e.classname}.${key}`);
+        }
+      }
+    }
 
     return {
       game: gameBlock(game, from),
       path,
+      format,
       connectionCount: report.connections.length,
       classesChecked: schemas.size,
       errorCount: errors.length,
@@ -174,6 +258,23 @@ export const validateIoTool = defineTool({
       unresolvedTargets: report.unresolvedTargets,
       warnings: [
         ...report.warnings,
+        ...(format === "bsp"
+          ? [
+              `This is a compiled map. vbsp flattened every connections block into ordinary ` +
+                `keyvalues, so the ${report.connections.length} output(s) judged here were ` +
+                `recognised by name and by parsing, then checked against the FGD. What a ` +
+                `compiled map cannot tell you at all: which brush was func_detail, where the ` +
+                `hints were, what the visgroups held.`,
+            ]
+          : []),
+        ...(missed.length > 0
+          ? [
+              `${missed.length} keyvalue(s) are outputs according to the FGD and were not ` +
+                `read as connections: ${missed.slice(0, 8).join(", ")}. Their values do not ` +
+                `parse as one, which usually means the map stores something else under that ` +
+                `name -- but it is said rather than dropped.`,
+            ]
+          : []),
         ...(unknownClasses.length > 0
           ? [
               `${unknownClasses.length} class(es) are not in this game's FGD and were not ` +
@@ -237,7 +338,7 @@ export const writePortalTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const beforeReport = checkVmfSolids(path, before);
 
@@ -345,7 +446,7 @@ export const setMapPropertiesTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = setMapProperties(before, {
       ...(args.skyname !== undefined ? { skyname: args.skyname } : {}),

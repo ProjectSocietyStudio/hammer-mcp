@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { defineTool } from "../mcp/registry.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { resolveInput } from "./paths.js";
+import { resolveInput, resolveVmfInput } from "./paths.js";
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -71,7 +71,7 @@ export const readVmfSolidsTool = defineTool({
     ),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const report = checkVmfSolids(path, readFileSync(path, "utf8"), { grid: args.grid });
 
     const findingCounts: Record<string, number> = {};

@@ -11,7 +11,7 @@ import {
 } from "../vmf/dispwrite.js";
 import type { FaceSelector } from "../vmf/select.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const faceSelectorFrom = (args: {
   solidIds?: number[];
@@ -129,7 +129,7 @@ export const readDisplacementsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const r = readDisplacements(readFileSync(path, "utf8"));
     return {
       path,
@@ -224,7 +224,7 @@ export const writeDisplacementTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = writeDisplacements(before, faceSelectorFrom(args), { power: args.power });
     assertGeometryUntouched(path, before, result.text);
@@ -307,7 +307,7 @@ export const sewDisplacementsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = sewDisplacements(before, args.tolerance ?? 0.1);
     assertGeometryUntouched(path, before, result.text);
@@ -384,7 +384,7 @@ export const sculptDisplacementTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = sculptDisplacements(
       before,
@@ -460,7 +460,7 @@ export const paintDisplacementTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = paintDisplacements(
       before,

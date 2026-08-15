@@ -60,6 +60,50 @@ numbers: that is the oracle that makes both trustworthy.
 (`vmf.spawn`) and excludes it from `vmf.entities`, where our reader counts it as an entity of the
 lump. Both conventions are defensible; comparing the two figures without knowing is not.
 
+## An output survives compilation, but not its packaging
+
+A `.vmf` keeps outputs in their own block:
+
+```
+"entity"
+{
+        "classname" "logic_timer"
+        "connections"
+        {
+                "OnTimer" "store_4_windows_template<ESC>ForceSpawn<ESC><ESC>0.2<ESC>-1"
+        }
+}
+```
+
+vbsp flattens that away. In the entity lump the same output is an ordinary pair among the rest,
+and older maps keep the comma separator Source used before the Orange Box — read verbatim out of
+`rp_eastcoast_v4c`, published 2018:
+
+```
+{
+"targetname" "store_4_windows_timer"
+"RefireTime" "120"
+"classname" "logic_timer"
+"OnTimer" "store_4_windows_template,ForceSpawn,,0.2,-1"
+}
+```
+
+So on a compiled map the name is the only structural clue left. **`isOutputKey` requires both**:
+a key matching `^(On|Out)[A-Z]` — `Out` for the handful that report a value, `math_counter.OutValue`
+and `logic_compare.OutValue` — **and** a value that parses as five fields with a target and an
+input. `"OnFire" "1"` is a keyvalue whatever it is called.
+
+That is a convention rather than a guarantee, so `validate_io` turns it into something checked:
+once the FGD is loaded it compares what the convention found against what the schema declares, and
+**reports any output the FGD knows about that parsing missed** rather than leaving the caller to
+assume it missed nothing.
+
+Everything after that split is format-agnostic. `entity/wiring.ts` judges a list of entities and
+`entity/model.ts` already said why: the formats *"differ in packaging, not in content"*. Wiring was
+the last place that had not been told — `validate_io` could judge a map you have the source for and
+nothing could judge the map you do not, which is the production case, and the eastcoast audit paid
+for it by finding four defects in a shipped map with hand-written Python.
+
 ## Game profiles
 
 Measured 11/08/2026. Generalising past Garry's Mod looked like it needed a hand-written table of

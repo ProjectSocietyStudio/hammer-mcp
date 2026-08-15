@@ -11,7 +11,7 @@ import { buildScene } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
 import { readEntities } from "../vmf/edit.js";
 import type { Vec3 } from "../vmf/solid.js";
-import { resolveInput } from "./paths.js";
+import { resolveInput, resolveVmfInput } from "./paths.js";
 
 const cache = new Map<string, { source: string; scene: Scene }>();
 
@@ -96,7 +96,7 @@ export const renderVmfPlanTool = defineTool({
     pngBytes: z.number(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const { scene, source } = sceneFor(path);
     const seeds = (args.seeds as number[][] | undefined)?.map((p) => [p[0]!, p[1]!, p[2]!] as Vec3) ??
       spawnsIn(source);

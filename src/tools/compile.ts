@@ -18,7 +18,7 @@ import { assertWritable } from "../fs/guard.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
 import { gameBlock, gameFor } from "../games/resolve.js";
-import { CONFIRM, GAME, GAME_BLOCK, resolveInput } from "./paths.js";
+import { CONFIRM, GAME, GAME_BLOCK, resolveInput, resolveVmfInput } from "./paths.js";
 
 const FINDING = z.object({
   severity: z.string(),
@@ -127,7 +127,7 @@ export const runCompile = defineTool({
       throw new Error(`cull is a Hammer++ flag; pass toolchain: "plusplus" to use it`);
     }
 
-    const vmf = resolveInput(args.vmf, ctx.config);
+    const vmf = resolveVmfInput(args.vmf, ctx.config);
     if (!existsSync(vmf)) throw new Error(`${vmf} does not exist`);
     if (extname(vmf).toLowerCase() !== ".vmf") throw new Error(`${vmf} is not a .vmf`);
 

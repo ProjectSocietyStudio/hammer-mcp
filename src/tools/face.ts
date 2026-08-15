@@ -6,7 +6,7 @@ import { alignFaces, setFaceMaterial, setSmoothingGroups } from "../vmf/face.js"
 import type { AlignMode } from "../vmf/face.js";
 import type { FaceSelector } from "../vmf/select.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const SELECTOR = {
   solidIds: z.array(z.number()).optional().describe("Only faces of these solids."),
@@ -119,7 +119,7 @@ export const setFaceMaterialTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = setFaceMaterial(before, selectorFrom(args), args.newMaterial);
     assertGeometryUntouched(path, before, result.text);
@@ -207,7 +207,7 @@ export const alignFacesTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     if (args.repeat && (args.repeat[0] <= 0 || args.repeat[1] <= 0)) {
       throw new Error(
@@ -300,7 +300,7 @@ export const setSmoothingGroupsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = setSmoothingGroups(before, selectorFrom(args), args.groups);
     assertGeometryUntouched(path, before, result.text);

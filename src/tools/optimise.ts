@@ -8,7 +8,7 @@ import { MAX_BRUSH_LUXELS_PER_AXIS, setLightmapScale } from "../vmf/lightmap.js"
 import { reclassSolids } from "../vmf/reclass.js";
 import type { ReclassTarget } from "../vmf/reclass.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -67,7 +67,7 @@ export const writeHintBrushTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
 
     let hintCount = 0;
@@ -186,7 +186,7 @@ export const setSolidClassTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
 
     const target: ReclassTarget =
@@ -319,6 +319,9 @@ export const setLightmapScaleTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
+    // Format before arguments: someone who passed a compiled map should hear about that
+    // rather than about a selector, which is advice for a file this tool cannot read.
+    const path = resolveVmfInput(args.path, ctx.config);
     const selector = {
       ...(args.solidIds !== undefined ? { solidIds: args.solidIds } : {}),
       ...(args.material !== undefined ? { material: args.material } : {}),
@@ -334,7 +337,6 @@ export const setLightmapScaleTool = defineTool({
       );
     }
 
-    const path = resolveInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = setLightmapScale(before, args.scale, selector);
 

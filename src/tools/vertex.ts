@@ -5,7 +5,7 @@ import { defineTool } from "../mcp/registry.js";
 import { checkVmfSolids } from "../vmf/solid.js";
 import { moveVertices } from "../vmf/vertex.js";
 import type { VertexMove } from "../vmf/vertex.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const Vec = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -60,7 +60,7 @@ export const moveVerticesTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const beforeReport = checkVmfSolids(path, before);
 

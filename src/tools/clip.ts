@@ -6,7 +6,7 @@ import { clipSolids } from "../vmf/clip.js";
 import type { SolidSelector } from "../vmf/select.js";
 import { checkVmfSolids, planeFromPoints } from "../vmf/solid.js";
 import type { Plane, Vec3 } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const Vec = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -81,7 +81,7 @@ export const clipSolidsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
 
     let plane: Plane;

@@ -8,7 +8,7 @@ import type { SolidSelector } from "../vmf/select.js";
 import { checkVmfSolids } from "../vmf/solid.js";
 import { mirror, rotation, scaling, translation } from "../vmf/transform.js";
 import type { Mat34 } from "../vmf/transform.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -137,7 +137,7 @@ export const transformSolidsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
 
     const chosen = [args.move, args.rotate, args.scale, args.mirror].filter(
@@ -296,7 +296,7 @@ export const deleteSolidsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const beforeReport = checkVmfSolids(path, before);
 

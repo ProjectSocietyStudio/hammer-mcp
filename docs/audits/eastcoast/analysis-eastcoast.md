@@ -338,16 +338,18 @@ it.
   called a defect in a reader was a category error in the caller, restated confidently enough
   to survive into an issue and two documents.
 
-  The real defect underneath is worse than the one reported, and it is still open: **a `.vmf`
-  tool given a `.bsp` reads the entire file into a string before failing.** On this map that is
+  ✅ **Fixed 15/08/2026.** The real defect underneath was worse than the one reported: **a `.vmf`
+  tool given a `.bsp` read the entire file into a string before failing.** On this map that is
   79 MB and a confusing error. On `rp_nycity_day` it is 1.13 GB, and the repository's own skill
   opens with the rule that a naive full read of that file kills the MCP transport. A path that
   does not end in `.vmf`, or a buffer that starts with `VBSP`, should be refused by name at the
   door.
 
-- **Nothing in this repository validates the wiring of a compiled map**
-  ([#103](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/103)) — and that is the gap
-  this pass leaned on hardest. `validate_io` and `read_entity_report` are both `.vmf`-only
+- ✅ **Nothing in this repository validated the wiring of a compiled map**
+  ([#103](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/103), **fixed 15/08/2026**:
+  `validate_io` and `read_entity_report` now take either format, and on this map the tool
+  reproduces this audit's hand count exactly — 3942 entities, 402 outputs, 7 dead across the
+  same four names). It was the gap this pass leaned on hardest. `validate_io` and `read_entity_report` are both `.vmf`-only
   (`src/tools/wiring.ts:86` and `:24`), while the BSP side has `read_bsp_entities`, which
   reports a histogram and samples. **Every one of the four defects in the section above was
   found with hand-written Python**, because no tool here will take a `.bsp` and tell you which
@@ -358,8 +360,10 @@ it.
   machinery already parses, and `read_bsp_entities` already extracts it correctly. The gap is
   wiring one to the other.
 
-- **`read_leak` concluded from a file that could not have been there**
-  ([#104](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/104)). It returned
+- ✅ **`read_leak` concluded from a file that could not have been there**
+  ([#104](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/104), **fixed 15/08/2026**:
+  the reply now carries `establishedBy`, and a bare `.bsp` reports `nothing` rather than a
+  verdict). It returned
   `leaked: false` because no `.lin` sits beside the `.bsp` — but this `.bsp` came out of a
   `.gma`, which carries no `.lin` and never could. The reasoning is sound for a map compiled
   in place and unsound for every map obtained any other way, and the answer does not say which

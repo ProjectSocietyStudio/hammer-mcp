@@ -11,7 +11,7 @@ import type { FittingSpec } from "../vmf/fittings/index.js";
 import { expandShape } from "../vmf/shapes.js";
 import type { CompoundSpec } from "../vmf/shapes.js";
 import { checkVmfSolids } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveVmfInput } from "./paths.js";
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -106,7 +106,7 @@ interface Placement {
 }
 
 function placeSolids(req: Placement, specs: SolidSpec[], ctx: ToolContext) {
-  const path = resolveInput(req.path, ctx.config);
+  const path = resolveVmfInput(req.path, ctx.config);
   const before = readFileSync(path, "utf8");
   const beforeReport = checkVmfSolids(path, before);
 
@@ -263,6 +263,9 @@ export const writeVmfSolidTool = defineTool({
     notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
+    // Format before arguments: someone who passed a compiled map should hear about
+    // that, not about the shape of a solid this tool will never get to read.
+    resolveVmfInput(args.path, ctx.config);
     // Compound shapes expand into the convex brushes that make them up, so the writer
     // below sees nothing it did not see before. The count is reported back because a
     // caller who asks for one sphere and gets eight brushes has spent a budget it did not
@@ -397,6 +400,9 @@ export const writeVmfFittingTool = defineTool({
     notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
+    // Format before arguments: someone who passed a compiled map should hear about
+    // that, not about the shape of a solid this tool will never get to read.
+    resolveVmfInput(args.path, ctx.config);
     const notes: string[] = [];
     const specs: SolidSpec[] = [];
     const built: { fitting: string; parts: string[]; brushes: number; depth: number }[] = [];
