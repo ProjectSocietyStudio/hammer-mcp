@@ -117,6 +117,13 @@ raise it, or vbsp would have refused. Do not read it as 'this map is broken' wit
 which toolchain produced it"* — and this is the measurement behind that sentence. A production
 map past a ceiling is a map whose compiler raised it, until somebody shows otherwise.
 
+One thing the measurement found on its way, recorded because it is about the reader rather than
+the compilers: the stock chain's `Too many unique verts, max = 65536` stops vbsp with exit code
+1, and `run_compile` reported that stage as `clean: true` with no finding at all
+([#99](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/99)). The ++ chain's
+`MAX_MAP_BRUSHSIDES` on the same probe produced exactly the right finding, so the gap is that
+the vertex limit announces itself in prose rather than by name.
+
 ⚠️ **Whether the engine copes is a separate question and is not measured here.** GMod ships both
 the compiler and the engine, so a lump its vbsp writes is presumably one its engine reads; that
 is an inference, not a measurement, and nothing above establishes it.
