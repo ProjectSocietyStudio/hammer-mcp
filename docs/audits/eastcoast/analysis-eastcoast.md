@@ -138,11 +138,14 @@ visgroup.** They are not in the `.bsp` and no reader here will recover them. So:
 
 ## Two things this audit found about the toolkit, not the map
 
-- **`read_gma` cannot read what the Workshop actually stores.** The addon on disk is a raw LZMA
-  stream, and every Workshop map is. The refusal is correct and the message is exact, but the
-  commonest way anyone obtains a map needs a decompression step the toolkit does not have.
-- **`read_entity_report` cannot parse this entity lump** — *"unterminated quoted string at
-  offset 61907"* — where `read_bsp_entities` reads all 3942 entities from the same bytes. A
-  production map broke one of two readers, which is what a production map is for.
+- **`read_gma` cannot read what the Workshop actually stores**
+  ([#96](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/96)). The addon on disk is a
+  raw LZMA stream, and every Workshop map is. The refusal is correct and the message is exact,
+  but the commonest way anyone obtains a map needs a decompression step the toolkit does not
+  have — six lines of Python stood between this repository and the file it was asked to audit.
+- **`read_entity_report` cannot parse this entity lump**
+  ([#97](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/97)) — *"unterminated quoted
+  string at offset 61907"* — where `read_bsp_entities` reads all 3942 entities from the same
+  bytes. A production map broke one of two readers, which is what a production map is for.
 
-Both are worth issues. Neither is worth fixing before question 1 is answered.
+Neither is worth fixing before question 1 is answered.
