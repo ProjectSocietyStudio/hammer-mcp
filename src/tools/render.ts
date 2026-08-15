@@ -16,7 +16,7 @@ import { pointInSolid } from "../space/trace.js";
 import { voxelise } from "../space/voxel.js";
 import { readEntities } from "../vmf/edit.js";
 import type { Vec3 } from "../vmf/solid.js";
-import { resolveInput } from "./paths.js";
+import { resolveInput, resolveVmfInput } from "./paths.js";
 import { seedsFor } from "./scene.js";
 
 /**
@@ -144,7 +144,7 @@ export const renderVmfViewTool = defineTool({
     pngBytes: z.number(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const source = readFileSync(path, "utf8");
     const scene = sceneFor(path);
 
@@ -323,7 +323,7 @@ export const renderVmfTourTool = defineTool({
     pngBytes: z.number(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const source = readFileSync(path, "utf8");
     const scene = sceneFor(path);
     const notes: string[] = [];

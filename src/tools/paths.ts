@@ -1,3 +1,4 @@
+import { closeSync, openSync, readSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import type { Config } from "../config.js";
@@ -5,6 +6,54 @@ import type { Config } from "../config.js";
 /** Resolves a caller-supplied path, relative to the repo root when not absolute. */
 export function resolveInput(path: string, config: Config): string {
   return isAbsolute(path) ? path : resolve(config.repoRoot, path);
+}
+
+/**
+ * The first four bytes of a file, or null when it cannot be opened or is shorter.
+ *
+ * Four bytes, not the file: the point of this whole module is that the map on this
+ * project's production server is 1.13 GB and reading it whole kills the transport.
+ */
+export function magicOf(path: string): string | null {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const buf = Buffer.alloc(4);
+    const read = readSync(fd, buf, 0, 4, 0);
+    return read === 4 ? buf.toString("latin1") : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/**
+ * Resolves a path a tool will read as a `.vmf`, and refuses a compiled map at the door.
+ *
+ * Every VMF tool reads its file whole, which is right for a source file and catastrophic
+ * for a compiled one: `rp_eastcoast_v4c.bsp` is 79 MB and `rp_nycity_day.bsp` is 1.13 GB,
+ * and the second read whole is the hang this server's first rule exists to prevent. Before
+ * this check, `read_entity_report` on a BSP read all 79 MB in and then reported
+ * `unterminated quoted string at offset 61907 (line 43)` -- a byte offset into binary,
+ * which reads exactly like a defect in the file it was given.
+ *
+ * The check is four bytes and the extension, so it costs nothing and cannot itself be the
+ * expensive read it prevents.
+ */
+export function resolveVmfInput(path: string, config: Config): string {
+  const full = resolveInput(path, config);
+  const magic = magicOf(full);
+  if (magic === "VBSP" || full.toLowerCase().endsWith(".bsp")) {
+    throw new Error(
+      `${full} is a compiled map, and this tool reads a .vmf. Compiling destroys what a ` +
+        `VMF holds -- the structural/func_detail split, hints, visgroups -- so there is no ` +
+        `reading of a .bsp that answers a VMF question. For a compiled map use the readers ` +
+        `built for one: read_bsp_entities, read_bsp_info, read_map_report, read_prop_survey, ` +
+        `read_visleaf_stats. read_entity_report and validate_io take either.`,
+    );
+  }
+  return full;
 }
 
 /**

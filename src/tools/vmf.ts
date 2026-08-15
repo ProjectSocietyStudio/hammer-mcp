@@ -16,7 +16,7 @@ import type { Vec3 } from "../vmf/solid.js";
 
 /** How far below a prop to look for its floor. Half a map is further than any prop stands. */
 const FLOOR_REACH = 8192;
-import { GAME, GAME_BLOCK, resolveInput } from "./paths.js";
+import { GAME, GAME_BLOCK, resolveInput, resolveVmfInput } from "./paths.js";
 
 const FINDING = z.object({
   severity: z.string(),
@@ -204,7 +204,7 @@ export const readVmf = defineTool({
     const reply = await callSidecar<Record<string, unknown>>(
       "vmf_read",
       {
-        path: resolveInput(args.path, ctx.config),
+        path: resolveVmfInput(args.path, ctx.config),
         ...(args.classname ? { classname: args.classname } : {}),
         collapseInstances: args.collapseInstances,
         gameDir: game.gameDir ?? ctx.config.gmodGameDir,
@@ -358,7 +358,7 @@ export const readVmfLint = defineTool({
   },
   handler: async (args, ctx) => {
     const { game, from, binDir, fgd } = fgdContext(ctx.config, args.game);
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const reply = await callSidecar<LintReply>(
       "vmf_lint",
       {

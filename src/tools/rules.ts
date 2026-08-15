@@ -6,7 +6,7 @@ import { CHECKS, parseRules, RULES_VERSION, rulesPathFor } from "../rules/schema
 import { buildScene } from "../space/scene.js";
 import type { Scene } from "../space/scene.js";
 import type { Vec3 } from "../vmf/solid.js";
-import { resolveInput } from "./paths.js";
+import { resolveInput, resolveVmfInput } from "./paths.js";
 
 const cache = new Map<string, { source: string; scene: Scene }>();
 
@@ -126,8 +126,8 @@ export const checkVmfRulesTool = defineTool({
     notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
-    const rulesPath = args.rulesPath ? resolveInput(args.rulesPath, ctx.config) : rulesPathFor(path);
+    const path = resolveVmfInput(args.path, ctx.config);
+    const rulesPath = args.rulesPath ? resolveVmfInput(args.rulesPath, ctx.config) : rulesPathFor(path);
 
     if (!existsSync(rulesPath)) {
       // Not an error. A map without rules is the normal case, and inventing a bar to judge

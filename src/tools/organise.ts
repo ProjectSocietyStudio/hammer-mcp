@@ -6,7 +6,7 @@ import { groupSolids, readOrganisation, setCordon, setVisgroup } from "../vmf/or
 import type { SolidSelector } from "../vmf/select.js";
 import { checkVmfSolids } from "../vmf/solid.js";
 import type { Vec3 } from "../vmf/solid.js";
-import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput } from "./paths.js";
+import { BACKUP, BACKUP_PATH, CONFIRM, DRY_RUN, resolveInput, resolveVmfInput } from "./paths.js";
 
 const Vec = z.tuple([z.number(), z.number(), z.number()]);
 
@@ -95,7 +95,7 @@ export const readMapOrganisationTool = defineTool({
     warnings: z.array(z.string()),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     return { path, ...readOrganisation(readFileSync(path, "utf8")) };
   },
 });
@@ -135,7 +135,7 @@ export const setVisgroupTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = setVisgroup(before, selectorFrom(args), {
       name: args.name,
@@ -205,7 +205,7 @@ export const groupSolidsTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = groupSolids(before, selectorFrom(args), {
       ...(args.ungroup !== undefined ? { ungroup: args.ungroup } : {}),
@@ -263,7 +263,7 @@ export const setCordonTool = defineTool({
     nextStep: z.string(),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const before = readFileSync(path, "utf8");
     const result = setCordon(
       before,

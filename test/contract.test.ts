@@ -185,3 +185,55 @@ describe("every VMF writer reaches the guard", () => {
     });
   }
 });
+
+/**
+ * #97. A `.vmf` tool handed a `.bsp` used to read the whole file into a string and then
+ * fail inside the KeyValues lexer -- `unterminated quoted string at offset 61907
+ * (line 43)`, a byte offset into binary, which reads exactly like a defect in the map.
+ *
+ * The eastcoast audit spent a pass believing that, filed an issue on it, and wrote it into
+ * two documents. The map was 79 MB. The one this project actually serves is 1.13 GB, and
+ * the first rule in the `source-map` skill is that reading it whole kills the transport.
+ *
+ * So the contract is behavioural and it is checked against the registry rather than
+ * against a list: any tool that says it takes a `.vmf` must refuse a `.bsp` by name. A
+ * tool added later gets the check for free, which a hand-written list would not give.
+ */
+describe("a .vmf tool refuses a compiled map (#97)", () => {
+  const BSP = join(FIXTURES, "hmcp_probe.bsp");
+  const ctx = { config: CONFIG } as unknown as ToolContext;
+
+  const describes = (t: (typeof allTools)[number], key: string): string => {
+    const shape = t.inputSchema as Record<string, { description?: string }> | undefined;
+    return shape?.[key]?.description ?? "";
+  };
+
+  const vmfTools = allTools.flatMap((t) => {
+    for (const key of ["path", "vmf"]) {
+      const d = describes(t, key);
+      if (d.includes(".vmf") && !d.includes(".bsp")) return [[t, key] as const];
+    }
+    return [];
+  });
+
+  it("finds the .vmf tools to check", () => {
+    // If this ever drops to a handful, the detection broke rather than the server.
+    expect(vmfTools.length).toBeGreaterThan(25);
+  });
+
+  for (const [tool, key] of vmfTools) {
+    it(`${tool.name} says it is a compiled map`, async () => {
+      const args = { [key]: BSP, confirm: true } as never;
+      let message = "";
+      try {
+        await tool.handler(args, ctx);
+      } catch (e) {
+        message = e instanceof Error ? e.message : String(e);
+      }
+      expect(message, `${tool.name} did not refuse`).toMatch(/compiled map/);
+      expect(message, `${tool.name} must name a reader that does answer`).toMatch(
+        /read_bsp_entities/,
+      );
+    });
+  }
+});

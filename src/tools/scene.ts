@@ -10,7 +10,7 @@ import { voxelise } from "../space/voxel.js";
 import type { VoxelGrid } from "../space/voxel.js";
 import { readEntities } from "../vmf/edit.js";
 import type { Vec3 } from "../vmf/solid.js";
-import { resolveInput } from "./paths.js";
+import { resolveVmfInput } from "./paths.js";
 
 /** How far a spawn entity's origin is lifted to find the air above the floor it sits on. */
 const SPAWN_LIFT = 16;
@@ -160,7 +160,7 @@ export const readVmfLeakTool = defineTool({
     notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const { scene, grid, seedNote } = gridFor(path, args);
     const notes = [...grid.notes];
     if (seedNote) notes.unshift(seedNote);
@@ -318,7 +318,7 @@ export const readVmfRoomsTool = defineTool({
     notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const { scene, grid, seedNote } = gridFor(path, args);
     const result = findRooms(grid, { minRoomArea: args.minRoomArea });
 
@@ -445,7 +445,7 @@ export const readVmfSurfacesTool = defineTool({
     notes: z.array(z.string()),
   },
   handler: (args, ctx) => {
-    const path = resolveInput(args.path, ctx.config);
+    const path = resolveVmfInput(args.path, ctx.config);
     const { scene } = sceneFor(path);
     const c = classify(scene);
 

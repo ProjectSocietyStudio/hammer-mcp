@@ -94,9 +94,9 @@ getting `ENOENT` on the first call.
 | Place a point entity | `edit_vmf` | Including `prop_static`: it is an ordinary entity in a `.vmf` |
 | Tie to entity / move to world | `set_solid_class` | |
 | Edit keyvalues | `edit_vmf` | |
-| Entity Report | `read_entity_report` | Filterable by classname, targetname or a key's presence |
+| Entity Report | `read_entity_report` | Filterable by classname, targetname or a key's presence. Takes a `.vmf` **or a compiled `.bsp`** |
 | Outputs and inputs | `edit_vmf` | |
-| **Check the wiring** | `validate_io` | Hammer does not do this. An output into a name nothing has is silent everywhere else |
+| **Check the wiring** | `validate_io` | Hammer does not do this. An output into a name nothing has is silent everywhere else. Takes a `.vmf` **or a compiled `.bsp`** — Hammer cannot open one at all |
 | Model browser | `read_model_info` | Bounds, skins, sequences, materials |
 | `func_instance` | `edit_vmf` | Created as an entity; `read_vmf` expands them with `collapseInstances` |
 | Areaportals | `write_portal` | |
