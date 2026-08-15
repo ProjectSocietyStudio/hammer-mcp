@@ -366,16 +366,35 @@ export const renderVmfTourTool = defineTool({
 
     for (const portal of portals) {
       // From inside each of the two rooms, looking at the col between them. Derived from the
-      // room centres rather than from a normal, which a portal does not carry: a point part
-      // way from the centre to the col is inside the room by construction.
+      // room centres rather than from a normal, which a portal does not carry.
+      //
+      // Half way used to be taken as inside the room "by construction". That holds for a
+      // convex room, and #90 is every room that is not one: a rotunda's centre is the pier
+      // holding its roof up, and a hall's is as likely to be a column. One frame in seven of
+      // `hmcp_rotunda` was the inside of the pier -- reported honestly, and still a spent
+      // tile on a nine-tile sheet.
+      //
+      // So the point walks toward the col until it is clear. `pointInSolid` was already
+      // being called on the result to set `insideSolid`; it is cheaper to use it to choose
+      // the point than to describe the bad one.
       for (const id of portal.between) {
         const room = rooms.find((r) => r.id === id);
         if (!room) continue;
-        const from: Vec3 = [
-          room.centre[0] + (portal.at[0] - room.centre[0]) * 0.5,
-          room.centre[1] + (portal.at[1] - room.centre[1]) * 0.5,
+        const along = (t: number): Vec3 => [
+          room.centre[0] + (portal.at[0] - room.centre[0]) * t,
+          room.centre[1] + (portal.at[1] - room.centre[1]) * t,
           room.centre[2],
         ];
+        let from = along(0.5);
+        // Stopping at 0.9 rather than at the col: a camera in the doorway sees a doorframe,
+        // and the frame is meant to show the room the doorway is seen from.
+        for (const t of [0.5, 0.62, 0.74, 0.86]) {
+          const candidate = along(t);
+          if (pointInSolid(scene, eyeAt(scene, candidate)) === null) {
+            from = candidate;
+            break;
+          }
+        }
         wanted.push({
           label: `DOOR ${portal.between[0]}-${portal.between[1]} FROM ${id}`,
           from,

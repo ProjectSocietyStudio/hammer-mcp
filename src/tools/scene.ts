@@ -103,6 +103,28 @@ const commonInput = {
   maxCells: z.number().int().min(1000).max(64_000_000).default(4_000_000),
 };
 
+/**
+ * Faces whose normal is not one of the six axes.
+ *
+ * The predicate behind #91's caveat. A map of boxes has none, and at a 16-unit grid it cannot
+ * hide a gap from the flood; every curve, wedge and splay has some, and two of them meeting at
+ * a shallow angle leave a sliver of any width you like.
+ */
+function countSkewFaces(scene: Scene): number {
+  let skew = 0;
+  for (const brush of scene.brushes) {
+    for (const face of brush.faces) {
+      const n = face.plane.normal;
+      const axial =
+        Math.abs(Math.abs(n[0]) - 1) < 1e-6 ||
+        Math.abs(Math.abs(n[1]) - 1) < 1e-6 ||
+        Math.abs(Math.abs(n[2]) - 1) < 1e-6;
+      if (!axial) skew += 1;
+    }
+  }
+  return skew;
+}
+
 function gridFor(path: string, args: { seeds?: number[][]; step: number; maxCells: number }): {
   scene: Scene;
   grid: VoxelGrid;
@@ -139,13 +161,34 @@ export const readVmfLeakTool = defineTool({
   },
   handler: (args, ctx) => {
     const path = resolveInput(args.path, ctx.config);
-    const { grid, seedNote } = gridFor(path, args);
+    const { scene, grid, seedNote } = gridFor(path, args);
     const notes = [...grid.notes];
     if (seedNote) notes.unshift(seedNote);
 
+    const sealed = !grid.leaked && grid.reachedCount > 0;
+
+    // A sealed verdict is not equally strong on every map, and until #91 it read as though it
+    // were. This method loses a gap narrower than a cell rather than inventing one -- the
+    // right trade, and unchanged. But on an axis-aligned map at this grid a wall thinner than
+    // a cell is close to impossible, while a curve meeting a flat surface produces one
+    // immediately: `hmcp_rotunda` came back sealed and vbsp said leaked, at a lens a few units
+    // wide where the rotunda's arc met the vestibule's wall. Nothing in the reply distinguished
+    // the two situations, and the caller has no reason to suspect the second.
+    if (sealed) {
+      const skew = countSkewFaces(scene);
+      if (skew > 0) {
+        notes.push(
+          `${skew} face(s) here are not axis-aligned. Two of them meeting at a shallow angle ` +
+            `leave a gap narrower than one ${grid.step}-unit cell, which this flood loses ` +
+            `rather than invents -- so a sealed verdict is weaker here than on a map of ` +
+            `boxes. run_compile and read_leak are the second answer, by a different method.`,
+        );
+      }
+    }
+
     return {
       path,
-      sealed: !grid.leaked && grid.reachedCount > 0,
+      sealed,
       leakPath: grid.leakPath.map((p) => [...p]),
       escapedAt: grid.leaked ? [...grid.leakPath[grid.leakPath.length - 1]!] : null,
       step: grid.step,

@@ -292,12 +292,21 @@ function arch(spec: ArchSpec): Expansion {
     specs.push({ shape: "convex", faces: band(bottom, top) });
   }
 
+  // The radius a body actually meets: a ring of wedges is a polygon inscribed in the radius
+  // asked for, so the flat of each facet sits nearer the centre than its corners do. Reported
+  // because the first thing anyone does with a round room is put a marker just inside the
+  // wall, and at 8 segments that is 8% of the radius inside the brick (#92).
+  const inscribed = Math.round(spec.innerRadius * Math.cos(Math.PI / spec.segments) * 100) / 100;
+
   return {
     specs,
     notes: [
       `${spec.segments} brushes. An arch is a ring of wedges, and every joint between two ` +
         `of them is a plane in the tree -- make them func_detail unless the arch is part ` +
         `of the hull.`,
+      `innerRadius ${spec.innerRadius} is where the corners are. The flat of each facet is ` +
+        `at ${inscribed}, so that is the usable interior -- a point between the two is inside ` +
+        `the wall.`,
     ],
   };
 }

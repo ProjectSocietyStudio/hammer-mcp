@@ -49,7 +49,15 @@ const Spec = z.discriminatedUnion("shape", [
   z.object({
     shape: z.literal("arch"),
     centre: Vec3.describe("Centre of the arc, at its base."),
-    innerRadius: z.number(),
+    innerRadius: z
+                  .number()
+                  .describe(
+                    "The radius the corners touch. A ring of `segments` wedges is a polygon " +
+                      "INSCRIBED in it, so the flat of each facet sits at " +
+                      "innerRadius * cos(180/segments) -- 98% of it at 16 segments, 92% at 8. " +
+                      "A marker placed just inside the wall at the radius you asked for is " +
+                      "inside the wall.",
+                  ),
     outerRadius: z.number(),
     height: z.number(),
     arcDegrees: z.number().describe("180 is a doorway arch, 360 a full ring."),

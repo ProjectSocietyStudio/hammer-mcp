@@ -86,7 +86,12 @@ export const readMapOrganisationTool = defineTool({
     ),
     /** With this on, a compile ships only what the cordon box contains. */
     cordonsActive: z.boolean(),
-    ungroupedSolids: z.number(),
+    solidsInNoVisgroup: z
+      .number()
+      .describe("Solids carrying no visgroupid. A map with no visgroups reports all of them."),
+    solidsInNoGroup: z
+      .number()
+      .describe("Solids carrying no groupid. This is the one group_solids moves."),
     warnings: z.array(z.string()),
   },
   handler: (args, ctx) => {
@@ -174,8 +179,10 @@ export const groupSolidsTool = defineTool({
     "Hammer treats its members as one thing when you click any of them, and that is all it " +
     "is. A solid carries exactly one group id, so grouping a brush that is already grouped " +
     "moves it rather than adding a second id, which Hammer would read as whichever came " +
-    "first. Note that srctools cannot read this back: its writer emits 'groupid' and its " +
-    "parser looks for 'group', so the sidecar reports no group membership on any map.",
+    "first. read_map_organisation reads it back -- `groups`, and `solidsInNoGroup`. (The " +
+    "Python sidecar cannot: its writer emits 'groupid' and its parser looks for 'group', so " +
+    "anything going through it reports no group membership on any map. That is a caveat " +
+    "about the sidecar's own map reading, not about verifying this.)",
   realm: "map",
   guarded: true,
   meta: { "anthropic/requiresUserInteraction": true },

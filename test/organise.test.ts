@@ -26,8 +26,28 @@ describe("readOrganisation", () => {
     expect(r.groups).toEqual([]);
     expect(r.cordons).toEqual([]);
     expect(r.cordonsActive).toBe(false);
-    // The probe's six brushes belong to no visgroup, which is the honest count.
-    expect(r.ungroupedSolids).toBe(6);
+    // The probe's six brushes belong to no visgroup and to no group either.
+    expect(r.solidsInNoVisgroup).toBe(6);
+    expect(r.solidsInNoGroup).toBe(6);
+  });
+
+  /**
+   * #88. The field was called `ungroupedSolids` and counted solids in no **visgroup**. On
+   * `hmcp_rotunda` -- 39 brushes, 16 of them just put in a group, no visgroups anywhere -- it
+   * reported 39, and the reading it invites is "the grouping did not take".
+   *
+   * The code was right and the name was the only documentation an MCP caller got: the output
+   * schema carried no description, so the field name was the whole contract. Groups and
+   * visgroups are different things, and this same report distinguishes them everywhere else.
+   */
+  it("counts group membership and visgroup membership apart", () => {
+    const grouped = groupSolids(probe(), { ids: [FLOOR, WALL] });
+    const r = readOrganisation(grouped.text);
+    expect(r.groups).toHaveLength(1);
+    expect(r.groups[0]!.solidCount).toBe(2);
+    // Two of six are in a group. None is in a visgroup: the two questions have two answers.
+    expect(r.solidsInNoGroup).toBe(4);
+    expect(r.solidsInNoVisgroup).toBe(6);
   });
 
   it("reads the groups a real Hammer map declares", () => {
@@ -100,7 +120,7 @@ describe("setVisgroup", () => {
     const after = readOrganisation(second.text);
     expect(after.visgroups).toHaveLength(2);
     expect(after.visgroups.map((v) => v.solidCount)).toEqual([1, 1]);
-    expect(after.ungroupedSolids).toBe(5);
+    expect(after.solidsInNoVisgroup).toBe(5);
 
     // And taking it out of one leaves it in the other.
     const removed = setVisgroup(second.text, { ids: [FLOOR] }, { name: "Shell", remove: true });
