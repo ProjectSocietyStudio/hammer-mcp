@@ -8,6 +8,7 @@ import {
   readVmfTraceTool,
   readVmfVisibilityTool,
 } from "../src/tools/space.js";
+import { readVmfLeakTool } from "../src/tools/scene.js";
 import { writeDisplacements } from "../src/vmf/dispwrite.js";
 import { ctx as sharedCtx, FIXTURES } from "./support/env.js";
 
@@ -150,5 +151,45 @@ describe("what the tools refuse to leave unsaid", () => {
     const clean = trace({ from: [0, 0, 128], to: [0, 0, -1000] });
     expect(clean.notes).toEqual([]);
     expect(clean.brushCount).toBe(6);
+  });
+});
+
+/**
+ * #91. Found building `hmcp_rotunda` -- the first disagreement between this tool and vbsp in
+ * seven rounds.
+ *
+ *   read_vmf_leak   sealed: true, 18192 open cells
+ *   vbsp            **** leaked ****
+ *   read_leak       escapes at [285, -56.6, 12]
+ *
+ * A lens a few units wide between a round wall's outer arc and a flat wall meeting it
+ * tangentially. Below the 16-unit grid, which the tool documents it will lose rather than
+ * invent -- a trade that is correct and does not change here.
+ *
+ * What changes is that `sealed: true` used to read the same on a map that CANNOT hide a leak
+ * from this method and on one that can. Six maps of boxes never produced a wall thinner than a
+ * cell; on an axis-aligned map at that grid it is close to impossible. Round meets square does
+ * it immediately, by construction, and nothing in the reply said so.
+ */
+describe("read_vmf_leak says when its grid cannot settle the question (#91)", () => {
+  const leak = (name: string) =>
+    readVmfLeakTool.handler(
+      { path: join(FIXTURES, name), step: 16, maxCells: 4_000_000 } as never,
+      ctx,
+    ) as unknown as { sealed: boolean; notes: string[] };
+
+  it("qualifies a sealed verdict on a map with faces off the axes", () => {
+    const r = leak("hmcp_rotunda.vmf");
+    expect(r.sealed).toBe(true);
+    expect(r.notes.join(" ")).toMatch(/not axis-aligned/);
+    expect(r.notes.join(" ")).toMatch(/run_compile|compiler/);
+  });
+
+  it("says nothing of the sort about a map made of boxes", () => {
+    for (const name of ["hmcp_probe.vmf", "hmcp_bodega.vmf", "hmcp_tenement.vmf"]) {
+      const r = leak(name);
+      expect(r.sealed, name).toBe(true);
+      expect(r.notes.join(" "), name).not.toMatch(/not axis-aligned/);
+    }
   });
 });
