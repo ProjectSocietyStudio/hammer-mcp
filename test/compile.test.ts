@@ -136,12 +136,44 @@ describe("pointfile correlation", () => {
       const r = (await readLeak.handler({ path: map, limit: 5 }, ctx)) as {
         leaked: boolean;
         compiled: boolean;
+        establishedBy: string;
+        evidence: string[];
         note: string;
       };
       expect(r.leaked).toBe(false);
       expect(r.compiled).toBe(true);
+      // The negative sister of the #104 case below: here the .vmf beside the .bsp shows a
+      // compile happened in this directory, so the missing pointfile does mean something.
+      expect(r.establishedBy).toBe("compile-artefacts");
+      expect(r.evidence).toContain(map);
       // No hedge: a .bsp beside no pointfile is evidence, not a guess.
       expect(r.note).not.toMatch(/usually|probably/i);
+    });
+
+    /**
+     * #104. This tool returned `leaked: false` on `rp_eastcoast_v4c.bsp`, reasoning that
+     * vbsp writes a `.lin` when it leaks and none was there. That `.bsp` came out of a
+     * Workshop `.gma`, which contains 42 entries and no pointfile and could not have
+     * contained one -- so the absence it reasoned from carried no information at all.
+     *
+     * The fix is not a better guess, it is saying which case the answer is in.
+     */
+    it("does not claim a bare .bsp did not leak: nothing here compiled it", async () => {
+      const only = join(scratch, "downloaded.bsp");
+      writeFileSync(only, "");
+
+      const r = (await readLeak.handler({ path: only, limit: 5 }, ctx)) as {
+        leaked: boolean;
+        compiled: boolean;
+        establishedBy: string;
+        evidence: string[];
+        note: string;
+      };
+      expect(r.compiled).toBe(true);
+      expect(r.establishedBy).toBe("nothing");
+      expect(r.evidence).toEqual([only]);
+      expect(r.note).toMatch(/never travels with its/);
+      expect(r.note).toMatch(/read_vmf_leak/);
     });
 
     it("says nothing has compiled the map, rather than that it did not leak", async () => {

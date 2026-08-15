@@ -273,7 +273,10 @@ export const readLeak = defineTool({
     ".bsp beside it. Both ends of the path are correlated, because vbsp does not " +
     "guarantee which end holds the entity -- on a two-point pointfile it was the last. " +
     "No pointfile is an ANSWER, not an error: it returns leaked:false, and `compiled` " +
-    "tells a map that did not leak from one nothing has compiled here.",
+    "tells a map that did not leak from one nothing has compiled here. A .bsp that arrived " +
+    "from somewhere else -- a Workshop .gma, a copy, a download -- carries no .lin and " +
+    "never could, so `establishedBy` says whether the answer rests on evidence or on the " +
+    "absence of a file that was never going to be there.",
   realm: "map",
   inputSchema: {
     path: z.string().describe("The .lin pointfile, or the .vmf/.bsp it sits beside."),
@@ -292,6 +295,21 @@ export const readLeak = defineTool({
     leaked: z.boolean(),
     /** Whether anything compiled this map here at all -- what tells the two no-leaks apart. */
     compiled: z.boolean(),
+    /**
+     * What the verdict rests on.
+     *
+     * `pointfile` -- vbsp wrote one and it was read. `compile-artefacts` -- no pointfile,
+     * but a compile demonstrably happened in this directory, so its absence means
+     * something. `nothing` -- neither, and the answer is not established.
+     *
+     * That third case is not hypothetical: the eastcoast audit read `leaked: false` off a
+     * `.bsp` extracted from a Workshop `.gma`, where a `.lin` could not have existed. The
+     * reasoning was sound for a map compiled in place and unsound for every other way of
+     * obtaining one, and nothing in the reply said which case it was in.
+     */
+    establishedBy: z.enum(["pointfile", "compile-artefacts", "nothing"]),
+    /** The sibling files the verdict was read from, by name. */
+    evidence: z.array(z.string()),
     note: z.string(),
     pointCount: z.number().optional(),
     start: z.array(z.number()).optional(),
@@ -349,16 +367,31 @@ export const readLeak = defineTool({
     // same one.
     if (!existsSync(pointfile)) {
       const compiled = existsSync(bsp);
+      // A .bsp alone is not evidence that a compile happened HERE. These are: the source
+      // it was built from, the log vbsp wrote, the portal file vvis reads. A map that
+      // arrived any other way has the .bsp and none of them.
+      const artefacts = [vmf, `${stem}.log`, `${stem}.prt`].filter((f) => existsSync(f));
+      const established = compiled && artefacts.length > 0;
       return {
         pointfile,
         leaked: false,
         compiled,
-        note: compiled
-          ? `No pointfile beside this map, and ${bsp} is there. vbsp writes a .lin when it ` +
+        establishedBy: established ? ("compile-artefacts" as const) : ("nothing" as const),
+        evidence: established ? [bsp, ...artefacts] : compiled ? [bsp] : [],
+        note: established
+          ? `No pointfile beside this map, and ${bsp} is there together with ` +
+            `${artefacts.map((f) => basename(f)).join(", ")}. vbsp writes a .lin when it ` +
             `leaks and does not otherwise, so the compile that produced that .bsp did not leak.`
-          : `No pointfile and no .bsp beside this map: nothing here has compiled it, so there ` +
-            `is nothing to say about whether it leaks. run_compile with stages ["vbsp"] ` +
-            `answers that, and read_vmf_leak answers it without a compiler at all.`,
+          : compiled
+            ? `${bsp} is here and nothing else is: no .vmf, no .log, no .prt. So nothing ` +
+              `shows this map was compiled in this directory, and a .bsp obtained any other ` +
+              `way -- extracted from a .gma, copied, downloaded -- never travels with its ` +
+              `.lin. The missing pointfile therefore says nothing about this map. ` +
+              `read_vmf_leak on the source answers it without a compiler; run_compile with ` +
+              `stages ["vbsp"] answers it here.`
+            : `No pointfile and no .bsp beside this map: nothing here has compiled it, so there ` +
+              `is nothing to say about whether it leaks. run_compile with stages ["vbsp"] ` +
+              `answers that, and read_vmf_leak answers it without a compiler at all.`,
         leakingEntity: null,
       };
     }
@@ -405,6 +438,8 @@ export const readLeak = defineTool({
       ...locateLeak(pointfile, points, entities, args.limit),
       leaked: true,
       compiled: existsSync(bsp),
+      establishedBy: "pointfile" as const,
+      evidence: [pointfile],
       correlatedAgainst,
       note:
         `${pointfile} is there, so the last compile leaked. The path runs from an entity ` +
