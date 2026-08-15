@@ -97,8 +97,17 @@ export interface OrganisationReport {
   cordons: CordonInfo[];
   /** Whether the cordon is switched on. A compile with it on ships only what it contains. */
   cordonsActive: boolean;
-  /** Solids belonging to no visgroup at all. */
-  ungroupedSolids: number;
+  /**
+   * Solids in no visgroup, and solids in no group. Two different questions (#88).
+   *
+   * They were one field called `ungroupedSolids`, which counted the first and read as the
+   * second. On a map with 39 brushes, 16 of them freshly grouped and no visgroups anywhere,
+   * it reported 39 -- and the reading that invites is "the grouping did not take". The code
+   * was right; the name was the only documentation an MCP caller got, because the output
+   * schema carried no description.
+   */
+  solidsInNoVisgroup: number;
+  solidsInNoGroup: number;
   warnings: string[];
 }
 
@@ -161,16 +170,21 @@ export function readOrganisation(source: string): OrganisationReport {
   // faults, and Hammer repairs the second one silently on open.
   const unknownVis = new Set<number>();
   const unknownGroup = new Set<number>();
-  let ungrouped = 0;
+  let noVisgroup = 0;
+  let noGroup = 0;
 
   const countOn = (block: KvBlock, kind: "solid" | "entity"): void => {
     const editor = editorOf(block);
     if (!editor) {
-      if (kind === "solid") ungrouped++;
+      if (kind === "solid") {
+        noVisgroup++;
+        noGroup++;
+      }
       return;
     }
     const ids = allValues(editor, "visgroupid").map(Number).filter(Number.isFinite);
-    if (ids.length === 0 && kind === "solid") ungrouped++;
+    if (ids.length === 0 && kind === "solid") noVisgroup++;
+    if (kind === "solid" && allValues(editor, "groupid").length === 0) noGroup++;
     for (const id of ids) {
       const info = byId.get(id);
       if (!info) unknownVis.add(id);
@@ -234,7 +248,8 @@ export function readOrganisation(source: string): OrganisationReport {
     groups: [...groups.values()],
     cordons,
     cordonsActive,
-    ungroupedSolids: ungrouped,
+    solidsInNoVisgroup: noVisgroup,
+    solidsInNoGroup: noGroup,
     warnings,
   };
 }
