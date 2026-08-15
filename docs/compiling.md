@@ -84,6 +84,50 @@ helpers, so merging it would change the accepted keyvalues of entities the game 
   binary. `-repack -compress` was never tried: nothing says Garry's Mod reads an LZMA-compressed
   lump.
 
+## The limits this repository reports are not the limits it compiles against
+
+Measured 15/08/2026, on a map generated for the purpose: a sealed shell plus a solid block of
+adjacent 32-unit cubes. Adjacent cubes share their corners, so `N³` brushes cost only `(N+1)³`
+unique vertices — which is the only way to exceed `MAX_MAP_BRUSHES` without tripping
+`MAX_MAP_VERTS` first. Free-standing boxes cannot do it: 8192 × 8 is exactly 65536, so the two
+ceilings arrive together.
+
+| brushes · brushsides | stock `vbsp.exe` | `vbspplusplus.exe` |
+|---|---|---|
+| 9 267 · 55 602 | **compiles** | **compiles** |
+| 27 006 · 162 036 | **compiles** | **refuses**, `Brush 152917: MAX_MAP_BRUSHSIDES` |
+
+Three things follow, and the second is the surprising one.
+
+**`MAX_MAP_BRUSHES` = 8192 is enforced by neither.** Both wrote 9 267 without a word; the stock
+chain wrote 27 006, which `read_map_geometry` reports as 330% of the ceiling. The number in
+`LUMP_SPECS` comes from `source-sdk-2013/src/public/bspfile.h`, and **neither binary here is
+that**: the stock one identifies itself as `Valve Software - vbsp.exe (Jul 22 2026) - Garry's
+Mod Edition`. Garry's Mod ships its own compilers and they are not Valve's.
+
+**The Hammer++ chain is the stricter of the two.** It refuses at `MAX_MAP_BRUSHSIDES` where the
+stock chain writes 162 036 into a lump whose stated ceiling is 65 536 — 247% — and says nothing.
+That is the opposite of what "the ++ chain raises the limits" leads a reader to expect, and it
+matters: **a map that compiles on the stock chain and refuses on ++ has not gained a defect by
+moving to ++.** It had one already, and the stricter compiler is the one that found it.
+
+**So `read_map_report`'s `fail` on a lump is a statement about SDK 2013, not about the map.**
+Each such verdict already carries the caveat verbatim — *"either the compilers that built this
+raise it, or vbsp would have refused. Do not read it as 'this map is broken' without checking
+which toolchain produced it"* — and this is the measurement behind that sentence. A production
+map past a ceiling is a map whose compiler raised it, until somebody shows otherwise.
+
+One thing the measurement found on its way, recorded because it is about the reader rather than
+the compilers: the stock chain's `Too many unique verts, max = 65536` stops vbsp with exit code
+1, and `run_compile` reported that stage as `clean: true` with no finding at all
+([#99](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/99)). The ++ chain's
+`MAX_MAP_BRUSHSIDES` on the same probe produced exactly the right finding, so the gap is that
+the vertex limit announces itself in prose rather than by name.
+
+⚠️ **Whether the engine copes is a separate question and is not measured here.** GMod ships both
+the compiler and the engine, so a lump its vbsp writes is presumably one its engine reads; that
+is an inference, not a measurement, and nothing above establishes it.
+
 ## Only world brushes seal
 
 A leaked map is one where something inside can see the void. The consequences compound: the PVS

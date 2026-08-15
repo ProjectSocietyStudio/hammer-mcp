@@ -9,8 +9,11 @@ A 350-metre roleplay city published to the Workshop on 13/06/2018
 | [`reading-eastcoast.md`](reading-eastcoast.md) | what was measured, one section per call. **Authoritative on the numbers** |
 | [`analysis-eastcoast.md`](analysis-eastcoast.md) | what it means, what is inferred rather than measured, and where the work is |
 
-**The short version.** `BRUSHES` sits at **8192 of 8192** — on the hard ceiling, not near it —
-which governs every plan before anything else is decided. `LIGHTING` is at 168% of its ceiling,
+**The short version.** `BRUSHES` sits at 8192 of 8192, which this audit first read as a hard
+ceiling governing every plan — and a measurement the same day refuted that: **neither compiler
+available here enforces `MAX_MAP_BRUSHES` at all**, and the Hammer++ chain is the stricter of
+the two. The number to watch is `BRUSHSIDES` at 89% of a limit ++ *does* enforce. `LIGHTING` is
+at 168% of its ceiling,
 and not for the reason arithmetic suggests: the map has no HDR, so the overflow is light styles.
 Eleven per cent of its lit faces carry two thirds of its lighting budget. The map has no
 occluders at all and 38 areaportals across 81 424 m².
