@@ -345,7 +345,8 @@ it.
   does not end in `.vmf`, or a buffer that starts with `VBSP`, should be refused by name at the
   door.
 
-- **Nothing in this repository validates the wiring of a compiled map** — and that is the gap
+- **Nothing in this repository validates the wiring of a compiled map**
+  ([#103](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/103)) — and that is the gap
   this pass leaned on hardest. `validate_io` and `read_entity_report` are both `.vmf`-only
   (`src/tools/wiring.ts:86` and `:24`), while the BSP side has `read_bsp_entities`, which
   reports a histogram and samples. **Every one of the four defects in the section above was
@@ -357,7 +358,8 @@ it.
   machinery already parses, and `read_bsp_entities` already extracts it correctly. The gap is
   wiring one to the other.
 
-- **`read_leak` concluded from a file that could not have been there.** It returned
+- **`read_leak` concluded from a file that could not have been there**
+  ([#104](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/104)). It returned
   `leaked: false` because no `.lin` sits beside the `.bsp` — but this `.bsp` came out of a
   `.gma`, which carries no `.lin` and never could. The reasoning is sound for a map compiled
   in place and unsound for every map obtained any other way, and the answer does not say which
