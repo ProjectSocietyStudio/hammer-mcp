@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "map": "hmcp_rotunda -- a round cistern with a conical roof and a square annexe. The prose half of this brief is brief.md, beside it.",
+  "rules": [
+    {
+      "id": "the-door-is-wide-enough",
+      "what": "circulation_width",
+      "select": { "portal": "*" },
+      "min": 64,
+      "note": "Two people meeting at a doorway should not have to take turns."
+    },
+    {
+      "id": "rooms-not-pinched",
+      "what": "circulation_width",
+      "select": { "room": "*" },
+      "min": 64,
+      "note": "A round room reports its diameter here, which is the closest this schema comes to knowing it is round."
+    },
+    {
+      "id": "headroom",
+      "what": "headroom",
+      "select": { "room": "*" },
+      "min": 112,
+      "note": "Under the dome as under the annexe's flat ceiling."
+    },
+    {
+      "id": "rooms-are-rooms",
+      "what": "room_area",
+      "select": { "room": "*" },
+      "min": 24000,
+      "note": "About 15 m2, with the central pier taken out of it."
+    },
+    {
+      "id": "room-inside-the-door",
+      "what": "clearance_in_front",
+      "select": { "targetname": "door" },
+      "min": 48,
+      "note": "You have to be able to stand where you land."
+    },
+    {
+      "id": "the-door-does-not-see-the-annexe",
+      "what": "sightline",
+      "from": { "entity": "door" },
+      "to": { "entity": "annexe_back" },
+      "mustBe": "blocked",
+      "note": "The annexe is off to one side. A round room does not put its own back room on show."
+    }
+  ]
+}

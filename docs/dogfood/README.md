@@ -63,6 +63,7 @@ Without the second round we would have fixed things without knowing whether it h
 | 1–3 | a corner shop — `hmcp_bodega` | [`2026-08-13-bodega/`](2026-08-13-bodega/) |
 | 5 | a house and its garden — `hmcp_backyard` | [`2026-08-14-backyard/`](2026-08-14-backyard/) |
 | 6 | a two-storey tenement — `hmcp_tenement` | [`2026-08-15-tenement/`](2026-08-15-tenement/) |
+| 7 | a round cistern — `hmcp_rotunda` | [`2026-08-15-rotunda/`](2026-08-15-rotunda/) |
 
 Round 4 was written and never run: its brief is in the bodega folder, and what it asked for —
 finish, not just measurement — was folded into round 5's brief instead.
