@@ -1,9 +1,10 @@
 # `rp_eastcoast_v4c` — what the reading means
 
 Derived from [`reading-eastcoast.md`](reading-eastcoast.md), which is authoritative on every
-number. Anything wrong here can be corrected without touching what was measured — and **three
-things already have been**: the lighting overflow, the edict count, and the headline conclusion
-itself, which a measurement taken the same day refuted outright.
+number. Anything wrong here can be corrected without touching what was measured — and **four
+things already have been**: the lighting overflow, the edict count, the headline conclusion
+itself, and then the correction to that correction, which read the new measurement against the
+wrong ceiling.
 
 The question this was commissioned to answer: **is this map worth improving, and where.**
 
@@ -27,15 +28,13 @@ chain raised it.
 a purpose-built map — the table and its method are in
 [`docs/compiling.md`](../../compiling.md#the-limits-this-repository-reports-are-not-the-limits-it-compiles-against):
 
-| brushes · brushsides | stock `vbsp.exe` | `vbspplusplus.exe` |
-|---|---|---|
-| 9 267 · 55 602 | compiles | compiles |
-| 27 006 · 162 036 | compiles | refuses, `MAX_MAP_BRUSHSIDES` |
+| Limit | SDK 2013 | stock `vbsp.exe` | `vbspplusplus.exe` |
+|---|---|---|---|
+| `MAX_MAP_BRUSHES` | 8192 | not enforced — wrote 27 006 | not enforced — wrote 17 582 |
+| `MAX_MAP_BRUSHSIDES` | 65 536 | not enforced — wrote 162 036 | enforced at **131 072** |
 
 The 8192 in `read_map_report` is `source-sdk-2013/src/public/bspfile.h`'s, and neither binary
-here is SDK 2013 — the stock one calls itself *Garry's Mod Edition*. And the Hammer++ chain
-turns out to be the **stricter** of the two, which is the reverse of the assumption the original
-paragraph was built on.
+here is SDK 2013 — the stock one calls itself *Garry's Mod Edition*.
 
 **So this map is not against a wall, and the question that was going to gate every other
 decision does not exist.** What remains true is narrower and still worth knowing: it sits at
@@ -43,8 +42,13 @@ exactly the SDK-2013 value, which is a striking number to land on by chance and 
 audit cannot explain. The compiler that built it in 2018 may have enforced what today's does
 not. That is a hypothesis, and nothing here tests it.
 
-`BRUSHSIDES` at 58 389 of 65 536 is the number to watch instead — 89% of a limit the ++ chain
-**does** enforce, on a map that would be recompiled with ++ if it is recompiled at all.
+⚠️ **A second correction, 15/08/2026.** This section first said the ++ chain was the *stricter*
+of the two and named `BRUSHSIDES` at 89% as the number to watch instead. Both halves were wrong.
+++ enforces `MAX_MAP_BRUSHSIDES` at 131 072 — **twice** the SDK value — so it raises the limit
+like everyone expects it to; it is simply the only one of the two that checks it. Against the
+ceiling ++ actually defends, this map's 58 389 sides are **45%**, not 89%. There is no brush-side
+headroom problem here either, and reading the reported percentage as a distance to a wall is what
+produced two wrong conclusions in a row.
 
 ## The edict number is not what the verdict says it is
 
@@ -145,8 +149,8 @@ visgroup.** They are not in the `.bsp` and no reader here will recover them. So:
 ## Where the work is, in order
 
 1. ~~**Establish the brush ceiling.**~~ **Done, 15/08/2026, and the answer dissolves the
-   question**: neither compiler enforces `MAX_MAP_BRUSHES`. Watch `BRUSHSIDES` instead — 89% of
-   a ceiling the ++ chain does enforce.
+   question**: neither compiler enforces `MAX_MAP_BRUSHES`, and this map is at 45% of the
+   `BRUSHSIDES` ceiling the ++ chain does enforce. No brush limit constrains this work.
 2. **Settle the edict count in the engine**, not in the entity lump. It is the difference
    between "over budget before the gamemode starts" and "comfortable", and the audit cannot
    close it.

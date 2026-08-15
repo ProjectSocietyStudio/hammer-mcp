@@ -86,47 +86,74 @@ helpers, so merging it would change the accepted keyvalues of entities the game 
 
 ## The limits this repository reports are not the limits it compiles against
 
-Measured 15/08/2026, on a map generated for the purpose: a sealed shell plus a solid block of
-adjacent 32-unit cubes. Adjacent cubes share their corners, so `N³` brushes cost only `(N+1)³`
-unique vertices — which is the only way to exceed `MAX_MAP_BRUSHES` without tripping
-`MAX_MAP_VERTS` first. Free-standing boxes cannot do it: 8192 × 8 is exactly 65536, so the two
-ceilings arrive together.
+Measured 15/08/2026 on maps generated for the purpose: a sealed shell plus a solid block of
+adjacent 32-unit cells. Adjacency matters — neighbours share their corners, so `N³` brushes cost
+only `(N+1)³` unique vertices, which is the only way to exceed `MAX_MAP_BRUSHES` without tripping
+`MAX_MAP_VERTS` first. Free-standing boxes cannot do it: 8192 × 8 is exactly 65536, so those two
+ceilings arrive together, and the first probe proved it by failing on verts at 9006 boxes.
 
-| brushes · brushsides | stock `vbsp.exe` | `vbspplusplus.exe` |
-|---|---|---|
-| 9 267 · 55 602 | **compiles** | **compiles** |
-| 27 006 · 162 036 | **compiles** | **refuses**, `Brush 152917: MAX_MAP_BRUSHSIDES` |
+| probe | brushes · brushsides | stock `vbsp.exe` | `vbspplusplus.exe` |
+|---|---|---|---|
+| cubes | 9 267 · 55 602 | **compiles** | **compiles** |
+| cubes | 27 006 · 162 036 | **compiles** | **refuses**, `Brush 152917: MAX_MAP_BRUSHSIDES` |
+| wedges | 17 582 · 87 916 | **compiles** | **compiles** |
 
-Three things follow, and the second is the surprising one.
+Neither binary is the one `LUMP_SPECS` quotes. The stock chain calls itself `Valve Software -
+vbsp.exe (Jul 22 2026) - Garry's Mod Edition (64-bit)`, the other `ficool2 - vbspplusplus.exe
+(Jun 23 2026)`, and the ceilings in `read_map_report` are
+`source-sdk-2013/src/public/bspfile.h`'s. What each one actually enforces:
 
-**`MAX_MAP_BRUSHES` = 8192 is enforced by neither.** Both wrote 9 267 without a word; the stock
-chain wrote 27 006, which `read_map_geometry` reports as 330% of the ceiling. The number in
-`LUMP_SPECS` comes from `source-sdk-2013/src/public/bspfile.h`, and **neither binary here is
-that**: the stock one identifies itself as `Valve Software - vbsp.exe (Jul 22 2026) - Garry's
-Mod Edition`. Garry's Mod ships its own compilers and they are not Valve's.
+| Limit | SDK 2013 | stock | ++ |
+|---|---|---|---|
+| `MAX_MAP_BRUSHES` | 8192 | not enforced — wrote **27 006** | not enforced — wrote **17 582** |
+| `MAX_MAP_BRUSHSIDES` | 65 536 | not enforced — wrote **162 036** | **enforced at 131 072** |
+| `MAX_MAP_VERTS` | 65 536 | **enforced at 65 536** | not reached by these probes |
 
-**The Hammer++ chain is the stricter of the two.** It refuses at `MAX_MAP_BRUSHSIDES` where the
-stock chain writes 162 036 into a lump whose stated ceiling is 65 536 — 247% — and says nothing.
-That is the opposite of what "the ++ chain raises the limits" leads a reader to expect, and it
-matters: **a map that compiles on the stock chain and refuses on ++ has not gained a defect by
-moving to ++.** It had one already, and the stricter compiler is the one that found it.
+**`MAX_MAP_BRUSHES` is enforced by neither**, and the wedge probe is what settles it for ++. A
+wedge has five sides rather than six, so 17 582 of them fit in 87 916 sides — past 8192 brushes
+and past 16 384, with room to spare under the side limit. ++ compiled it and said so:
+`Emitted 17582 brushes and 123068 brushsides`. Whatever stops a map on either chain, it is not
+the brush count.
 
-**So `read_map_report`'s `fail` on a lump is a statement about SDK 2013, not about the map.**
+**Where ++ enforces, it enforces a doubled ceiling.** `Brush 152917` is the id of the **21 846th**
+solid in that file; the 21 845 before it carry six sides each, which is 131 070, and the next six
+would pass 131 072. That is 2 × 65 536 exactly. ++ is not more limited than stock — it is the only
+one of the two that **checks** this limit at all, and the value it checks against is twice the
+SDK's.
+
+⚠️ **So a map ++ refuses and stock accepts is not a map ++ is being fussy about.** The stock chain
+wrote a `BRUSHSIDES` lump at 247% of its stated size without a word; nothing here shows the engine
+reads such a lump correctly, and the compiler that stopped is the one that made a claim it can
+stand behind. Silence is not permission.
+
+**And `read_map_report`'s `fail` on a lump is a statement about SDK 2013, not about the map.**
 Each such verdict already carries the caveat verbatim — *"either the compilers that built this
 raise it, or vbsp would have refused. Do not read it as 'this map is broken' without checking
-which toolchain produced it"* — and this is the measurement behind that sentence. A production
-map past a ceiling is a map whose compiler raised it, until somebody shows otherwise.
+which toolchain produced it"* — and this is the measurement behind that sentence.
 
-One thing the measurement found on its way, recorded because it is about the reader rather than
-the compilers: the stock chain's `Too many unique verts, max = 65536` stops vbsp with exit code
-1, and `run_compile` reported that stage as `clean: true` with no finding at all
-([#99](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/99)). The ++ chain's
-`MAX_MAP_BRUSHSIDES` on the same probe produced exactly the right finding, so the gap is that
-the vertex limit announces itself in prose rather than by name.
+⚠️ **What this does not license is reading a percentage against the wrong ceiling**
+([#101](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/101)). A map at 89%
+of `BRUSHSIDES` as this repository reports it is at **45%** of what ++ enforces, and at no known
+fraction of anything on stock. The percentages are useful as a relative signal and are not a
+distance to a wall.
 
-⚠️ **Whether the engine copes is a separate question and is not measured here.** GMod ships both
-the compiler and the engine, so a lump its vbsp writes is presumably one its engine reads; that
-is an inference, not a measurement, and nothing above establishes it.
+Two things the measurement found on its way:
+
+- The stock chain's `Too many unique verts, max = 65536` stops vbsp with exit code 1, and
+  `run_compile` reported that stage as `clean: true` with no finding at all
+  ([#99](https://github.com/ProjectSocietyStudio/hammer-mcp/issues/99)). The ++ chain's
+  `MAX_MAP_BRUSHSIDES` on the same probe produced exactly the right finding — the gap is that the
+  vertex limit announces itself in prose rather than by name.
+- **++ prints `Emitted N brushes and M brushsides`; stock prints neither.** That line is the
+  cheapest ground truth there is on a map with no `.vmf`, and it is worth reading when a count is
+  in question. Note that the emitted side count exceeds the authored one — 87 916 authored became
+  123 068 emitted on the wedge probe, because vbsp adds bevel planes for collision. **A map can
+  therefore pass the load-time check and fail on what it emits**, and the authored count is a
+  lower bound rather than the number the limit is compared against.
+
+⚠️ **Whether the engine copes with a lump past its stated ceiling is a separate question and is
+not measured here.** GMod ships both the compiler and the engine, so a lump its vbsp writes is
+presumably one its engine reads; that is an inference, not a measurement.
 
 ## Only world brushes seal
 
