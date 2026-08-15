@@ -161,7 +161,15 @@ export const alignFacesTool = defineTool({
   meta: { "anthropic/requiresUserInteraction": true },
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
-    mode: z.enum(["world", "face", "fit"]),
+    mode: z
+      .enum(["world", "face", "fit", "arc"])
+      .describe(
+        "'arc' is 'face' plus continuity: facets that touch without turning a corner are one " +
+          "run, and each carries its texture on from where the last one stopped. It is what a " +
+          "curve needs and what neither of the others gives -- a ring aligned to 'face' " +
+          "restarts the brick at every seam, which reads as flat plates however well the " +
+          "smoothing groups are set.",
+      ),
     scale: z
       .number()
       .optional()

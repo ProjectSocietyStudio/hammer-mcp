@@ -193,7 +193,7 @@ export function normaliseMaterial(material: string): string {
 }
 
 
-export type AlignMode = "world" | "face" | "fit";
+export type AlignMode = "world" | "face" | "fit" | "arc";
 
 export interface AlignOptions {
   mode: AlignMode;
@@ -226,7 +226,7 @@ export interface AlignResult {
 /**
  * Realigns the texture on every selected face.
  *
- * Three modes, which are Hammer's three:
+ * Four modes. Three are Hammer's; the fourth is the one a curve needs.
  *
  * **`world`** derives the axes from the face's dominant normal, using vbsp's own
  * `baseaxis` table -- the same `textureAxesFor` that `write_vmf_solid` uses, already
@@ -240,10 +240,139 @@ export interface AlignResult {
  * **`fit`** stretches the texture to span the face exactly, which needs the face's extent
  * along each axis -- available because the reader already computed the corners.
  *
+ * **`arc`** is `face` plus continuity. Facets that touch without turning a corner form a run,
+ * and each one's offset carries on from where its neighbour stopped instead of restarting at
+ * its own edge. Found in the game and nowhere else (#93): a sixteen-segment ring aligned to
+ * `face` reads as sixteen flat plates, and the smoothing groups were working the whole time --
+ * it was the brick restarting at every seam.
+ *
  * The offsets are always recomputed from a corner of the face, never carried over. An axis
  * pair without a matching offset puts the texture somewhere else entirely, and that is the
  * single most common way an alignment tool produces a map that compiles and looks wrong.
  */
+/**
+ * How far around the run each facet starts, in units.
+ *
+ * `world` and `face` both anchor a texture at the face's own corner, which is right for a
+ * wall and wrong for a curve: sixteen facets of a ring each restart the brick, and the seams
+ * are what a player sees (#93, found in the game and nowhere else — the smoothing groups were
+ * working the whole time).
+ *
+ * The order is angular about the selection's own centroid, which is what a ring has instead of
+ * a direction. Contiguity is reported rather than enforced: a wall with two doorways in it is
+ * two runs, and refusing that would refuse the case the feature was built for.
+ */
+function arcRun(faces: ResolvedFace[], warnings: string[]): Map<SolidSide, number> {
+  const usable = faces.filter((f) => f.side.plane && f.side.vertices.length >= 3);
+  const out = new Map<SolidSide, number>();
+  if (usable.length < 2) return out;
+
+  const normalOf = (f: ResolvedFace): Vec3 => f.side.plane!.normal;
+
+  /** The facet's own u, projected into its plane -- the direction the texture runs. */
+  const uOf = (f: ResolvedFace): Vec3 => {
+    const n = normalOf(f);
+    const base = textureAxesFor(n);
+    const d = base.u[0] * n[0] + base.u[1] * n[1] + base.u[2] * n[2];
+    const p: Vec3 = [base.u[0] - d * n[0], base.u[1] - d * n[1], base.u[2] - d * n[2]];
+    const l = Math.hypot(p[0], p[1], p[2]);
+    return l < 1e-9 ? base.u : [p[0] / l, p[1] / l, p[2] / l];
+  };
+
+  const widthOf = (f: ResolvedFace): number => {
+    const u = uOf(f);
+    const along = f.side.vertices.map((w) => w[0] * u[0] + w[1] * u[1] + w[2] * u[2]);
+    return Math.max(...along) - Math.min(...along);
+  };
+
+  // Two facets carry on from each other when they touch and the surface does not turn a
+  // corner. Both halves are needed and each catches what the other misses: two parallel faces
+  // on unrelated brushes turn zero degrees and are not a run, which is most of a box map;
+  // a box's own adjacent faces do share an edge and turn 90 degrees, and a corner is not a
+  // curve.
+  //
+  // Chained by adjacency rather than sorted by angle. Sorting was the first attempt and it
+  // fails on the case this exists for: a ring's wedges each contribute an inner face, an outer
+  // face and two radial joints, and an angular sort interleaves all four so that no two
+  // consecutive entries are the same surface. Adjacency separates them without being told
+  // they are different.
+  const adjacent = (a: ResolvedFace, b: ResolvedFace): boolean => {
+    const na = normalOf(a);
+    const nb = normalOf(b);
+    const dot = Math.max(-1, Math.min(1, na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2]));
+    if ((Math.acos(dot) * 180) / Math.PI > 60) return false;
+    let shared = 0;
+    for (const p of a.side.vertices) {
+      for (const q of b.side.vertices) {
+        if (Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) < 0.5 && Math.abs(p[2] - q[2]) < 0.5) {
+          shared += 1;
+          break;
+        }
+      }
+      if (shared >= 2) return true;
+    }
+    return shared >= 2;
+  };
+
+  const links = usable.map(() => new Set<number>());
+  for (let i = 0; i < usable.length; i += 1) {
+    for (let j = i + 1; j < usable.length; j += 1) {
+      if (adjacent(usable[i]!, usable[j]!)) {
+        links[i]!.add(j);
+        links[j]!.add(i);
+      }
+    }
+  }
+
+  const seen = new Set<number>();
+  let runs = 0;
+  for (let start = 0; start < usable.length; start += 1) {
+    if (seen.has(start)) continue;
+    // Collect the component, then walk it from an end so the order follows the surface. A
+    // closed ring has no end; starting anywhere on it is as good as anywhere else.
+    const component: number[] = [];
+    const stack = [start];
+    seen.add(start);
+    while (stack.length > 0) {
+      const at = stack.pop()!;
+      component.push(at);
+      for (const n of links[at]!) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          stack.push(n);
+        }
+      }
+    }
+    const end = component.find((i) => links[i]!.size <= 1) ?? component[0]!;
+
+    const walked: number[] = [];
+    const done = new Set<number>();
+    let at: number | undefined = end;
+    while (at !== undefined) {
+      walked.push(at);
+      done.add(at);
+      at = [...links[at]!].find((n) => !done.has(n) && component.includes(n));
+    }
+
+    let travelled = 0;
+    for (const i of walked) {
+      out.set(usable[i]!.side, travelled);
+      travelled += widthOf(usable[i]!);
+    }
+    runs += 1;
+  }
+
+  if (runs > 1) {
+    warnings.push(
+      `the selection is ${runs} run(s), not one. A facet turning more than 60 degrees from its ` +
+        `neighbour, or not touching it at all, ends a run, and the next one starts its texture ` +
+        `at zero. A ring with a doorway cut in it is two runs; a box is one run per face.`,
+    );
+  }
+
+  return out;
+}
+
 export function alignFaces(
   source: string,
   selector: FaceSelector,
@@ -253,6 +382,10 @@ export function alignFaces(
   const splices: Splice[] = [];
   const changed: AlignChange[] = [];
   const warnings: string[] = [];
+
+  // `arc` needs to know what came before each facet, so it is decided once for the whole
+  // selection rather than face by face (#93).
+  const running = options.mode === "arc" ? arcRun(faces, warnings) : null;
 
   for (const face of faces) {
     const side = face.side;
@@ -273,7 +406,7 @@ export function alignFaces(
     let u: Vec3 = base.u;
     let v: Vec3 = base.v;
 
-    if (options.mode === "face") {
+    if (options.mode === "face" || options.mode === "arc") {
       // Project u into the plane, then derive v from it. Projecting both independently
       // does not keep them perpendicular: on a face whose normal is (0.5, 0.5, 0.707) the
       // projected pair has a dot product of 0.333, which shears the texture -- the exact
@@ -347,7 +480,11 @@ export function alignFaces(
 
     // Anchor at the low corner so the texture starts at the face's edge, then apply the
     // caller's shift. Carrying the old offset over is what makes a realigned face slide.
-    let uOff = -su.lo / uScale;
+    //
+    // In `arc`, the anchor is not the face's own corner but the distance already travelled
+    // around the run -- which is the whole difference between sixteen plates and a wall.
+    const ahead = running?.get(face.side) ?? 0;
+    let uOff = (ahead - su.lo) / uScale;
     let vOff = -sv.lo / vScale;
     if (options.shift) {
       uOff += options.shift[0];

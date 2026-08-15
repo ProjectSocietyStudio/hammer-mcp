@@ -9,9 +9,9 @@ import {
   setSmoothingGroups,
   VmfFaceError,
 } from "../src/vmf/face.js";
-import { insertSolids } from "../src/vmf/build.js";
 import { checkVmfSolids } from "../src/vmf/solid.js";
 import type { SolidCheck, Vec3 } from "../src/vmf/solid.js";
+import { insertSolids } from "../src/vmf/build.js";
 import { FIXTURES } from "./support/env.js";
 
 const PROBE = join(FIXTURES, "hmcp_probe.vmf");
@@ -367,5 +367,72 @@ describe("the file around a face edit", () => {
     const after = alignFaces(source, { solidIds: [FLOOR] }, { mode: "world" }).text;
     expect(after.startsWith("// hand-written")).toBe(true);
     expect(after.endsWith("// trailing\n")).toBe(true);
+  });
+});
+
+/**
+ * #93. Found in the game, on `hmcp_rotunda`, and only there.
+ *
+ * A ring of fourteen 22.5° facets aligned with `mode: "face"` — the right call, because `world`
+ * squashes a brick on a 22.5° facet by cos 22.5°, fourteen times, each differently. In game the
+ * wall read as flat plates, and not because of the lighting: the smoothing groups were working.
+ * The **texture** restarted at every seam, because `face` anchors each facet's offset at its
+ * own low corner.
+ *
+ * Both modes are per-face. A curve needs a run: the per-face scale, with each facet's offset
+ * carrying on from where its neighbour stopped. That is arithmetic, not judgement.
+ */
+describe("alignFaces: a texture that runs around an arc (#93)", () => {
+  const ROTUNDA = join(FIXTURES, "hmcp_rotunda.vmf");
+  const ring = (): string => readFileSync(ROTUNDA, "utf8");
+
+  /** Every vertical brick facet's u offset, in texels. */
+  const offsets = (text: string): number[] => {
+    const out: number[] = [];
+    for (const solid of read(text)) {
+      for (const side of solid.sides) {
+        if (!side.material.includes("BRICKWALL001A")) continue;
+        if (!side.plane || Math.abs(side.plane.normal[2]) > 0.01) continue;
+        if (side.uaxis) out.push(Math.round(side.uaxis.offset));
+      }
+    }
+    return out;
+  };
+
+  it("gives the facets of a ring offsets that carry on from each other", () => {
+    const perFace = offsets(alignFaces(ring(), { material: "BRICKWALL001A" }, { mode: "face" }).text);
+    const arc = offsets(alignFaces(ring(), { material: "BRICKWALL001A" }, { mode: "arc" }).text);
+
+    expect(perFace.length).toBeGreaterThan(20);
+    expect(arc.length).toBe(perFace.length);
+
+    // The defect and the fix in one comparison: `face` anchors every facet at its own corner,
+    // so the offsets collapse onto a handful of values. `arc` spreads them along the run.
+    expect(new Set(arc).size).toBeGreaterThan(new Set(perFace).size);
+  });
+
+  it("reports how many runs it found rather than pretending the ring is closed", () => {
+    // The rotunda's ring has two doorways cut in it, so it is two arcs. Saying so is the point:
+    // refusing it would refuse the case this was built for.
+    const r = alignFaces(ring(), { material: "BRICKWALL001A" }, { mode: "arc" });
+    expect(r.warnings.join(" ")).toMatch(/run\(s\)/);
+  });
+
+  it("leaves a lone box exactly where face mode puts it", () => {
+    // Every face of a box turns 90 degrees from its neighbours, and a corner is not a curve:
+    // six runs of one, each anchored at its own corner, which is face mode exactly.
+    //
+    // The probe itself is six slabs that touch, and there `arc` does differ -- two coplanar
+    // faces meeting edge to edge are one surface and a texture should run across them. That
+    // is the feature working, not a regression, so the claim is tested on the shape it is
+    // about.
+    const lone = insertSolids(
+      'versioninfo\n{\n}\nworld\n{\n\t"id" "1"\n\t"classname" "worldspawn"\n}\n',
+      [{ shape: "box", mins: [0, 0, 0], maxs: [128, 128, 128] }],
+      { material: "BRICK/BRICKWALL014A" },
+    ).text;
+    expect(alignFaces(lone, {}, { mode: "arc" }).text).toBe(
+      alignFaces(lone, {}, { mode: "face" }).text,
+    );
   });
 });
